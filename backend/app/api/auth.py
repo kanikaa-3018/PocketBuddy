@@ -47,7 +47,9 @@ async def signup(req: AuthReq):
 async def login(req: AuthReq):
     db = get_db()
     user = await db.users.find_one({"email": req.email})
-    if not user or not bcrypt.checkpw(req.password.encode('utf-8'), user["password"].encode('utf-8')):
+    # Safely retrieve password hash; if missing, treat as invalid credentials
+    password_hash = user.get("password") if user else None
+    if not user or not password_hash or not bcrypt.checkpw(req.password.encode('utf-8'), password_hash.encode('utf-8')):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
     token = jwt.encode({"userId": user["_id"]}, settings.JWT_SECRET, algorithm="HS256")
