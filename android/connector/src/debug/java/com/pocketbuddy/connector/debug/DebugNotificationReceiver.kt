@@ -54,7 +54,7 @@ class DebugNotificationReceiver : BroadcastReceiver() {
                 return
             }
 
-            WebhookClient().post(
+            WebhookClient(context.applicationContext).post(
                 TransactionNotificationPayload(
                     packageName = parserPackageName,
                     text = notificationText,

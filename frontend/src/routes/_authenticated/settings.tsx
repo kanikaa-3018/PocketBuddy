@@ -76,12 +76,12 @@ function SettingsPage() {
     if (!profile) return;
     setAllowance(String(Math.round(profile.monthly_allowance / 100)));
     setCycleDay(String(profile.cycle_start_day));
-    setHostel(profile.hostel_block);
-    setWing(profile.wing_label);
-    setRoom(profile.room_number);
+    setHostel(profile.hostel_block ?? "");
+    setWing(profile.wing_label ?? "");
+    setRoom(profile.room_number ?? "");
     setExamStart(profile.exam_start_date ?? "");
     setExamEnd(profile.exam_end_date ?? "");
-    setMess(profile.mess_enrolled);
+    setMess(profile.mess_enrolled ?? false);
   }, [profile]);
 
   const [addingSub, setAddingSub] = useState(false);
@@ -325,7 +325,7 @@ function SettingsPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-[13px]">
-                      {s.service_name}
+                      {s.service_name ?? s.name}
                       {s.detected_from === "auto_detected" && (
                         <Badge className="ml-2 bg-[color:var(--pb-purple)]/20 text-[color:var(--pb-purple)] text-[10px]">
                           Auto
@@ -340,7 +340,7 @@ function SettingsPage() {
                     <Switch
                       id={`switch-sub-${s.id}`}
                       checked={s.is_active}
-                      onCheckedChange={(v) => toggleSub(s.id, v, s.service_name)}
+                      onCheckedChange={(v) => toggleSub(s.id, v, s.service_name ?? s.name)}
                     />
                     <button onClick={() => delSub(s.id)} className="text-muted-foreground">
                       <Trash2 className="h-4 w-4" />
@@ -422,6 +422,7 @@ function AddSubForm({ onClose }: { onClose: () => void }) {
       await insertSubscription({
         data: {
           service_name: name,
+          billing_cycle: "monthly",
           amount: Math.round(parseFloat(amt) * 100),
           next_debit_date: date,
           detected_from: "manual",

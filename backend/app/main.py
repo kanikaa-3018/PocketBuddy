@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from app.core.config import settings
 
-from app.api import auth, profile, transactions, subscriptions, pools, webhook, checkins
+from app.api import auth, profile, transactions, subscriptions, pools, webhook, checkins, companion
 
 app = FastAPI(title="PocketBuddy API")
 
@@ -21,6 +21,8 @@ app.include_router(transactions.router, prefix="/api/transactions", tags=["trans
 app.include_router(subscriptions.router, prefix="/api/subscriptions", tags=["subscriptions"])
 app.include_router(pools.router, prefix="/api/cart-pools", tags=["pools"])
 app.include_router(checkins.router, prefix="/api/checkins", tags=["checkins"])
+app.include_router(companion.router, prefix="/api/companion", tags=["companion"])
+app.include_router(webhook.router, prefix="/api/ingest", tags=["ingest"])
 app.include_router(webhook.router, prefix="/webhook", tags=["webhook"])
 
 @app.get("/api/campus-food")

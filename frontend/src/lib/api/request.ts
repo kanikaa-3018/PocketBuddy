@@ -22,6 +22,7 @@ export async function apiRequest<T = any>(
     try {
       const data = await response.json();
       if (data?.error) errMsg = data.error;
+      else if (data?.detail) errMsg = typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail);
     } catch (_) {}
     throw new Error(errMsg);
   }

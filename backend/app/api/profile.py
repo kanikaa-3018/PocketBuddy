@@ -9,9 +9,21 @@ router = APIRouter()
 class ProfileUpdateReq(BaseModel):
     monthly_allowance: Optional[int] = None
     cycle_start_day: Optional[int] = None
+    college_name: Optional[str] = None
+    hostel_block: Optional[str] = None
     wing_label: Optional[str] = None
+    room_number: Optional[str] = None
+    exam_start_date: Optional[str] = None
+    exam_end_date: Optional[str] = None
+    mess_enrolled: Optional[bool] = None
+    meal_schedule: Optional[dict] = None
+    upi_apps_used: Optional[list[str]] = None
+    onboarding_completed: Optional[bool] = None
     setup_completed: Optional[bool] = None
     pairing_code: Optional[str] = None
+    companion_paired: Optional[bool] = None
+    companion_device_name: Optional[str] = None
+    companion_last_sync: Optional[str] = None
 
 @router.get("/")
 async def get_profile(user_id: str = Depends(get_current_user)):
@@ -24,7 +36,7 @@ async def get_profile(user_id: str = Depends(get_current_user)):
 @router.post("/")
 async def update_profile(req: ProfileUpdateReq, user_id: str = Depends(get_current_user)):
     db = get_db()
-    updates = {k: v for k, v in req.dict(exclude_unset=True).items() if v is not None}
+    updates = req.model_dump(exclude_unset=True)
     
     if not updates:
         profile = await db.profiles.find_one({"_id": user_id})

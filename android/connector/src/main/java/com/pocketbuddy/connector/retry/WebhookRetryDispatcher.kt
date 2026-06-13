@@ -5,8 +5,9 @@ import android.util.Log
 import com.pocketbuddy.connector.network.WebhookClient
 
 class WebhookRetryDispatcher(context: Context) {
-    private val queue = WebhookRetryQueue(context.applicationContext)
-    private val webhookClient = WebhookClient()
+    private val appContext = context.applicationContext
+    private val queue = WebhookRetryQueue(appContext)
+    private val webhookClient = WebhookClient(appContext)
 
     fun flush(onComplete: (shouldReschedule: Boolean) -> Unit) {
         sendNext(onComplete)

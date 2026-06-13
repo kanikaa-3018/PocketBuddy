@@ -13,8 +13,8 @@ import com.pocketbuddy.connector.retry.WebhookRetryQueue
 
 class PocketBuddyNotificationListener : NotificationListenerService() {
     private val parser = UpiNotificationParser()
-    private val webhookClient = WebhookClient()
     private val recentNotificationKeys = LinkedHashSet<String>()
+    private val webhookClient by lazy { WebhookClient(applicationContext) }
     private val identityStore by lazy { DeviceIdentityStore(applicationContext) }
     private val retryQueue by lazy { WebhookRetryQueue(applicationContext) }
 

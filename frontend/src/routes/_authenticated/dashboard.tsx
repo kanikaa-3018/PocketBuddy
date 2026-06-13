@@ -188,6 +188,7 @@ function Dashboard() {
     const week = new Date(today);
     week.setDate(week.getDate() + 7);
     return subs
+      .filter((s) => s.is_active !== false)
       .filter((s) => new Date(s.next_debit_date) <= week)
       .map((s) => {
         const newLimit =
@@ -265,6 +266,7 @@ function Dashboard() {
         response: "skipped",
         food_gap_hours: foodGapHours,
         suggestion_given: suggestion,
+        stress_note: stressNote,
       },
     });
     localStorage.setItem("pocketbuddy_last_checkin", String(Date.now()));
@@ -464,7 +466,7 @@ function Dashboard() {
                 >
                   <div className="flex items-center justify-between">
                     <p className="text-[13px]">
-                      {c.service_name} • {shortDate(new Date(c.next_debit_date))}
+                      {c.service_name ?? c.name} • {shortDate(new Date(c.next_debit_date))}
                       {c.detected_from === "auto_detected" && (
                         <Badge className="ml-2 bg-[color:var(--pb-purple)]/20 text-[color:var(--pb-purple)] text-[10px]">
                           Auto-detected
@@ -722,6 +724,7 @@ function IdentifyForm({ txn, onClose }: { txn: Txn; onClose: () => void }) {
     try {
       await identifyMerchant({
         data: {
+          txn_id: txn.id,
           raw_merchant_string: txn.raw_merchant_string,
           display_name: name,
           category: cat,

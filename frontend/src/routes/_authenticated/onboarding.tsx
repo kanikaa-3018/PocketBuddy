@@ -136,17 +136,18 @@ function Onboarding() {
     }
   }
 
-  async function finish(skipPairing: boolean) {
+  async function finish(connectCompanion: boolean) {
     if (!user) return;
     setBusy(true);
     try {
       await updateProfile({
         data: {
           onboarding_completed: true,
+          setup_completed: true,
           pairing_code: pairingCode,
-          companion_paired: !skipPairing,
-          companion_device_name: skipPairing ? null : "Redmi Note 12",
-          companion_last_sync: skipPairing ? null : new Date().toISOString(),
+          companion_paired: false,
+          companion_device_name: null,
+          companion_last_sync: null,
         },
       });
       // Seed demo data
@@ -155,18 +156,18 @@ function Onboarding() {
       } catch (e) {
         console.warn("seed", e);
       }
-      toast.success(skipPairing ? "Welcome! Add expenses manually." : "Device connected! 🎉");
+      if (connectCompanion) {
+        toast.success("Profile saved. Finish Android setup from the companion page.");
+        nav({ to: "/companion", replace: true });
+        return;
+      }
+      toast.success("Welcome. You can add expenses manually.");
       nav({ to: "/dashboard", replace: true });
     } catch (err: any) {
       toast.error(err.message || "Failed to complete onboarding");
     } finally {
       setBusy(false);
     }
-  }
-
-  // Demo APK download
-  function downloadApk() {
-    toast("APK downloading. Open it from your notifications to install.");
   }
 
   function toggleUpi(app: string) {
@@ -353,38 +354,39 @@ function Onboarding() {
         {step === 3 && (
           <div id="onboarding-step-3" className="space-y-5">
             <div>
-              <h2 className="text-[18px] font-semibold">Last step — auto-track spending</h2>
+              <h2 className="text-[18px] font-semibold">Last step: auto-track spending</h2>
               <p className="mt-1 text-[13px] text-muted-foreground">
-                Install our tiny companion app to capture UPI notifications automatically. No bank
-                access, no passwords.
+                Use the Android connector to capture UPI notifications automatically. No bank login
+                or SMS inbox upload is required.
               </p>
             </div>
             <div className="flex gap-2">
               {[
-                { e: "📲", l: "Install APK" },
-                { e: "🔔", l: "Grant notification access" },
-                { e: "✨", l: "Auto-syncs expenses" },
+                { e: "1", l: "Install connector" },
+                { e: "2", l: "Grant notification access" },
+                { e: "3", l: "Wait for real sync" },
               ].map((c) => (
                 <div
                   key={c.l}
                   className="flex-1 rounded-lg bg-[color:var(--surface-raised)] p-3 text-center"
                 >
-                  <div className="text-2xl">{c.e}</div>
+                  <div className="mx-auto flex h-7 w-7 items-center justify-center rounded-full bg-[color:var(--pb-blue)] text-[12px] font-semibold text-white">
+                    {c.e}
+                  </div>
                   <p className="mt-1 text-[11px] text-muted-foreground leading-tight">{c.l}</p>
                 </div>
               ))}
             </div>
-            <button
-              onClick={downloadApk}
-              className="w-full rounded-lg border-2 border-[color:var(--pb-blue)] bg-[color:var(--surface-raised)] p-5 text-center"
-            >
-              <div className="text-[15px] font-semibold text-[color:var(--pb-blue)]">
-                ⬇ Download PocketBuddy Companion
-              </div>
-              <p className="mt-1 text-[12px] text-muted-foreground">
-                Android only • 1.2 MB • No sign-in required
+            <div className="rounded-lg border border-[color:var(--pb-blue)] bg-[color:var(--surface-raised)] p-4">
+              <p className="text-[14px] font-semibold text-[color:var(--pb-blue)]">
+                Android connector setup
               </p>
-            </button>
+              <p className="mt-1 text-[12px] text-muted-foreground">
+                Build and install the connector from the repository Android module. The next screen
+                shows the webhook URL, user ID, and token fields to paste into the Android setup
+                screen.
+              </p>
+            </div>
             <div className="text-center">
               <p className="text-[12px] text-muted-foreground">Your pairing code:</p>
               <div
@@ -394,21 +396,21 @@ function Onboarding() {
                 {pairingCode}
               </div>
               <p className="mt-2 text-[11px] text-muted-foreground">
-                Enter this code in the companion app after installing
+                This code is saved to your profile for the backend pairing flow.
               </p>
             </div>
             <div className="space-y-2">
               <Button
-                id="btn-ob-verify"
-                onClick={() => finish(false)}
+                id="btn-ob-continue-companion"
+                onClick={() => finish(true)}
                 disabled={busy}
                 className="w-full bg-[color:var(--pb-green)] text-white hover:bg-[color:var(--pb-green)]/90"
               >
-                I've installed it — verify connection
+                Continue To Companion Setup
               </Button>
               <button
                 id="link-ob-skip"
-                onClick={() => finish(true)}
+                onClick={() => finish(false)}
                 disabled={busy}
                 className="w-full text-center text-[13px] text-muted-foreground py-2"
               >

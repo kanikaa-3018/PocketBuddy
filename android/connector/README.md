@@ -33,6 +33,8 @@ From `PocketBuddy/android`, copy `local.properties.example` to `local.properties
 POCKETBUDDY_WEBHOOK_URL=https://your-ngrok-url.ngrok-free.app/api/ingest/notification
 ```
 
+`local.properties` provides build-time defaults. After the APK is installed, open `PocketBuddy Connector` from the launcher to change the webhook URL, user ID, and token at runtime without rebuilding.
+
 The Android folder includes a local FastAPI test harness at `tools/ingest_test_backend`. The main project backend lives under the repo-level `backend/`; wire Android to that service once its ingest endpoint accepts the connector payload shape shown below.
 
 For an Android emulator, the default host URL is:
@@ -49,6 +51,8 @@ POCKETBUDDY_USER_ID=
 ```
 
 When `POCKETBUDDY_WEBHOOK_TOKEN` is set, the connector sends `Authorization: Bearer <token>`. Every webhook includes an installation-scoped `deviceId`; `userId` is included when configured.
+
+The final backend contract is tracked in `docs/mobile-ingest-contract.md` from the repository root.
 
 ## Enabling notification access
 

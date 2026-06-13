@@ -124,6 +124,14 @@ POCKETBUDDY_WEBHOOK_URL=https://your-ngrok-url.ngrok-free.app/api/ingest/notific
 
 `android/local.properties` is ignored by git.
 
+These values are build-time defaults. The installed APK also has a setup screen where you can change the webhook URL, user ID, and bearer token without rebuilding.
+
+The backend payload and companion frontend contract are documented in:
+
+```text
+docs/mobile-ingest-contract.md
+```
+
 ## Build And Test
 
 From the repo root:
@@ -182,6 +190,14 @@ Also open the app once from the launcher:
 
 ```text
 PocketBuddy Connector
+```
+
+In the setup screen, save the connector config shown by the web app's Companion Device page:
+
+```text
+Webhook URL
+PocketBuddy user ID
+Webhook token, if the backend has issued one
 ```
 
 On Android 13+, allow notification permission if prompted. This is needed for debug notification tests, not for listening to other app notifications.
@@ -392,9 +408,11 @@ If no real events appear, verify:
 
 ```text
 android/connector/src/main/java/com/pocketbuddy/connector/PocketBuddyNotificationListener.kt
+android/connector/src/main/java/com/pocketbuddy/connector/config/ConnectorConfigStore.kt
 android/connector/src/main/java/com/pocketbuddy/connector/parser/UpiNotificationParser.kt
 android/connector/src/main/java/com/pocketbuddy/connector/network/WebhookClient.kt
 android/connector/src/main/java/com/pocketbuddy/connector/retry/WebhookRetryQueue.kt
 android/connector/src/debug/java/com/pocketbuddy/connector/debug/DebugNotificationReceiver.kt
 android/tools/ingest_test_backend/app/main.py
+docs/mobile-ingest-contract.md
 ```

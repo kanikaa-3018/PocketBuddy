@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Copy, RefreshCw, Save } from "lucide-react";
 import { toast } from "sonner";
 import { relativeTime } from "@/lib/format";
 
@@ -19,6 +19,8 @@ export const Route = createFileRoute("/_authenticated/companion")({
 
 type Profile = any;
 type SyncLog = any;
+
+const LOCAL_WEBHOOK_URL = "http://127.0.0.1:8000/api/ingest/notification";
 
 function randomPairingCode() {
   const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
@@ -33,31 +35,52 @@ function CompanionPage() {
   const nav = useNavigate();
   const [pairing, setPairing] = useState<string>("");
 
-  const { data: profile } = useQuery({
+  const { data: profile, refetch: refetchProfile } = useQuery<Profile>({
     queryKey: ["profile", user?.id],
     enabled: !!user,
     queryFn: () => getProfile(),
+    refetchInterval: 5000,
   });
 
-  const { data: logs } = useQuery({
+  const { data: logs, refetch: refetchLogs } = useQuery<SyncLog[] | { logs?: SyncLog[] }>({
     queryKey: ["sync-log", user?.id],
     enabled: !!user,
     queryFn: () => getCompanionSyncLogs(),
+    refetchInterval: 5000,
   });
+
+  const syncLogs: SyncLog[] = Array.isArray(logs) ? logs : logs?.logs ?? [];
+  const latestSyncAt = profile?.companion_last_sync ?? syncLogs[0]?.created_at;
+  const hasRealSync = Boolean(profile?.companion_last_sync || syncLogs.length > 0);
+  const isConnected = Boolean(profile?.companion_paired || hasRealSync);
+  const connectorConfig = [
+    `POCKETBUDDY_WEBHOOK_URL=${LOCAL_WEBHOOK_URL}`,
+    "POCKETBUDDY_WEBHOOK_TOKEN=",
+    `POCKETBUDDY_USER_ID=${user?.id ?? ""}`,
+  ].join("\n");
 
   useEffect(() => {
     if (profile?.pairing_code) setPairing(profile.pairing_code);
     else if (!pairing) setPairing(randomPairingCode());
   }, [profile, pairing]);
 
-  async function testConn() {
-    if (!profile?.companion_last_sync) {
-      toast("Last sync was never. Open the companion app on your phone.");
+  async function checkRealSync() {
+    const [freshProfile, freshLogs] = await Promise.all([
+      refetchProfile(),
+      refetchLogs(),
+      qc.invalidateQueries({ queryKey: ["txns"] }),
+    ]);
+    const nextLogs = Array.isArray(freshLogs.data) ? freshLogs.data : freshLogs.data?.logs ?? [];
+    const nextLatestSyncAt = freshProfile.data?.companion_last_sync ?? nextLogs[0]?.created_at;
+
+    if (!nextLatestSyncAt) {
+      toast("No sync received yet. Send a test notification from the Android connector.");
       return;
     }
-    const mins = (Date.now() - new Date(profile.companion_last_sync).getTime()) / 60000;
-    if (mins < 5) toast.success("Connection active ✓");
-    else toast(`Last sync was ${Math.round(mins)}m ago. Open the companion app on your phone.`);
+
+    const mins = (Date.now() - new Date(nextLatestSyncAt).getTime()) / 60000;
+    if (mins < 5) toast.success("Connection active");
+    else toast(`Last sync was ${Math.round(mins)}m ago. Send another Android test notification.`);
   }
 
   async function unpair() {
@@ -78,21 +101,27 @@ function CompanionPage() {
     }
   }
 
-  async function verifyPair() {
+  async function savePairingCode() {
     if (!user) return;
     try {
       await updateProfile({
         data: {
-          companion_paired: true,
-          companion_device_name: profile?.companion_device_name ?? "Redmi Note 12",
-          companion_last_sync: new Date().toISOString(),
           pairing_code: pairing,
         },
       });
       qc.invalidateQueries({ queryKey: ["profile"] });
-      toast.success("Device connected! 🎉");
+      toast.success("Pairing code saved.");
     } catch (err: any) {
-      toast.error(err.message || "Failed to pair device");
+      toast.error(err.message || "Failed to save pairing code");
+    }
+  }
+
+  async function copyConnectorConfig() {
+    try {
+      await navigator.clipboard.writeText(connectorConfig);
+      toast.success("Android config copied.");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to copy config");
     }
   }
 
@@ -108,7 +137,7 @@ function CompanionPage() {
       <div className="space-y-4 px-4 py-4">
         {!profile ? (
           <Skeleton className="h-32 w-full" />
-        ) : profile.companion_paired ? (
+        ) : isConnected ? (
           <>
             <Card
               id="card-companion-status"
@@ -119,14 +148,13 @@ function CompanionPage() {
                 <p className="text-[14px] font-semibold text-[color:var(--pb-green)]">Connected</p>
               </div>
               <p className="mt-1 text-[13px]">
-                {profile.companion_device_name ?? "Unknown device"}
+                {profile.companion_device_name ?? "PocketBuddy Android Connector"}
               </p>
               <p className="mt-0.5 text-[12px] text-muted-foreground">
-                Last sync:{" "}
-                {profile.companion_last_sync ? relativeTime(profile.companion_last_sync) : "never"}
+                Last sync: {latestSyncAt ? relativeTime(latestSyncAt) : "never"}
               </p>
               <p className="text-[12px] text-muted-foreground">
-                UPI apps: {profile.upi_apps_used?.length ? profile.upi_apps_used.join(", ") : "—"}
+                UPI apps: {profile.upi_apps_used?.length ? profile.upi_apps_used.join(", ") : "-"}
               </p>
             </Card>
 
@@ -135,12 +163,12 @@ function CompanionPage() {
                 RECENT SYNC ACTIVITY
               </h3>
               <div id="list-sync-log" className="mt-2 space-y-1.5">
-                {(logs ?? []).length === 0 && (
+                {syncLogs.length === 0 && (
                   <p className="text-[12px] text-muted-foreground py-4 text-center">
                     No sync activity yet.
                   </p>
                 )}
-                {(logs ?? []).map((l) => (
+                {syncLogs.map((l) => (
                   <div
                     key={l.id}
                     className="flex items-start justify-between gap-3 rounded-md bg-[color:var(--surface)] p-2.5"
@@ -165,8 +193,9 @@ function CompanionPage() {
                 id="btn-test-companion"
                 variant="outline"
                 className="w-full"
-                onClick={testConn}
+                onClick={checkRealSync}
               >
+                <RefreshCw />
                 Test Connection
               </Button>
               <Button
@@ -181,26 +210,55 @@ function CompanionPage() {
           </>
         ) : (
           <>
-            <button
-              onClick={() => toast("APK downloading. Open it from your notifications to install.")}
-              className="w-full rounded-lg border-2 border-[color:var(--pb-blue)] bg-[color:var(--surface-raised)] p-5 text-center"
-            >
-              <div className="text-[15px] font-semibold text-[color:var(--pb-blue)]">
-                ⬇ Download PocketBuddy Companion
+            <Card className="bg-[color:var(--surface-raised)] p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[14px] font-semibold">Android Connector</p>
+                  <p className="mt-0.5 text-[12px] text-muted-foreground">
+                    Build and install from the repository Android module.
+                  </p>
+                </div>
+                <Badge variant="outline" className="text-[10px]">
+                  USB
+                </Badge>
               </div>
-              <p className="mt-1 text-[12px] text-muted-foreground">Android only • 1.2 MB</p>
-            </button>
+            </Card>
+
             <div className="text-center">
               <p className="text-[12px] text-muted-foreground">Your pairing code:</p>
               <div className="mt-2 inline-block rounded-md bg-[color:var(--surface-raised)] px-5 py-3 text-[24px] font-bold tracking-[4px] text-[color:var(--pb-blue)] font-mono">
                 {pairing}
               </div>
             </div>
+
+            <Card className="bg-[color:var(--surface-raised)] p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[13px] font-semibold">Connector config</p>
+                  <p className="mt-0.5 text-[12px] text-muted-foreground">
+                    Paste these values in the Android setup screen.
+                  </p>
+                </div>
+                <Button variant="outline" size="sm" onClick={copyConnectorConfig}>
+                  <Copy />
+                  Copy
+                </Button>
+              </div>
+              <pre className="mt-3 overflow-x-auto rounded-md bg-[color:var(--surface)] p-3 text-left text-[11px] leading-5 text-muted-foreground">
+                {connectorConfig}
+              </pre>
+            </Card>
+
+            <Button variant="outline" className="w-full" onClick={savePairingCode}>
+              <Save />
+              Save Pairing Code
+            </Button>
             <Button
               className="w-full bg-[color:var(--pb-green)] text-white hover:bg-[color:var(--pb-green)]/90"
-              onClick={verifyPair}
+              onClick={checkRealSync}
             >
-              I've installed it — verify connection
+              <RefreshCw />
+              Check For Real Sync
             </Button>
           </>
         )}
