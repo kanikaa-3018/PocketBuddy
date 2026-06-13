@@ -3,7 +3,19 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from app.core.config import settings
 
-from app.api import auth, profile, transactions, subscriptions, pools, webhook, checkins, companion
+from app.api import (
+    auth,
+    campus_food,
+    checkins,
+    companion,
+    pools,
+    profile,
+    rag,
+    seed,
+    subscriptions,
+    transactions,
+    webhook,
+)
 
 app = FastAPI(title="PocketBuddy API")
 
@@ -22,18 +34,11 @@ app.include_router(subscriptions.router, prefix="/api/subscriptions", tags=["sub
 app.include_router(pools.router, prefix="/api/cart-pools", tags=["pools"])
 app.include_router(checkins.router, prefix="/api/checkins", tags=["checkins"])
 app.include_router(companion.router, prefix="/api/companion", tags=["companion"])
+app.include_router(rag.router, prefix="/api/rag", tags=["rag"])
+app.include_router(campus_food.router, prefix="/api/campus-food", tags=["campus-food"])
+app.include_router(seed.router, prefix="/api/seed", tags=["seed"])
 app.include_router(webhook.router, prefix="/api/ingest", tags=["ingest"])
 app.include_router(webhook.router, prefix="/webhook", tags=["webhook"])
-
-@app.get("/api/campus-food")
-async def get_campus_food():
-    import os, json
-    food_path = os.path.join(os.path.dirname(__file__), '..', '..', 'data', 'campus_food.json')
-    try:
-        with open(food_path, 'r') as f:
-            return json.load(f)
-    except Exception:
-        return []
 
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=settings.PORT, reload=True)
