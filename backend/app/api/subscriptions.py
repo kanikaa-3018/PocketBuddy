@@ -17,14 +17,14 @@ class SubReq(BaseModel):
     detected_from: Optional[str] = "manual"
     is_active: Optional[bool] = True
 
-@router.get("/")
+@router.get("")
 async def get_subscriptions(user_id: str = Depends(get_current_user)):
     db = get_db()
     cursor = db.subscriptions.find({"user_id": user_id}).sort("next_debit_date", 1)
     subs = await cursor.to_list(length=100)
     return map_docs(subs)
 
-@router.post("/")
+@router.post("")
 async def insert_subscription(req: SubReq, user_id: str = Depends(get_current_user)):
     db = get_db()
     sub_id = str(uuid.uuid4())

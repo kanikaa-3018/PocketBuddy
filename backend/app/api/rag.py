@@ -13,24 +13,23 @@ class RagReq(BaseModel):
     remaining_budget: float
     spent_today: float
 
-# Load static campus food once
-def load_campus_food():
-    food_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'data', 'campus_food.json')
-    try:
-        with open(food_path, 'r') as f:
-            return json.load(f)
-    except Exception:
-        return []
-
-campus_foods = load_campus_food()
-
 @router.post("/food-rag")
 async def get_food_recommendation(req: RagReq, user_id: str = Depends(get_current_user)):
+    from app.core.database import get_db
+    db = get_db()
+    cursor = db.campus_food.find({})
+    campus_foods = await cursor.to_list(length=100)
+    
+    # Map _id to string
+    for f in campus_foods:
+        f["id"] = str(f.pop("_id"))
+
     if not settings.AWS_ACCESS_KEY_ID:
         # Fallback if Bedrock is not configured
         if not campus_foods: return {"recommendation": "No food data available."}
         cheapest = sorted(campus_foods, key=lambda x: x["price"])[0]
-        return {"recommendation": f"Bedrock not configured. Local fallback: Try {cheapest['item_name']} at {cheapest['venue']} for {cheapest['price']} Rs."}
+        price_in_rs = int(cheapest["price"] / 100)
+        return {"recommendation": f"Bedrock not configured. Local fallback: Try {cheapest['item_name']} at {cheapest['venue']} for {price_in_rs} Rs."}
         
     try:
         client = boto3.client(

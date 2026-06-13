@@ -71,6 +71,7 @@ function SettingsPage() {
   const [examStart, setExamStart] = useState("");
   const [examEnd, setExamEnd] = useState("");
   const [mess, setMess] = useState(false);
+  const [upiId, setUpiId] = useState("");
 
   useEffect(() => {
     if (!profile) return;
@@ -82,6 +83,7 @@ function SettingsPage() {
     setExamStart(profile.exam_start_date ?? "");
     setExamEnd(profile.exam_end_date ?? "");
     setMess(profile.mess_enrolled ?? false);
+    setUpiId(profile.upi_id ?? "");
   }, [profile]);
 
   const [addingSub, setAddingSub] = useState(false);
@@ -99,6 +101,7 @@ function SettingsPage() {
           exam_start_date: examStart || null,
           exam_end_date: examEnd || null,
           mess_enrolled: mess,
+          upi_id: upiId,
         },
       });
       qc.invalidateQueries({ queryKey: ["profile"] });
@@ -253,6 +256,9 @@ function SettingsPage() {
           </FieldRow>
           <FieldRow label="Exam end">
             <Input type="date" value={examEnd} onChange={(e) => setExamEnd(e.target.value)} />
+          </FieldRow>
+          <FieldRow label="UPI ID for Pools">
+            <Input id="input-settings-upi" placeholder="username@upi" value={upiId} onChange={(e) => setUpiId(e.target.value)} />
           </FieldRow>
           <div className="flex items-center justify-between">
             <span className="text-[13px]">Mess enrolled</span>

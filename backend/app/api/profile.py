@@ -21,11 +21,12 @@ class ProfileUpdateReq(BaseModel):
     onboarding_completed: Optional[bool] = None
     setup_completed: Optional[bool] = None
     pairing_code: Optional[str] = None
+    upi_id: Optional[str] = None
     companion_paired: Optional[bool] = None
     companion_device_name: Optional[str] = None
     companion_last_sync: Optional[str] = None
 
-@router.get("/")
+@router.get("")
 async def get_profile(user_id: str = Depends(get_current_user)):
     db = get_db()
     profile = await db.profiles.find_one({"_id": user_id})
@@ -33,7 +34,7 @@ async def get_profile(user_id: str = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Profile not found")
     return map_doc(profile)
 
-@router.post("/")
+@router.post("")
 async def update_profile(req: ProfileUpdateReq, user_id: str = Depends(get_current_user)):
     db = get_db()
     updates = req.model_dump(exclude_unset=True)
