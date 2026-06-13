@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
-import { supabase } from "@/integrations/supabase/client";
+import { getProfile, updateProfile, getCompanionSyncLogs } from "@/lib/api/db.functions";
 import { AppShell } from "@/components/AppShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,15 +11,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ChevronLeft } from "lucide-react";
 import { toast } from "sonner";
 import { relativeTime } from "@/lib/format";
-import type { Tables } from "@/integrations/supabase/types";
 
 export const Route = createFileRoute("/_authenticated/companion")({
   ssr: false,
   component: CompanionPage,
 });
 
-type Profile = Tables<"profiles">;
-type SyncLog = Tables<"companion_sync_log">;
+type Profile = any;
+type SyncLog = any;
 
 function randomPairingCode() {
   const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
@@ -37,20 +36,13 @@ function CompanionPage() {
   const { data: profile } = useQuery({
     queryKey: ["profile", user?.id],
     enabled: !!user,
-    queryFn: async (): Promise<Profile | null> => {
-      const { data } = await supabase.from("profiles").select("*").eq("id", user!.id).maybeSingle();
-      return data;
-    },
+    queryFn: () => getProfile(),
   });
 
   const { data: logs } = useQuery({
     queryKey: ["sync-log", user?.id],
     enabled: !!user,
-    queryFn: async (): Promise<SyncLog[]> => {
-      const { data } = await supabase.from("companion_sync_log").select("*")
-        .eq("user_id", user!.id).order("created_at", { ascending: false }).limit(20);
-      return data ?? [];
-    },
+    queryFn: () => getCompanionSyncLogs(),
   });
 
   useEffect(() => {
@@ -71,23 +63,37 @@ function CompanionPage() {
   async function unpair() {
     if (!confirm("Unpair this device?")) return;
     if (!user) return;
-    await supabase.from("profiles").update({
-      companion_paired: false, companion_device_name: null, companion_last_sync: null,
-    }).eq("id", user.id);
-    qc.invalidateQueries({ queryKey: ["profile"] });
-    toast.success("Device unpaired.");
+    try {
+      await updateProfile({
+        data: {
+          companion_paired: false,
+          companion_device_name: null,
+          companion_last_sync: null,
+        },
+      });
+      qc.invalidateQueries({ queryKey: ["profile"] });
+      toast.success("Device unpaired.");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to unpair device");
+    }
   }
 
   async function verifyPair() {
     if (!user) return;
-    await supabase.from("profiles").update({
-      companion_paired: true,
-      companion_device_name: profile?.companion_device_name ?? "Redmi Note 12",
-      companion_last_sync: new Date().toISOString(),
-      pairing_code: pairing,
-    }).eq("id", user.id);
-    qc.invalidateQueries({ queryKey: ["profile"] });
-    toast.success("Device connected! 🎉");
+    try {
+      await updateProfile({
+        data: {
+          companion_paired: true,
+          companion_device_name: profile?.companion_device_name ?? "Redmi Note 12",
+          companion_last_sync: new Date().toISOString(),
+          pairing_code: pairing,
+        },
+      });
+      qc.invalidateQueries({ queryKey: ["profile"] });
+      toast.success("Device connected! 🎉");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to pair device");
+    }
   }
 
   return (

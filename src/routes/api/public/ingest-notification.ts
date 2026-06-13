@@ -1,8 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-
-// Webhook endpoint for the PocketBuddy companion Android app.
-// Parses UPI notifications and inserts transactions on behalf of users.
-// Authenticates by pairing_code in the body (per-user secret set during onboarding).
+import { connectToDatabase } from "@/lib/mongodb";
 
 interface IngestBody {
   user_id?: string;
@@ -26,7 +23,6 @@ function parseUpiBody(text: string): { amount: number | null; merchant: string |
     text.match(/(?:to|at)\s+([A-Z][A-Z0-9_\- ]{3,40})/);
   if (toMatch) merchant = toMatch[1].trim().replace(/\s+/g, "_").slice(0, 80);
 
-  // UPI/MerchantId pattern
   const upiMatch = text.match(/UPI\/([A-Z0-9_\-]+)/i);
   if (!merchant && upiMatch) merchant = upiMatch[1];
 
@@ -61,15 +57,10 @@ export const Route = createFileRoute("/api/public/ingest-notification")({
           return new Response(JSON.stringify({ status: "missing_fields" }), { status: 400, headers: cors });
         }
 
-        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const { db } = await connectToDatabase();
 
-        const { data: profile, error: pErr } = await supabaseAdmin
-          .from("profiles")
-          .select("id, pairing_code, companion_paired")
-          .eq("id", body.user_id)
-          .maybeSingle();
-
-        if (pErr || !profile) {
+        const profile = await db.collection("profiles").findOne({ _id: body.user_id as any });
+        if (!profile) {
           return new Response(JSON.stringify({ status: "user_not_found" }), { status: 404, headers: cors });
         }
         if (profile.pairing_code && body.pairing_code && profile.pairing_code !== body.pairing_code) {
@@ -80,77 +71,73 @@ export const Route = createFileRoute("/api/public/ingest-notification")({
         const src = body.source ?? "UPI";
 
         // Insert pending log
-        const { data: logRow } = await supabaseAdmin
-          .from("companion_sync_log")
-          .insert({
-            user_id: body.user_id,
-            device_name: deviceName,
-            notification_source: src,
-            raw_body: body.body,
-            processing_status: "pending",
-          })
-          .select()
-          .single();
+        const logId = globalThis.crypto.randomUUID();
+        const logRow = {
+          _id: logId as any,
+          user_id: body.user_id,
+          device_name: deviceName,
+          notification_source: src,
+          raw_body: body.body,
+          processing_status: "pending",
+          created_at: new Date(),
+        };
+        await db.collection("companion_sync_log").insertOne(logRow);
 
         const { amount, merchant } = parseUpiBody(body.body);
 
         if (!amount || !merchant) {
-          if (logRow) {
-            await supabaseAdmin
-              .from("companion_sync_log")
-              .update({ processing_status: "failed" })
-              .eq("id", logRow.id);
-          }
+          await db.collection("companion_sync_log").updateOne(
+            { _id: logId as any },
+            { $set: { processing_status: "failed" } }
+          );
           return new Response(JSON.stringify({ status: "parse_failed" }), { status: 200, headers: cors });
         }
 
         // Look up merchant directory
-        const { data: md } = await supabaseAdmin
-          .from("merchant_directory")
-          .select("display_name, category")
-          .eq("raw_string", merchant)
-          .maybeSingle();
+        const md = await db.collection("merchant_directory").findOne({ raw_string: merchant });
 
         const txnSource = body.type === "sms" ? "companion_sms" : "companion_notification";
+        const txnId = globalThis.crypto.randomUUID();
 
-        const { data: txn } = await supabaseAdmin
-          .from("transactions")
-          .insert({
-            user_id: body.user_id,
-            amount,
-            raw_merchant_string: merchant,
-            mapped_merchant_name: md?.display_name ?? null,
-            category: md?.category ?? null,
-            is_mapped: !!md,
-            source: txnSource,
-            raw_notification_body: body.body,
-          })
-          .select()
-          .single();
+        const newTxn = {
+          _id: txnId as any,
+          user_id: body.user_id,
+          amount,
+          raw_merchant_string: merchant,
+          mapped_merchant_name: md?.display_name ?? null,
+          category: md?.category ?? null,
+          is_mapped: !!md,
+          source: txnSource,
+          raw_notification_body: body.body,
+          created_at: new Date(),
+        };
+        await db.collection("transactions").insertOne(newTxn);
 
-        if (logRow) {
-          await supabaseAdmin
-            .from("companion_sync_log")
-            .update({
+        await db.collection("companion_sync_log").updateOne(
+          { _id: logId as any },
+          {
+            $set: {
               processing_status: "parsed",
               parsed_amount: amount,
               parsed_merchant: merchant,
-            })
-            .eq("id", logRow.id);
-        }
+            },
+          }
+        );
 
-        await supabaseAdmin
-          .from("profiles")
-          .update({
-            companion_paired: true,
-            companion_device_name: deviceName,
-            companion_last_sync: new Date().toISOString(),
-          })
-          .eq("id", body.user_id);
+        await db.collection("profiles").updateOne(
+          { _id: body.user_id as any },
+          {
+            $set: {
+              companion_paired: true,
+              companion_device_name: deviceName,
+              companion_last_sync: new Date(),
+            },
+          }
+        );
 
         return new Response(
-          JSON.stringify({ status: "ok", transaction_id: txn?.id ?? null }),
-          { status: 200, headers: cors },
+          JSON.stringify({ status: "ok", transaction_id: txnId }),
+          { status: 200, headers: cors }
         );
       },
     },

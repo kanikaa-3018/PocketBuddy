@@ -296,3 +296,17 @@ export const identifyMerchant = createServerFn({ method: "POST" })
     );
     return { success: true };
   });
+
+export const getCompanionSyncLogs = createServerFn({ method: "GET" })
+  .middleware([requireMongoAuth])
+  .handler(async ({ context }) => {
+    const { userId } = context;
+    const { db } = await connectToDatabase();
+    const logs = await db
+      .collection("companion_sync_log")
+      .find({ user_id: userId })
+      .sort({ created_at: -1 })
+      .limit(20)
+      .toArray();
+    return mapDocs(logs);
+  });

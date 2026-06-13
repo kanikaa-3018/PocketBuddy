@@ -1,26 +1,24 @@
 import { createServerFn } from "@tanstack/react-start";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { requireMongoAuth } from "@/integrations/mongodb/auth-middleware";
+import { connectToDatabase } from "./mongodb";
 
 // Seed demo data for the current user. Only inserts if they have no transactions yet.
 export const seedDemoData = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireMongoAuth])
   .handler(async ({ context }) => {
-    const { supabase, userId } = context;
+    const { userId } = context;
+    const { db } = await connectToDatabase();
 
     // Check if already seeded
-    const { count } = await supabase
-      .from("transactions")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", userId);
-
-    if ((count ?? 0) > 0) return { seeded: false, reason: "already_has_data" };
+    const count = await db.collection("transactions").countDocuments({ user_id: userId });
+    if (count > 0) return { seeded: false, reason: "already_has_data" };
 
     const now = new Date();
     const daysAgo = (d: number, h: number = 0) => {
       const x = new Date(now);
       x.setDate(x.getDate() - d);
       x.setHours(h || (10 + Math.floor(Math.random() * 12)), Math.floor(Math.random() * 60), 0, 0);
-      return x.toISOString();
+      return x;
     };
 
     const txns = [
@@ -59,9 +57,14 @@ export const seedDemoData = createServerFn({ method: "POST" })
       { amount: 5500, raw_merchant_string: "XYZT_MERCH_009", mapped_merchant_name: null, category: null, is_mapped: false, source: "companion_notification", created_at: daysAgo(1, 17) },
       { amount: 3500, raw_merchant_string: "QK_PAY_SNACKS", mapped_merchant_name: null, category: null, is_mapped: false, source: "companion_notification", created_at: daysAgo(3, 16) },
       { amount: 4000, raw_merchant_string: "UPI_TXN_BALAJI", mapped_merchant_name: null, category: null, is_mapped: false, source: "companion_notification", created_at: daysAgo(5, 18) },
-    ].map((t) => ({ ...t, user_id: userId }));
+    ].map((t) => ({
+      _id: globalThis.crypto.randomUUID() as any,
+      ...t,
+      user_id: userId,
+      created_at: new Date(t.created_at),
+    }));
 
-    await supabase.from("transactions").insert(txns);
+    await db.collection("transactions").insertMany(txns);
 
     // Companion sync log
     const syncLog = [
@@ -70,63 +73,100 @@ export const seedDemoData = createServerFn({ method: "POST" })
       { device_name: "Redmi Note 12", notification_source: "Google Pay", raw_body: "You paid ₹45 to BH2_NIGHT_CANTEEN on UPI", parsed_amount: 4500, parsed_merchant: "BH2_NIGHT_CANTEEN", processing_status: "parsed" },
       { device_name: "Redmi Note 12", notification_source: "Google Pay", raw_body: "You paid ₹35 to QK_PAY_SNACKS on UPI", parsed_amount: null, parsed_merchant: null, processing_status: "pending" },
       { device_name: "Redmi Note 12", notification_source: "SBI Bank", raw_body: "Account update — call for details", parsed_amount: null, parsed_merchant: null, processing_status: "failed" },
-    ].map((s, i) => ({ ...s, user_id: userId, created_at: new Date(Date.now() - i * 3600 * 1000).toISOString() }));
+    ].map((s, i) => ({
+      _id: globalThis.crypto.randomUUID() as any,
+      ...s,
+      user_id: userId,
+      created_at: new Date(Date.now() - i * 3600 * 1000),
+    }));
 
-    await supabase.from("companion_sync_log").insert(syncLog);
+    await db.collection("companion_sync_log").insertMany(syncLog);
 
     // Subscriptions
     const subs = [
       { user_id: userId, service_name: "Spotify Premium", amount: 14900, next_debit_date: new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10), detected_from: "auto_detected", is_active: true },
       { user_id: userId, service_name: "YouTube Premium", amount: 12900, next_debit_date: new Date(Date.now() + 9 * 86400000).toISOString().slice(0, 10), detected_from: "auto_detected", is_active: true },
-    ];
-    await supabase.from("subscriptions").insert(subs);
+    ].map((s) => ({
+      _id: globalThis.crypto.randomUUID() as any,
+      ...s,
+      created_at: new Date(),
+    }));
+    await db.collection("subscriptions").insertMany(subs);
 
     // Cart pool + items
-    const { data: pool } = await supabase
-      .from("cart_pools")
-      .insert({
-        created_by: userId,
-        created_by_name: "Nishant",
-        wing_label: "Wing 4B",
-        platform: "zepto",
-        status: "open",
-        min_cart_value: 19900,
-        delivery_fee: 2500,
-        expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-      })
-      .select()
-      .single();
+    const poolId = globalThis.crypto.randomUUID();
+    const pool = {
+      _id: poolId as any,
+      created_by: userId,
+      created_by_name: "Nishant",
+      wing_label: "Wing 4B",
+      platform: "zepto",
+      status: "open",
+      min_cart_value: 19900,
+      delivery_fee: 2500,
+      expires_at: new Date(Date.now() + 30 * 60 * 1000),
+      created_at: new Date(),
+    };
+    await db.collection("cart_pools").insertOne(pool);
 
-    if (pool) {
-      await supabase.from("cart_pool_items").insert([
-        { pool_id: pool.id, added_by_name: "Nishant", item_description: "Amul Toned Milk 500ml", estimated_price: 3200 },
-        { pool_id: pool.id, added_by_name: "Nishant", item_description: "Parle-G Biscuits", estimated_price: 1000 },
-        { pool_id: pool.id, added_by_name: "Kavya", item_description: "Maggi 4-pack", estimated_price: 4800 },
-      ]);
-    }
+    await db.collection("cart_pool_items").insertMany([
+      { _id: globalThis.crypto.randomUUID() as any, pool_id: poolId, added_by_name: "Nishant", item_description: "Amul Toned Milk 500ml", estimated_price: 3200, created_at: new Date() },
+      { _id: globalThis.crypto.randomUUID() as any, pool_id: poolId, added_by_name: "Nishant", item_description: "Parle-G Biscuits", estimated_price: 1000, created_at: new Date() },
+      { _id: globalThis.crypto.randomUUID() as any, pool_id: poolId, added_by_name: "Kavya", item_description: "Maggi 4-pack", estimated_price: 4800, created_at: new Date() },
+    ]);
 
     // Checkin log
-    await supabase.from("checkin_logs").insert({
+    await db.collection("checkin_logs").insertOne({
+      _id: globalThis.crypto.randomUUID() as any,
       user_id: userId,
       response: "skipped",
       stress_note: "was studying for exam",
       food_gap_hours: 18.5,
       suggestion_given: "BH-2 Night Canteen Chai ₹15",
-      created_at: new Date(Date.now() - 2 * 86400000).toISOString(),
+      created_at: new Date(Date.now() - 2 * 86400000),
     });
 
+    // Seed campus food options if not already seeded
+    const foodCount = await db.collection("campus_food_options").countDocuments();
+    if (foodCount === 0) {
+      const foodOptions = [
+        { venue_name: "BH-1 Mess Hall", item_name: "Breakfast Thali", price: 5000, available_from: "07:30", available_until: "09:30" },
+        { venue_name: "BH-1 Mess Hall", item_name: "Lunch Thali", price: 6000, available_from: "12:00", available_until: "14:00" },
+        { venue_name: "BH-1 Mess Hall", item_name: "Dinner Thali", price: 6000, available_from: "19:30", available_until: "21:30" },
+        { venue_name: "BH-2 Night Canteen", item_name: "Maggi", price: 3000, available_from: "20:00", available_until: "02:00" },
+        { venue_name: "BH-2 Night Canteen", item_name: "Egg Paratha", price: 4500, available_from: "20:00", available_until: "02:00" },
+        { venue_name: "BH-2 Night Canteen", item_name: "Chai", price: 1500, available_from: "20:00", available_until: "02:00" },
+        { venue_name: "BH-2 Night Canteen", item_name: "Bread Omelette", price: 3500, available_from: "20:00", available_until: "02:00" },
+        { venue_name: "Campus Café", item_name: "Samosa (2pc)", price: 2000, available_from: "10:00", available_until: "22:00" },
+        { venue_name: "Campus Café", item_name: "Chole Bhature", price: 7000, available_from: "11:00", available_until: "15:00" },
+        { venue_name: "Campus Café", item_name: "Cold Coffee", price: 4000, available_from: "10:00", available_until: "22:00" },
+        { venue_name: "Gate Dhaba", item_name: "Egg Rice", price: 6000, available_from: "11:00", available_until: "23:00" },
+        { venue_name: "Gate Dhaba", item_name: "Paneer Roll", price: 5000, available_from: "11:00", available_until: "23:00" },
+        { venue_name: "Gate Dhaba", item_name: "Lemon Soda", price: 2000, available_from: "11:00", available_until: "23:00" },
+        { venue_name: "Night Juice Corner", item_name: "Banana Shake", price: 3500, available_from: "19:00", available_until: "01:00" },
+        { venue_name: "Night Juice Corner", item_name: "Mixed Fruit", price: 4500, available_from: "19:00", available_until: "01:00" },
+      ].map((f) => ({
+        _id: globalThis.crypto.randomUUID() as any,
+        ...f,
+        is_active: true,
+      }));
+      await db.collection("campus_food_options").insertMany(foodOptions);
+    }
+
     // Update profile companion info
-    await supabase
-      .from("profiles")
-      .update({
-        companion_paired: true,
-        companion_device_name: "Redmi Note 12",
-        companion_last_sync: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
-        upi_apps_used: ["gpay", "phonepe"],
-        mess_enrolled: true,
-        meal_schedule: { breakfast: false, lunch: true, dinner: true },
-      })
-      .eq("id", userId);
+    await db.collection("profiles").updateOne(
+      { _id: userId as any },
+      {
+        $set: {
+          companion_paired: true,
+          companion_device_name: "Redmi Note 12",
+          companion_last_sync: new Date(Date.now() - 2 * 3600 * 1000),
+          upi_apps_used: ["gpay", "phonepe"],
+          mess_enrolled: true,
+          meal_schedule: { breakfast: false, lunch: true, dinner: true },
+        },
+      }
+    );
 
     return { seeded: true };
   });
