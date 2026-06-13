@@ -1,7 +1,9 @@
 package com.pocketbuddy.connector.network
 
+import android.content.Context
 import android.util.Log
 import com.pocketbuddy.connector.BuildConfig
+import com.pocketbuddy.connector.config.ConnectorConfigStore
 import com.pocketbuddy.connector.model.TransactionNotificationPayload
 import java.io.IOException
 import java.util.concurrent.TimeUnit
@@ -14,10 +16,19 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 
 class WebhookClient(
-    private val endpointUrl: String = BuildConfig.POCKETBUDDY_WEBHOOK_URL,
+    context: Context? = null,
+    private val endpointUrlOverride: String? = null,
     private val client: OkHttpClient = defaultClient,
 ) {
+    private val configStore = context?.applicationContext?.let(::ConnectorConfigStore)
+
     fun post(payload: TransactionNotificationPayload, onComplete: ((PostResult) -> Unit)? = null) {
+        val endpointUrl = endpointUrlOverride
+            ?: configStore?.webhookUrl()
+            ?: BuildConfig.POCKETBUDDY_WEBHOOK_URL.trim()
+        val webhookToken = configStore?.webhookToken()
+            ?: BuildConfig.POCKETBUDDY_WEBHOOK_TOKEN.trim().takeIf(String::isNotBlank)
+
         if (endpointUrl.isBlank()) {
             onComplete?.invoke(PostResult.Failure("Webhook URL is blank"))
             return
@@ -31,10 +42,7 @@ class WebhookClient(
             .header("X-PocketBuddy-Device-Id", payload.deviceId)
             .apply {
                 payload.userId?.let { header("X-PocketBuddy-User-Id", it) }
-                BuildConfig.POCKETBUDDY_WEBHOOK_TOKEN
-                    .trim()
-                    .takeIf(String::isNotBlank)
-                    ?.let { header("Authorization", "Bearer $it") }
+                webhookToken?.let { header("Authorization", "Bearer $it") }
             }
             .build()
 
