@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">PocketBuddy Connector</string>
+    <string name="notification_listener_label">PocketBuddy UPI Listener</string>
+</resources>
