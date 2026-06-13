@@ -2,7 +2,6 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
-import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,37 +18,40 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { rupees, getCycleStart, shortDate } from "@/lib/format";
-import type { Tables } from "@/integrations/supabase/types";
+import {
+  getProfile,
+  getSubscriptions,
+  updateProfile,
+  updateSubscriptionIsActive,
+  deleteSubscription,
+  getTransactions,
+  deleteRecentTransactions,
+  insertSubscription,
+} from "@/lib/api/db.functions";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   ssr: false,
   component: SettingsPage,
 });
 
-type Profile = Tables<"profiles">;
-type Sub = Tables<"subscriptions">;
+type Profile = any;
+type Sub = any;
 
 function SettingsPage() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const qc = useQueryClient();
   const nav = useNavigate();
 
   const { data: profile } = useQuery({
     queryKey: ["profile", user?.id],
     enabled: !!user,
-    queryFn: async (): Promise<Profile | null> => {
-      const { data } = await supabase.from("profiles").select("*").eq("id", user!.id).maybeSingle();
-      return data;
-    },
+    queryFn: () => getProfile(),
   });
 
   const { data: subs } = useQuery({
     queryKey: ["all-subs", user?.id],
     enabled: !!user,
-    queryFn: async (): Promise<Sub[]> => {
-      const { data } = await supabase.from("subscriptions").select("*").eq("user_id", user!.id);
-      return data ?? [];
-    },
+    queryFn: () => getSubscriptions(),
   });
 
   // Profile form state
@@ -78,78 +80,107 @@ function SettingsPage() {
 
   async function saveProfile() {
     if (!user) return;
-    const { error } = await supabase.from("profiles").update({
-      monthly_allowance: Math.round(parseFloat(allowance) * 100),
-      cycle_start_day: parseInt(cycleDay, 10),
-      hostel_block: hostel, wing_label: wing, room_number: room,
-      exam_start_date: examStart || null, exam_end_date: examEnd || null,
-      mess_enrolled: mess,
-    }).eq("id", user.id);
-    if (error) { toast.error(error.message); return; }
-    qc.invalidateQueries({ queryKey: ["profile"] });
-    toast.success("Profile updated.");
+    try {
+      await updateProfile({
+        data: {
+          monthly_allowance: Math.round(parseFloat(allowance) * 100),
+          cycle_start_day: parseInt(cycleDay, 10),
+          hostel_block: hostel,
+          wing_label: wing,
+          room_number: room,
+          exam_start_date: examStart || null,
+          exam_end_date: examEnd || null,
+          mess_enrolled: mess,
+        },
+      });
+      qc.invalidateQueries({ queryKey: ["profile"] });
+      toast.success("Profile updated.");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update profile");
+    }
   }
 
   async function toggleSub(id: string, val: boolean, name: string) {
-    await supabase.from("subscriptions").update({ is_active: val }).eq("id", id);
-    qc.invalidateQueries({ queryKey: ["all-subs"] });
-    toast(`${name} ${val ? "enabled" : "paused"}`);
+    try {
+      await updateSubscriptionIsActive({ data: { id, is_active: val } });
+      qc.invalidateQueries({ queryKey: ["all-subs"] });
+      toast(`${name} ${val ? "enabled" : "paused"}`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update subscription");
+    }
   }
+
   async function delSub(id: string) {
     if (!confirm("Remove this subscription?")) return;
-    await supabase.from("subscriptions").delete().eq("id", id);
-    qc.invalidateQueries({ queryKey: ["all-subs"] });
-    toast.success("Removed.");
+    try {
+      await deleteSubscription({ data: { id } });
+      qc.invalidateQueries({ queryKey: ["all-subs"] });
+      toast.success("Removed.");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete subscription");
+    }
   }
 
   async function exportCsv() {
     if (!user) return;
-    const { data } = await supabase.from("transactions").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
-    const rows = [["date", "merchant", "category", "amount_inr", "source"], ...(data ?? []).map((t) => [
-      t.created_at, t.mapped_merchant_name ?? t.raw_merchant_string,
-      t.category ?? "", String(t.amount / 100), t.source,
-    ])];
-    const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-    downloadBlob(csv, "transactions.csv", "text/csv");
-    toast.success("CSV downloaded.");
+    try {
+      const txns = await getTransactions();
+      const rows = [["date", "merchant", "category", "amount_inr", "source"], ...(txns ?? []).map((t: any) => [
+        t.created_at, t.mapped_merchant_name ?? t.raw_merchant_string,
+        t.category ?? "", String(t.amount / 100), t.source,
+      ])];
+      const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+      downloadBlob(csv, "transactions.csv", "text/csv");
+      toast.success("CSV downloaded.");
+    } catch (err: any) {
+      toast.error("Failed to export transactions");
+    }
   }
 
   async function exportReport() {
     if (!user || !profile) return;
-    const { data } = await supabase.from("transactions").select("*").eq("user_id", user.id);
-    const start = getCycleStart(profile.cycle_start_day);
-    const cycleTxns = (data ?? []).filter((t) => new Date(t.created_at) >= start);
-    const total = cycleTxns.reduce((s, t) => s + t.amount, 0) / 100;
-    const byCat: Record<string, number> = {};
-    cycleTxns.forEach((t) => { byCat[t.category ?? "unmapped"] = (byCat[t.category ?? "unmapped"] ?? 0) + t.amount / 100; });
-    const lines = [
-      "POCKETBUDDY SPENDING REPORT",
-      `Generated: ${new Date().toLocaleString("en-IN")}`,
-      `Cycle start: ${start.toLocaleDateString("en-IN")}`,
-      "",
-      `Total spent this cycle: ₹${total.toFixed(0)}`,
-      `Monthly allowance: ₹${(profile.monthly_allowance / 100).toFixed(0)}`,
-      "",
-      "By category:",
-      ...Object.entries(byCat).map(([k, v]) => `  ${k}: ₹${v.toFixed(0)}`),
-    ];
-    downloadBlob(lines.join("\n"), "spending-report.txt", "text/plain");
-    toast.success("Report downloaded.");
+    try {
+      const txns = await getTransactions();
+      const start = getCycleStart(profile.cycle_start_day);
+      const cycleTxns = (txns ?? []).filter((t: any) => new Date(t.created_at) >= start);
+      const total = cycleTxns.reduce((s: any, t: any) => s + t.amount, 0) / 100;
+      const byCat: Record<string, number> = {};
+      cycleTxns.forEach((t: any) => { byCat[t.category ?? "unmapped"] = (byCat[t.category ?? "unmapped"] ?? 0) + t.amount / 100; });
+      const lines = [
+        "POCKETBUDDY SPENDING REPORT",
+        `Generated: ${new Date().toLocaleString("en-IN")}`,
+        `Cycle start: ${start.toLocaleDateString("en-IN")}`,
+        "",
+        `Total spent this cycle: ₹${total.toFixed(0)}`,
+        `Monthly allowance: ₹${(profile.monthly_allowance / 100).toFixed(0)}`,
+        "",
+        "By category:",
+        ...Object.entries(byCat).map(([k, v]) => `  ${k}: ₹${v.toFixed(0)}`),
+      ];
+      downloadBlob(lines.join("\n"), "spending-report.txt", "text/plain");
+      toast.success("Report downloaded.");
+    } catch (err: any) {
+      toast.error("Failed to export report");
+    }
   }
 
   async function resetCycle() {
     if (!user || !profile) return;
     if (!confirm("Delete all transactions in the current cycle?")) return;
-    const start = getCycleStart(profile.cycle_start_day);
-    await supabase.from("transactions").delete().eq("user_id", user.id).gte("created_at", start.toISOString());
-    qc.invalidateQueries();
-    toast.success("Cycle reset.");
+    try {
+      const start = getCycleStart(profile.cycle_start_day);
+      await deleteRecentTransactions({ data: { startDate: start.toISOString() } });
+      qc.invalidateQueries();
+      toast.success("Cycle reset.");
+    } catch (err: any) {
+      toast.error("Failed to reset cycle");
+    }
   }
 
   async function signOut() {
     await qc.cancelQueries();
     qc.clear();
-    await supabase.auth.signOut();
+    await logout();
     nav({ to: "/login", replace: true });
   }
 
@@ -250,7 +281,7 @@ function SettingsPage() {
 
       <Dialog open={addingSub} onOpenChange={setAddingSub}>
         <DialogContent id="dialog-add-sub">
-          <AddSubForm userId={user?.id} onClose={() => { setAddingSub(false); qc.invalidateQueries({ queryKey: ["all-subs"] }); }} />
+          <AddSubForm onClose={() => { setAddingSub(false); qc.invalidateQueries({ queryKey: ["all-subs"] }); }} />
         </DialogContent>
       </Dialog>
     </AppShell>
@@ -266,19 +297,27 @@ function FieldRow({ label, children }: { label: string; children: React.ReactNod
   );
 }
 
-function AddSubForm({ userId, onClose }: { userId: string | undefined; onClose: () => void }) {
+function AddSubForm({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState("");
   const [amt, setAmt] = useState("");
   const [date, setDate] = useState("");
   async function save() {
-    if (!userId || !name || !amt || !date) { toast.error("Fill all fields"); return; }
-    await supabase.from("subscriptions").insert({
-      user_id: userId, service_name: name,
-      amount: Math.round(parseFloat(amt) * 100), next_debit_date: date,
-      detected_from: "manual", is_active: true,
-    });
-    toast.success("Subscription tracked.");
-    onClose();
+    if (!name || !amt || !date) { toast.error("Fill all fields"); return; }
+    try {
+      await insertSubscription({
+        data: {
+          service_name: name,
+          amount: Math.round(parseFloat(amt) * 100),
+          next_debit_date: date,
+          detected_from: "manual",
+          is_active: true,
+        },
+      });
+      toast.success("Subscription tracked.");
+      onClose();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to add subscription");
+    }
   }
   return (
     <>

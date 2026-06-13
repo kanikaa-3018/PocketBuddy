@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
-import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,14 +9,14 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { rupees, relativeTime, absoluteDate, getCycleStart } from "@/lib/format";
-import type { Tables } from "@/integrations/supabase/types";
+import { getProfile, getTransactions } from "@/lib/api/db.functions";
 
 export const Route = createFileRoute("/_authenticated/transactions")({
   ssr: false,
   component: TxnsPage,
 });
 
-type Txn = Tables<"transactions">;
+type Txn = any;
 type Cat = "all" | "food" | "stationery" | "travel" | "subscription" | "other" | "unmapped";
 type Source = "all" | "companion" | "manual";
 type Range = "cycle" | "7" | "30" | "all";
@@ -39,19 +38,13 @@ function TxnsPage() {
   const { data: profile } = useQuery({
     queryKey: ["profile", user?.id],
     enabled: !!user,
-    queryFn: async () => {
-      const { data } = await supabase.from("profiles").select("cycle_start_day").eq("id", user!.id).maybeSingle();
-      return data;
-    },
+    queryFn: () => getProfile(),
   });
 
   const { data: txns, isLoading } = useQuery({
     queryKey: ["txns", user?.id],
     enabled: !!user,
-    queryFn: async (): Promise<Txn[]> => {
-      const { data } = await supabase.from("transactions").select("*").eq("user_id", user!.id).order("created_at", { ascending: false });
-      return data ?? [];
-    },
+    queryFn: () => getTransactions(),
   });
 
   const filtered = useMemo(() => {

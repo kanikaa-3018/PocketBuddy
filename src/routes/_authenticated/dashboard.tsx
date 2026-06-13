@@ -2,7 +2,6 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
-import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,19 +20,28 @@ import {
   rupees, shortDate, relativeTime, getCycleStart, getCycleEnd, daysBetween,
   isTimeInRange, fmtTime,
 } from "@/lib/format";
-import type { Tables } from "@/integrations/supabase/types";
+import {
+  getProfile,
+  getTransactions,
+  getCampusFood,
+  getSubscriptions,
+  getCartPools,
+  insertTransaction,
+  insertCheckinLog,
+  identifyMerchant,
+} from "@/lib/api/db.functions";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   ssr: false,
   component: Dashboard,
 });
 
-type Profile = Tables<"profiles">;
-type Txn = Tables<"transactions">;
-type Food = Tables<"campus_food_options">;
-type Sub = Tables<"subscriptions">;
-type Pool = Tables<"cart_pools">;
-type PoolItem = Tables<"cart_pool_items">;
+type Profile = any;
+type Txn = any;
+type Food = any;
+type Sub = any;
+type Pool = any;
+type PoolItem = any;
 
 const CATEGORIES = [
   { v: "food", l: "🍜 Food" }, { v: "stationery", l: "📎 Stationery" },
@@ -66,71 +74,39 @@ function Dashboard() {
     queryKey: ["profile", user?.id],
     enabled: !!user,
     staleTime: 30_000,
-    queryFn: async (): Promise<Profile | null> => {
-      const { data } = await supabase.from("profiles").select("*").eq("id", user!.id).maybeSingle();
-      return data;
-    },
+    queryFn: () => getProfile(),
   });
 
   const { data: txns } = useQuery({
     queryKey: ["txns", user?.id],
     enabled: !!user,
     staleTime: 30_000,
-    queryFn: async (): Promise<Txn[]> => {
-      const { data } = await supabase.from("transactions").select("*").eq("user_id", user!.id).order("created_at", { ascending: false });
-      return data ?? [];
-    },
+    queryFn: () => getTransactions(),
   });
 
   const { data: foods } = useQuery({
     queryKey: ["foods"],
     staleTime: 5 * 60_000,
-    queryFn: async (): Promise<Food[]> => {
-      const { data } = await supabase.from("campus_food_options").select("*").eq("is_active", true);
-      return data ?? [];
-    },
+    queryFn: () => getCampusFood(),
   });
 
   const { data: subs } = useQuery({
     queryKey: ["subs", user?.id],
     enabled: !!user,
     staleTime: 30_000,
-    queryFn: async (): Promise<Sub[]> => {
-      const { data } = await supabase.from("subscriptions").select("*").eq("user_id", user!.id).eq("is_active", true);
-      return data ?? [];
-    },
+    queryFn: () => getSubscriptions(),
   });
 
   const { data: pools } = useQuery({
     queryKey: ["pools", profile?.wing_label],
     enabled: !!profile?.wing_label,
     staleTime: 15_000,
+    refetchInterval: 5000, // MongoDB real-time replacement polling
     queryFn: async (): Promise<(Pool & { items: PoolItem[] })[]> => {
-      const { data: ps } = await supabase
-        .from("cart_pools")
-        .select("*")
-        .eq("wing_label", profile!.wing_label)
-        .eq("status", "open")
-        .gte("expires_at", new Date().toISOString());
-      if (!ps?.length) return [];
-      const ids = ps.map((p) => p.id);
-      const { data: items } = await supabase.from("cart_pool_items").select("*").in("pool_id", ids);
-      return ps.map((p) => ({ ...p, items: (items ?? []).filter((i) => i.pool_id === p.id) }));
+      const ps = await getCartPools();
+      return ps ?? [];
     },
   });
-
-  // Realtime: pools changes
-  useEffect(() => {
-    if (!profile?.wing_label) return;
-    const ch = supabase
-      .channel("dash-pools")
-      .on("postgres_changes", { event: "*", schema: "public", table: "cart_pools", filter: `wing_label=eq.${profile.wing_label}` },
-        () => qc.invalidateQueries({ queryKey: ["pools"] }))
-      .on("postgres_changes", { event: "*", schema: "public", table: "cart_pool_items" },
-        () => qc.invalidateQueries({ queryKey: ["pools"] }))
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
-  }, [profile?.wing_label, qc]);
 
   // Runway calculation
   const calc = useMemo(() => {
@@ -165,7 +141,6 @@ function Dashboard() {
     if (available.length) {
       return [...available].sort((a, b) => a.price - b.price)[0];
     }
-    // Find next opening
     return foods[0];
   }, [foods]);
 
@@ -233,12 +208,20 @@ function Dashboard() {
 
   async function handleCheckInAte() {
     if (!user) return;
-    await supabase.from("transactions").insert({
-      user_id: user.id, amount: 0, raw_merchant_string: "Self-reported: Ate at mess",
-      mapped_merchant_name: "Self-reported", category: "food", is_mapped: true, source: "manual",
+    await insertTransaction({
+      data: {
+        amount: 0,
+        raw_merchant_string: "Self-reported: Ate at mess",
+        mapped_merchant_name: "Self-reported",
+        category: "food",
+        source: "manual",
+      },
     });
-    await supabase.from("checkin_logs").insert({
-      user_id: user.id, response: "ate", food_gap_hours: foodGapHours,
+    await insertCheckinLog({
+      data: {
+        response: "ate",
+        food_gap_hours: foodGapHours,
+      },
     });
     localStorage.setItem("pocketbuddy_last_checkin", String(Date.now()));
     setShowCheckIn(false);
@@ -249,9 +232,13 @@ function Dashboard() {
   async function handleCheckInSkipped() {
     if (!user) return;
     const suggestion = bestFood ? `${bestFood.venue_name} ${bestFood.item_name} ${rupees(bestFood.price)}` : "Campus Café";
-    await supabase.from("checkin_logs").insert({
-      user_id: user.id, response: "skipped", stress_note: stressNote || null,
-      food_gap_hours: foodGapHours, suggestion_given: suggestion,
+    await insertCheckinLog({
+      data: {
+        response: "skipped",
+        stress_note: stressNote || null,
+        food_gap_hours: foodGapHours,
+        suggestion_given: suggestion,
+      },
     });
     localStorage.setItem("pocketbuddy_last_checkin", String(Date.now()));
     setShowCheckIn(false); setStressNote(""); setCheckInExpanded(false);
@@ -340,13 +327,13 @@ function Dashboard() {
           <div className="mt-2 space-y-2">
             {(pools ?? []).length === 0 && <p className="py-4 text-center text-[12px] text-muted-foreground">No active pools in your wing.</p>}
             {(pools ?? []).map((p) => {
-              const total = p.items.reduce((s, i) => s + i.estimated_price, 0);
+              const total = p.items.reduce((s: number, i: any) => s + i.estimated_price, 0);
               const minsLeft = Math.max(0, Math.round((new Date(p.expires_at).getTime() - Date.now()) / 60000));
-              const perPerson = p.items.length ? Math.round(p.delivery_fee / new Set(p.items.map((i) => i.added_by_name)).size) : 0;
+              const perPerson = p.items.length ? Math.round(p.delivery_fee / new Set(p.items.map((i: any) => i.added_by_name)).size) : 0;
               return (
                 <Link key={p.id} to="/pool/$id" params={{ id: p.id }}>
                   <Card className="p-3 bg-[color:var(--surface)] hover:border-[color:var(--pb-purple)]/40 transition-colors">
-                    <div className="flex items-center justify-between">
+                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium capitalize">{p.platform.replace("_", " ")}</span>
                         <Badge variant="outline" className="text-muted-foreground">{p.wing_label}</Badge>
@@ -442,7 +429,7 @@ function Dashboard() {
       {/* Add txn */}
       <Dialog open={adding} onOpenChange={setAdding}>
         <DialogContent id="dialog-add-transaction">
-          <AddTxnForm userId={user?.id} onClose={() => { setAdding(false); qc.invalidateQueries(); }} />
+          <AddTxnForm onClose={() => { setAdding(false); qc.invalidateQueries(); }} />
         </DialogContent>
       </Dialog>
 
@@ -518,30 +505,27 @@ function Pill({ children }: { children: React.ReactNode }) {
 }
 
 function IdentifyForm({ txn, onClose }: { txn: Txn; onClose: () => void }) {
-  const { user } = useAuth();
   const [name, setName] = useState("");
   const [cat, setCat] = useState<string>("food");
   const [busy, setBusy] = useState(false);
   async function save() {
-    if (!user || !name) { toast.error("Enter shop name"); return; }
+    if (!name) { toast.error("Enter shop name"); return; }
     setBusy(true);
-    const { data: existing } = await supabase.from("merchant_directory")
-      .select("*").eq("raw_string", txn.raw_merchant_string).maybeSingle();
-    if (existing) {
-      await supabase.from("merchant_directory").update({
-        display_name: name, category: cat, confirmation_count: (existing.confirmation_count ?? 1) + 1,
-      }).eq("id", existing.id);
-    } else {
-      await supabase.from("merchant_directory").insert({
-        raw_string: txn.raw_merchant_string, display_name: name, category: cat, mapped_by_user_id: user.id,
+    try {
+      await identifyMerchant({
+        data: {
+          raw_merchant_string: txn.raw_merchant_string,
+          display_name: name,
+          category: cat,
+        },
       });
+      toast.success("Mapped! This helps everyone on campus.");
+      onClose();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to identify merchant");
+    } finally {
+      setBusy(false);
     }
-    await supabase.from("transactions").update({
-      mapped_merchant_name: name, category: cat, is_mapped: true,
-    }).eq("user_id", user.id).eq("raw_merchant_string", txn.raw_merchant_string);
-    setBusy(false);
-    toast.success("Mapped! This helps everyone on campus.");
-    onClose();
   }
   return (
     <>
@@ -568,22 +552,31 @@ function IdentifyForm({ txn, onClose }: { txn: Txn; onClose: () => void }) {
   );
 }
 
-function AddTxnForm({ userId, onClose }: { userId: string | undefined; onClose: () => void }) {
+function AddTxnForm({ onClose }: { onClose: () => void }) {
   const [amount, setAmount] = useState("");
   const [merchant, setMerchant] = useState("");
   const [cat, setCat] = useState<string>("food");
   const [busy, setBusy] = useState(false);
   async function save() {
-    if (!userId || !amount || !merchant) { toast.error("Fill all fields"); return; }
+    if (!amount || !merchant) { toast.error("Fill all fields"); return; }
     setBusy(true);
-    await supabase.from("transactions").insert({
-      user_id: userId, amount: Math.round(parseFloat(amount) * 100),
-      raw_merchant_string: merchant, mapped_merchant_name: merchant,
-      category: cat, is_mapped: true, source: "manual",
-    });
-    setBusy(false);
-    toast.success("Transaction logged.");
-    onClose();
+    try {
+      await insertTransaction({
+        data: {
+          amount: Math.round(parseFloat(amount) * 100),
+          raw_merchant_string: merchant,
+          mapped_merchant_name: merchant,
+          category: cat,
+          source: "manual",
+        },
+      });
+      toast.success("Transaction logged.");
+      onClose();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to log transaction");
+    } finally {
+      setBusy(false);
+    }
   }
   return (
     <>
