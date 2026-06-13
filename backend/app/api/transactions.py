@@ -20,14 +20,14 @@ class IdentifyReq(BaseModel):
     category: str
     display_name: str
 
-@router.get("/")
+@router.get("")
 async def get_transactions(user_id: str = Depends(get_current_user)):
     db = get_db()
     cursor = db.transactions.find({"user_id": user_id}).sort("created_at", -1)
     txns = await cursor.to_list(length=1000)
     return map_docs(txns)
 
-@router.post("/")
+@router.post("")
 async def insert_transaction(req: TxnReq, user_id: str = Depends(get_current_user)):
     db = get_db()
     txn_id = str(uuid.uuid4())

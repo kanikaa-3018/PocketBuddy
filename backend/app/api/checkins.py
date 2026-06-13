@@ -15,7 +15,7 @@ class CheckinReq(BaseModel):
     suggestion_given: Optional[str] = None
     stress_note: Optional[str] = None
 
-@router.post("/")
+@router.post("")
 async def insert_checkin(req: CheckinReq, user_id: str = Depends(get_current_user)):
     db = get_db()
     log_id = str(uuid.uuid4())

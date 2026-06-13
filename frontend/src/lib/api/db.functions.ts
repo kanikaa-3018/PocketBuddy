@@ -75,12 +75,46 @@ export async function insertCartPool({ data }: { data: any }) {
   });
 }
 
+export async function updateCartPool({ id, data }: { id: string; data: any }) {
+  return apiRequest(`/api/cart-pools/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
 export async function getCartPoolItems({ data }: { data: { pool_id: string } }) {
   return apiRequest(`/api/cart-pools/${data.pool_id}/items`);
 }
 
 export async function insertCartPoolItem({ data }: { data: any }) {
   return apiRequest(`/api/cart-pools/${data.pool_id}/items`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteCartPoolItem({ pool_id, item_id }: { pool_id: string; item_id: string }) {
+  return apiRequest(`/api/cart-pools/${pool_id}/items/${item_id}`, {
+    method: "DELETE",
+  });
+}
+
+export async function updateCartPoolItem({ pool_id, item_id, data }: { pool_id: string; item_id: string; data: any }) {
+  return apiRequest(`/api/cart-pools/${pool_id}/items/${item_id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function paymentConfirm({ pool_id, data }: { pool_id: string; data: { roommate_name: string; utr: string } }) {
+  return apiRequest(`/api/cart-pools/${pool_id}/payment-confirm`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function paymentVerify({ pool_id, data }: { pool_id: string; data: { roommate_name: string; action: "verify" | "reject" } }) {
+  return apiRequest(`/api/cart-pools/${pool_id}/payment-verify`, {
     method: "POST",
     body: JSON.stringify(data),
   });

@@ -49,7 +49,7 @@ async def get_food_recommendation(req: RagReq, user_id: str = Depends(get_curren
         body = json.dumps({
             "anthropic_version": "bedrock-2023-05-31",
             "max_tokens": 150,
-            "messages": [{"role": "user", "content": prompt}]
+            "messages": [{"role": "user", "content": prompt}],
         })
 
         response = client.invoke_model(
@@ -59,8 +59,8 @@ async def get_food_recommendation(req: RagReq, user_id: str = Depends(get_curren
             contentType="application/json",
         )
 
-        res_body = json.loads(response.get('body').read())
-        recommendation = res_body.get('content')[0].get('text')
+        res_body = json.loads(response.get("body").read())
+        recommendation = res_body.get("content")[0].get("text")
 
         return {
             "recommendation": recommendation,
@@ -68,8 +68,8 @@ async def get_food_recommendation(req: RagReq, user_id: str = Depends(get_curren
             "fallback": fallback["recommendation"],
         }
 
-    except Exception as e:
-        logger.warning("Bedrock recommendation failed; using local fallback: %s", e)
+    except Exception as exc:
+        logger.warning("Bedrock recommendation failed; using local fallback: %s", exc)
         return {**fallback, "source": "local_fallback", "bedrock_error": "unavailable"}
 
 

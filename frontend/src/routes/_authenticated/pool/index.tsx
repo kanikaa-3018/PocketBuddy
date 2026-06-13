@@ -31,6 +31,30 @@ const PLATFORMS = [
   { v: "swiggy_instamart" as const, l: "Swiggy Instamart" },
 ];
 
+const BRAND_THEMES: Record<string, { bg: string; text: string; name: string; gradient: string; accent: string }> = {
+  zepto: {
+    bg: "bg-[#5E17EB]",
+    text: "text-white",
+    name: "Zepto",
+    gradient: "from-[#5E17EB] to-[#FF5E00]",
+    accent: "text-[#FF5E00]"
+  },
+  blinkit: {
+    bg: "bg-[#F7EC13]",
+    text: "text-black",
+    name: "Blinkit",
+    gradient: "from-[#F7EC13] to-[#14B8A6]",
+    accent: "text-[#14B8A6]"
+  },
+  swiggy_instamart: {
+    bg: "bg-[#FC8019]",
+    text: "text-white",
+    name: "Swiggy Instamart",
+    gradient: "from-[#FC8019] to-[#EF4444]",
+    accent: "text-[#FC8019]"
+  }
+};
+
 function PoolList() {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -121,27 +145,76 @@ function PoolCard({ pool }: { pool: Pool }) {
     0,
     Math.round((new Date(pool.expires_at).getTime() - Date.now()) / 60000),
   );
+
+  const theme = BRAND_THEMES[pool.platform] || {
+    bg: "bg-primary",
+    text: "text-primary-foreground",
+    name: pool.platform,
+    gradient: "from-primary to-accent",
+    accent: "text-primary"
+  };
+
+  const active = minsLeft > 0 && pool.status === "open";
+
   return (
-    <Link to="/pool/$id" params={{ id: pool.id }}>
-      <Card className="p-3 reactbits-card">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium capitalize">
-              {pool.platform.replace("_", " ")}
+    <Link to="/pool/$id" params={{ id: pool.id }} className="block no-underline">
+      <Card className={`relative overflow-hidden p-4 border transition-all hover:scale-[1.01] active:scale-[0.99] shadow-sm hover:shadow-md ${
+        active
+          ? `bg-gradient-to-r ${theme.gradient} text-white border-transparent`
+          : "bg-[color:var(--surface)] text-foreground border-border"
+      }`}>
+        {active && (
+          <div className="absolute right-2 top-2">
+            <span className="inline-flex items-center gap-1 bg-white/20 backdrop-blur-md px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider text-white">
+              <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
+              Open & Join
             </span>
-            <Badge variant="outline" className="text-muted-foreground">
-              {pool.wing_label}
-            </Badge>
           </div>
-          <span
-            className={`text-[12px] font-medium text-[color:var(--pb-purple)] tnum ${minsLeft < 5 && minsLeft > 0 ? "countdown-pulse" : ""}`}
-          >
-            {minsLeft > 0 ? `${minsLeft}m left` : pool.status}
-          </span>
+        )}
+
+        <div className="flex flex-col justify-between h-full">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className={`text-lg font-black uppercase tracking-tight ${active ? "text-white" : "text-foreground"}`}>
+                {theme.name} Pool
+              </span>
+              <Badge variant="outline" className={`text-[10px] font-bold ${active ? "border-white/40 text-white bg-white/10" : "border-border text-muted-foreground"}`}>
+                {pool.wing_label}
+              </Badge>
+            </div>
+            <p className={`text-xs mt-1 ${active ? "text-white/80" : "text-muted-foreground"}`}>
+              Host: <span className="font-bold capitalize">{pool.created_by_name || "—"}</span>
+            </p>
+          </div>
+
+          <div className="mt-4 flex justify-between items-end border-t pt-2.5 border-current/10">
+            <div>
+              <p className={`text-[10px] uppercase tracking-wider ${active ? "text-white/70" : "text-muted-foreground/80"}`}>
+                Min Cart Target
+              </p>
+              <p className={`text-sm font-black tnum ${active ? "text-white" : "text-foreground"}`}>
+                {rupees(pool.min_cart_value)}
+              </p>
+            </div>
+            <div className="text-right">
+              {active ? (
+                <span className="text-xs font-bold bg-black/25 px-2.5 py-1 rounded-full tnum">
+                  ⚡ {minsLeft}m left
+                </span>
+              ) : (
+                <Badge className={`font-bold capitalize ${
+                  pool.status === "completed"
+                    ? "bg-green-600 text-white"
+                    : pool.status === "cancelled"
+                    ? "bg-red-600 text-white"
+                    : "bg-muted text-muted-foreground"
+                }`}>
+                  {pool.status}
+                </Badge>
+              )}
+            </div>
+          </div>
         </div>
-        <p className="mt-1 text-[12px] text-muted-foreground">
-          Host: {pool.created_by_name || "—"} • Min cart: {rupees(pool.min_cart_value)}
-        </p>
       </Card>
     </Link>
   );
