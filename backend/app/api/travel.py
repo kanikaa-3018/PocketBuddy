@@ -1,7 +1,8 @@
 import datetime
 import uuid
 import logging
-from typing import Optional, List
+import re
+from typing import Any, Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from app.core.database import get_db
@@ -469,6 +470,52 @@ class AiCoachReq(BaseModel):
     college: Optional[str] = None
     app_quote: Optional[float] = None  # What the booking app is showing right now
 
+
+def _coerce_ai_text(value: Any, fallback: str) -> str:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return fallback
+
+
+def _coerce_ai_tactics(value: Any, fallback: list[str]) -> list[str]:
+    if isinstance(value, list):
+        tactics = [str(item).strip() for item in value if str(item).strip()]
+        if tactics:
+            return tactics[:5]
+
+    if isinstance(value, str) and value.strip():
+        raw_parts = value.replace("\r", "\n").split("\n")
+        tactics = []
+        for part in raw_parts:
+            cleaned = part.strip().lstrip("-*0123456789. )").strip()
+            if cleaned:
+                tactics.append(cleaned)
+        if tactics:
+            return tactics[:5]
+        return [value.strip()]
+
+    return fallback
+
+
+def _normalize_ai_coach_response(
+    result: dict[str, Any],
+    fallback_response: dict[str, Any],
+    *,
+    surge_factor: float,
+    community_median: float,
+    report_count: int,
+) -> dict[str, Any]:
+    return {
+        "script": _coerce_ai_text(result.get("script"), fallback_response["script"]),
+        "tactics": _coerce_ai_tactics(result.get("tactics"), fallback_response["tactics"]),
+        "safety": _coerce_ai_text(result.get("safety"), fallback_response["safety"]),
+        "source": "bedrock",
+        "surge_factor": surge_factor,
+        "community_median": community_median,
+        "report_count": report_count,
+    }
+
+
 @router.post("/ai-coach")
 async def get_ai_negotiation_coach(req: AiCoachReq, user_id: str = Depends(get_current_user)):
     db = get_db()
@@ -501,11 +548,10 @@ async def get_ai_negotiation_coach(req: AiCoachReq, user_id: str = Depends(get_c
     community_median = median_fare  # fallback to route median
     report_count = 0
     if route:
-        now_hour = datetime.datetime.utcnow().hour
         # Fetch recent reports for this route+mode to build community median
         report_cursor = db.travel_reports.find({
             "route_id": req.route_id,
-            "mode": {"$regex": req.mode, "$options": "i"},
+            "mode": {"$regex": re.escape(req.mode), "$options": "i"},
         }).sort("created_at", -1)
         recent_reports = await report_cursor.to_list(length=200)
         if recent_reports:
@@ -592,11 +638,13 @@ async def get_ai_negotiation_coach(req: AiCoachReq, user_id: str = Depends(get_c
         """
 
         result = generate_json(prompt, max_tokens=500, temperature=0.25)
-        result["source"] = "bedrock"
-        result["surge_factor"] = surge_factor
-        result["community_median"] = community_median
-        result["report_count"] = report_count
-        return result
+        return _normalize_ai_coach_response(
+            result,
+            fallback_response,
+            surge_factor=surge_factor,
+            community_median=community_median,
+            report_count=report_count,
+        )
 
     except Exception as exc:
         logger.warning("Bedrock AI coach failed: %s", exc)

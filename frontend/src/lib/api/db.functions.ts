@@ -73,7 +73,7 @@ export async function verifyCampusFoodItem({ id, vote }: { id: string; vote: "up
   });
 }
 
-export async function submitParserCorrection({ data }: { data: { transaction_id: string; corrected_amount?: number; corrected_merchant?: string; corrected_category?: string } }) {
+export async function submitParserCorrection({ data }: { data: { transaction_id: string; corrected_amount?: number; corrected_merchant?: string; corrected_category?: string; corrected_direction?: "debit" | "credit" } }) {
   return apiRequest("/api/ingest/correction", {
     method: "POST",
     body: JSON.stringify(data),

@@ -326,4 +326,3 @@ async def _flag_candidate_subscription(
         observed_at=observed_at,
         observed_interval_days=gap_days,
     )
-

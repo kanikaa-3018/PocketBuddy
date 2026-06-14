@@ -228,4 +228,3 @@ async def add_catalog_item(
 
     await db.catalog_items.insert_one(new_item)
     return map_doc(new_item)
-

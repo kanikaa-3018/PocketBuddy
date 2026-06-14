@@ -286,7 +286,45 @@ AWS_REGION=ap-south-1
 CAMPUS_FOOD_S3_BUCKET=
 CAMPUS_FOOD_S3_KEY=campus_food.json
 BEDROCK_ENABLED=false
-BEDROCK_MODEL_ID=anthropic.claude-3-haiku-20240307-v1:0
+BEDROCK_REGION=us-east-1
+BEDROCK_MODEL_ID=us.amazon.nova-lite-v1:0
+```
+
+For the menu photo scanner, keep `CAMPUS_FOOD_S3_BUCKET` empty if you only
+need OCR and database insertion. Set it only when you also want to store the
+uploaded menu images for audit/debugging.
+
+If menu scanning is enabled, the EC2 IAM role must also allow Textract:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowMenuPhotoTextract",
+      "Effect": "Allow",
+      "Action": "textract:DetectDocumentText",
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+If `CAMPUS_FOOD_S3_BUCKET=<bucket-name>` is configured, add this permission to
+the same EC2 IAM role:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowMenuScanImageUploads",
+      "Effect": "Allow",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::<bucket-name>/menu-scans/*"
+    }
+  ]
+}
 ```
 
 Important failure that happened:

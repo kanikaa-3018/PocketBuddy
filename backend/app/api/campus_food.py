@@ -228,4 +228,3 @@ async def verify_food_item(
         return {"status": "rejected", "verification_votes": current_votes}
 
     return {"status": "voted", "verification_votes": current_votes, "vote": req.vote}
-
