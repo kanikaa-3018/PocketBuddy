@@ -289,6 +289,7 @@ function Dashboard() {
     retry: false,
     queryFn: () => getWingFeed(),
   });
+  const wingEvents = wingFeed?.events ?? [];
 
   // Burnout score derived from insights
   const calc = useMemo(() => {
@@ -949,26 +950,31 @@ function Dashboard() {
               <div className="flex items-center justify-between mb-4">
                 <p className="text-[9px] font-bold tracking-[0.2em] text-zinc-500 uppercase">Wing Activity</p>
                 <span className="flex items-center gap-1.5 text-[8px] text-zinc-600 font-bold">
-                  <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
-                  Live
+                  <span className={`w-1.5 h-1.5 rounded-full ${wingEvents.length ? "bg-success animate-pulse" : "bg-zinc-600"}`} />
+                  {wingEvents.length ? "Live" : "No Live Events"}
                 </span>
               </div>
               <div className="space-y-3">
-                {(wingFeed?.events ?? [
-                  { icon: "🛒", text: "New Zepto pool started in Wing 4B", mins_ago: 3 },
-                  { icon: "📍", text: "'BH-2 Night Canteen' identified and added to campus directory", mins_ago: 12 },
-                  { icon: "🍽️", text: "A student checked in — ate at campus mess", mins_ago: 28 },
-                ]).map((ev: any, i: number) => (
-                  <div key={i} className="flex items-start gap-3 animate-[fadeIn_0.4s_ease-out]" style={{ animationDelay: `${i * 80}ms` }}>
-                    <span className="text-sm shrink-0 mt-0.5">{ev.icon}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[11px] text-zinc-300 leading-snug">{ev.text}</p>
-                      <p className="text-[9px] text-zinc-600 mt-0.5 font-bold">
-                        {ev.mins_ago === 0 ? "just now" : ev.mins_ago < 60 ? `${ev.mins_ago}m ago` : `${Math.floor(ev.mins_ago / 60)}h ago`}
-                      </p>
+                {wingEvents.length ? (
+                  wingEvents.map((ev: any, i: number) => (
+                    <div key={i} className="flex items-start gap-3 animate-[fadeIn_0.4s_ease-out]" style={{ animationDelay: `${i * 80}ms` }}>
+                      <span className="text-sm shrink-0 mt-0.5">{ev.icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11px] text-zinc-300 leading-snug">{ev.text}</p>
+                        <p className="text-[9px] text-zinc-600 mt-0.5 font-bold">
+                          {ev.mins_ago === 0 ? "just now" : ev.mins_ago < 60 ? `${ev.mins_ago}m ago` : `${Math.floor(ev.mins_ago / 60)}h ago`}
+                        </p>
+                      </div>
                     </div>
+                  ))
+                ) : (
+                  <div className="rounded-xl border border-dashed border-border bg-surface-raised/40 p-4">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">No wing activity yet</p>
+                    <p className="mt-1 text-[11px] leading-relaxed text-zinc-600">
+                      Start a cart pool, identify a merchant, or check in from the dashboard to populate this feed.
+                    </p>
                   </div>
-                ))}
+                )}
               </div>
             </div>
 
