@@ -5,6 +5,12 @@ import uuid
 import datetime
 from app.core.database import get_db
 from app.core.security import get_current_user, map_doc, map_docs
+from app.services.subscriptions import (
+    clean_merchant_name,
+    next_future_debit,
+    subscription_name_for_merchant,
+    upsert_subscription,
+)
 
 router = APIRouter()
 
@@ -45,6 +51,21 @@ async def insert_transaction(req: TxnReq, user_id: str = Depends(get_current_use
     }
     
     await db.transactions.insert_one(new_txn)
+    merchant = new_txn["mapped_merchant_name"] or new_txn["raw_merchant_string"]
+    service_name = subscription_name_for_merchant(merchant)
+    if new_txn["category"] == "subscription" or service_name:
+        service_name = service_name or clean_merchant_name(merchant)
+        if service_name:
+            await upsert_subscription(
+                db,
+                user_id=user_id,
+                service_name=service_name,
+                amount_paise=new_txn["amount"],
+                next_debit_date=next_future_debit(new_txn["created_at"], 30),
+                detected_from="manual_transaction",
+                observed_at=new_txn["created_at"],
+                observed_interval_days=30,
+            )
     return map_doc(new_txn)
 
 @router.post("/delete-recent")
