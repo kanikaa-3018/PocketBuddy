@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
-import { AppShell } from "@/components/AppShell";
+import { AppShell, MobileMenuButton } from "@/components/AppShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { rupees } from "@/lib/format";
+import { Clock } from "lucide-react";
 import { getProfile, getCartPools, insertCartPool } from "@/lib/api/db.functions";
 
 export const Route = createFileRoute("/_authenticated/pool/")({
@@ -80,17 +81,18 @@ function PoolList() {
 
   return (
     <AppShell>
-      <div className="sticky top-0 z-30 flex h-14 items-center border-b border-border bg-[#0A0A0A]/85 backdrop-blur-md">
-        <h1 className="text-[12px] font-black tracking-[0.25em] text-foreground uppercase">Cart Pools</h1>
+      <div className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-background/85 backdrop-blur-md">
+        <MobileMenuButton />
+        <h1 className="text-lg font-black tracking-wider text-foreground uppercase">Cart Pools</h1>
       </div>
       <div className="space-y-6 py-6">
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetTrigger asChild>
             <button
               id="card-create-pool"
-              className="w-full rounded-xl border border-dashed border-accent-bronze/30 hover:border-accent-bronze/60 bg-surface/50 p-6 text-center transition-all duration-200 hover:bg-surface-raised active:scale-[0.98] cursor-pointer shadow-sm hover:shadow-lg hover:shadow-black/20"
+              className="w-full rounded-xl border border-dashed border-primary/30 hover:border-primary/60 bg-surface/50 p-6 text-center transition-all duration-200 hover:bg-surface-raised active:scale-[0.98] cursor-pointer shadow-sm hover:shadow-lg hover:shadow-black/20"
             >
-              <p className="text-xs font-black uppercase tracking-widest text-accent-bronze hover:text-accent-amber transition-colors">
+              <p className="text-xs font-black uppercase tracking-widest text-primary hover:text-primary/80 transition-colors">
                 + Start a New Cart Pool
               </p>
             </button>
@@ -110,7 +112,7 @@ function PoolList() {
         </Sheet>
 
         <section className="space-y-3">
-          <h3 className="text-[10px] font-bold tracking-[0.25em] text-zinc-500 uppercase px-1">
+          <h3 className="text-xs font-bold tracking-[0.25em] text-zinc-500 uppercase px-1">
             Active Pools
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -127,7 +129,7 @@ function PoolList() {
 
         {past.length > 0 && (
           <details className="group pt-2">
-            <summary className="cursor-pointer text-[10px] font-bold tracking-[0.25em] text-zinc-500 uppercase list-none flex items-center gap-1 hover:text-foreground transition-colors select-none">
+            <summary className="cursor-pointer text-xs font-bold tracking-[0.25em] text-zinc-500 uppercase list-none flex items-center gap-1 hover:text-foreground transition-colors select-none">
               <span className="transition-transform group-open:rotate-90">▶</span>
               Past Pools ({past.length})
             </summary>
@@ -174,7 +176,7 @@ function PoolCard({ pool }: { pool: Pool }) {
       <Card className={`relative overflow-hidden p-5 border border-border border-l-4 ${platformBorderColor} bg-surface transition-all duration-200 hover:bg-surface-raised hover:border-r-white/10 hover:border-t-white/10 hover:border-b-white/10 hover:shadow-lg hover:shadow-black/50 active:scale-[0.99]`}>
         {active && (
           <div className="absolute right-3 top-3">
-            <span className="inline-flex items-center gap-1.5 bg-white/5 border border-border px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider text-foreground">
+            <span className="inline-flex items-center gap-1.5 bg-white/5 border border-border px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider text-foreground">
               <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
               Open
             </span>
@@ -187,7 +189,7 @@ function PoolCard({ pool }: { pool: Pool }) {
               <span className="text-sm font-black uppercase tracking-wider text-foreground">
                 {theme.name} Pool
               </span>
-              <Badge variant="outline" className="text-[9px] font-bold border-border bg-white/5 text-muted-foreground">
+              <Badge variant="outline" className="text-xs font-bold border-border bg-white/5 text-muted-foreground">
                 {pool.wing_label}
               </Badge>
             </div>
@@ -198,7 +200,7 @@ function PoolCard({ pool }: { pool: Pool }) {
 
           <div className="mt-5 flex justify-between items-end border-t border-border pt-3">
             <div>
-              <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider">
+              <p className="text-xs text-zinc-500 font-bold uppercase tracking-wider">
                 Min Cart Target
               </p>
               <p className="text-sm font-black text-foreground tnum mt-0.5">
@@ -207,11 +209,12 @@ function PoolCard({ pool }: { pool: Pool }) {
             </div>
             <div className="text-right">
               {active ? (
-                <span className="text-[10px] font-bold bg-white/5 border border-border px-3 py-1 rounded-full text-foreground tnum">
-                  ⚡ {minsLeft}m left
+                <span className="inline-flex items-center gap-1 text-xs font-bold bg-white/5 border border-border px-3 py-1 rounded-full text-foreground tnum">
+                  <Clock className="h-3 w-3 text-muted-foreground" />
+                  <span>{minsLeft}m left</span>
                 </span>
               ) : (
-                <Badge className={`text-[9px] font-bold uppercase tracking-wider ${
+                <Badge className={`text-xs font-bold uppercase tracking-wider ${
                   pool.status === "completed"
                     ? "bg-green-600/15 border border-green-600/30 text-green-500"
                     : pool.status === "cancelled"
@@ -297,7 +300,7 @@ function CreatePoolForm({
           ))}
         </div>
         <div>
-          <label className="text-[12px] text-muted-foreground">Min cart value</label>
+          <label className="text-sm text-muted-foreground">Min cart value</label>
           <div className="mt-1 flex items-center rounded-md border border-input bg-surface">
             <span className="px-3 text-sm text-muted-foreground">₹</span>
             <input
@@ -310,7 +313,7 @@ function CreatePoolForm({
           </div>
         </div>
         <div>
-          <label className="text-[12px] text-muted-foreground">Delivery fee</label>
+          <label className="text-sm text-muted-foreground">Delivery fee</label>
           <div className="mt-1 flex items-center rounded-md border border-input bg-surface">
             <span className="px-3 text-sm text-muted-foreground">₹</span>
             <input
@@ -323,7 +326,7 @@ function CreatePoolForm({
           </div>
         </div>
         <div>
-          <label className="text-[12px] text-muted-foreground">Duration</label>
+          <label className="text-sm text-muted-foreground">Duration</label>
           <Select value={dur} onValueChange={setDur}>
             <SelectTrigger id="select-pool-duration" className="mt-1">
               <SelectValue />

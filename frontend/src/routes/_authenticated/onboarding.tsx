@@ -179,7 +179,7 @@ function Onboarding() {
       {[1, 2, 3].map((s) => (
         <div key={s} className="flex-1 h-0.5 bg-border rounded-full overflow-hidden">
           <div
-            className={`h-full bg-accent-bronze transition-all duration-300 ${
+            className={`h-full bg-primary transition-all duration-300 ${
               s <= currentStep ? "w-full" : "w-0"
             }`}
           />
@@ -191,7 +191,7 @@ function Onboarding() {
   return (
     <div className="flex min-h-screen items-start justify-center bg-background px-4 py-12 relative overflow-hidden">
       {/* Cinematic light overlay */}
-      <div className="absolute top-0 right-0 h-[350px] w-[350px] rounded-full bg-accent-bronze/5 blur-[100px] pointer-events-none" />
+      <div className="absolute top-0 right-0 h-[350px] w-[350px] rounded-full bg-primary/5 blur-[100px] pointer-events-none" />
       
       <div className="w-full max-w-[400px] relative z-10">
         <StepBar currentStep={step} />
@@ -209,7 +209,7 @@ function Onboarding() {
               label="Monthly Allowance"
               helper="Total amount you receive each month from family"
             >
-              <div className="flex items-center rounded-md border border-border bg-surface-raised/40 hover:border-white/15 focus-within:ring-1 focus-within:ring-accent-bronze/40 focus-within:border-accent-bronze/40 transition-all">
+              <div className="flex items-center rounded-md border border-border bg-surface-raised/40 hover:border-white/15 focus-within:ring-1 focus-within:ring-primary/40 focus-within:border-primary/40 transition-all">
                 <span className="px-3 text-xs text-muted-foreground font-bold border-r border-border">₹</span>
                 <input
                   id="input-ob-allowance"
@@ -251,7 +251,7 @@ function Onboarding() {
               </Select>
             </Field>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Field label="Hostel Block">
                 <Input
                   id="input-ob-hostel"
@@ -301,14 +301,14 @@ function Onboarding() {
               <div id="toggle-ob-mess" className="grid grid-cols-2 gap-3">
                 <button
                   onClick={() => setMess(true)}
-                  className={`rounded-md border p-3.5 text-left text-xs transition-all cursor-pointer ${mess ? "border-accent-bronze bg-accent-bronze/5 font-semibold text-foreground" : "border-border bg-surface-raised/40 text-muted-foreground hover:border-white/10"}`}
+                  className={`rounded-md border p-3.5 text-left text-xs transition-all cursor-pointer ${mess ? "border-primary bg-primary/5 font-semibold text-foreground" : "border-border bg-surface-raised/40 text-muted-foreground hover:border-white/10"}`}
                 >
                   <p className="font-bold">Yes</p>
                   <p className="text-[10px] text-muted-foreground mt-0.5">Mess enrolled</p>
                 </button>
                 <button
                   onClick={() => setMess(false)}
-                  className={`rounded-md border p-3.5 text-left text-xs transition-all cursor-pointer ${!mess ? "border-accent-bronze bg-accent-bronze/5 font-semibold text-foreground" : "border-border bg-surface-raised/40 text-muted-foreground hover:border-white/10"}`}
+                  className={`rounded-md border p-3.5 text-left text-xs transition-all cursor-pointer ${!mess ? "border-primary bg-primary/5 font-semibold text-foreground" : "border-border bg-surface-raised/40 text-muted-foreground hover:border-white/10"}`}
                 >
                   <p className="font-bold">No</p>
                   <p className="text-[10px] text-muted-foreground mt-0.5">Self-catering</p>
@@ -323,9 +323,9 @@ function Onboarding() {
                     <button
                       key={m}
                       onClick={() => setMeals({ ...meals, [m]: !meals[m] })}
-                      className={`flex-1 rounded-full py-2 text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer border ${meals[m] ? "bg-primary border-primary text-primary-foreground" : "bg-surface-raised border-border text-muted-foreground hover:text-foreground"}`}
+                      className={`flex-1 rounded-full py-2 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer border ${meals[m] ? "bg-primary border-primary text-primary-foreground" : "bg-surface-raised border-border text-muted-foreground hover:text-foreground"}`}
                     >
-                      {m === "breakfast" ? "🌅" : m === "lunch" ? "☀️" : "🌙"} {m}
+                      {m}
                     </button>
                   ))}
                 </div>
@@ -333,8 +333,8 @@ function Onboarding() {
             )}
 
             <div>
-              <label className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest pl-1">Upcoming Exams (Optional)</label>
-              <div className="mt-1.5 grid grid-cols-2 gap-3">
+              <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest pl-1">Upcoming Exams (Optional)</label>
+              <div className="mt-1.5 grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Input
                   id="input-ob-exam-start"
                   type="date"
@@ -405,7 +405,7 @@ function Onboarding() {
                   key={c.l}
                   className="rounded-lg bg-surface-raised border border-border p-3 text-center"
                 >
-                  <div className="mx-auto flex h-6 w-6 items-center justify-center rounded-full bg-accent-bronze/10 border border-accent-bronze/20 text-[10px] font-bold text-accent-bronze">
+                  <div className="mx-auto flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 border border-primary/20 text-[10px] font-bold text-primary">
                     {c.e}
                   </div>
                   <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-none">{c.l}</p>
@@ -426,7 +426,7 @@ function Onboarding() {
               <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Your Pairing Code</p>
               <div
                 id="text-pairing-code"
-                className="mt-2 inline-block rounded-md bg-[#0A0A0A] border border-border px-6 py-2.5 text-[22px] font-black tracking-[4px] text-accent-bronze font-mono shadow-inner"
+                className="mt-2 inline-block rounded-md bg-background border border-border px-6 py-2.5 text-[22px] font-black tracking-[4px] text-primary font-mono shadow-inner"
               >
                 {pairingCode}
               </div>

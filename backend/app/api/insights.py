@@ -258,26 +258,35 @@ async def get_wellness_insights(user_id: str = Depends(get_current_user)):
     if not profile:
         profile = {}
 
-    # 1. Late-night activity (last 7 days, hours 23 to 4)
+    # 1. Late-night activity (last 7 days, hours 0 to 4)
     since_7 = now - datetime.timedelta(days=7)
     late_txns_7d = [
         t for t in txns
         if t.get("created_at") and t["created_at"] >= since_7 and (
-            t["created_at"].hour >= 23 or t["created_at"].hour < 4
+            0 <= t["created_at"].hour < 5
         )
     ]
-    late_night_txn_count_7d = len(late_txns_7d)
+    late_night_spend_7d = len(late_txns_7d)
 
-    # 2. Food gap (hours since last food transaction)
-    food_txns = [t for t in txns if t.get("category") == "food"]
-    if food_txns:
-        # txns are sorted descending, so food_txns[0] is the latest
-        last_food = food_txns[0]
-        food_gap_hours = (now - last_food["created_at"]).total_seconds() / 3600
+    # 2. Meal regularity: avg_food_gap_hours_7d
+    food_txns_7d = [
+        t for t in txns
+        if t.get("category") == "food" and t.get("created_at") and t["created_at"] >= since_7
+    ]
+    food_txns_7d.sort(key=lambda t: t["created_at"])
+    
+    gaps_7d = []
+    if len(food_txns_7d) > 0:
+        for i in range(1, len(food_txns_7d)):
+            gap = (food_txns_7d[i]["created_at"] - food_txns_7d[i-1]["created_at"]).total_seconds() / 3600.0
+            gaps_7d.append(gap)
+        current_gap = (now - food_txns_7d[-1]["created_at"]).total_seconds() / 3600.0
+        gaps_7d.append(current_gap)
+        avg_food_gap_hours_7d = sum(gaps_7d) / len(gaps_7d)
     else:
-        food_gap_hours = 0.0
+        avg_food_gap_hours_7d = 168.0
 
-    # 3. Financial runway
+    # 3. Financial runway & safe daily limit
     cycle_start_day = profile.get("cycle_start_day") or 1
     monthly_allowance = profile.get("monthly_allowance") or 1000000  # in paise
     total_allowance_rs = monthly_allowance / 100
@@ -299,17 +308,18 @@ async def get_wellness_insights(user_id: str = Depends(get_current_user)):
         runway_days = days_left
 
     runway_days = min(runway_days, days_left + 5)
+    
+    # safe_daily_limit_rs
+    safe_daily_limit_rs = remaining_rs / days_left if days_left > 0 else 0.0
 
     # 4. Spending velocity
-    since_14 = now - datetime.timedelta(days=14)
-    spend_7 = sum(t.get("amount", 0) for t in txns if t.get("created_at", now) >= since_7)
-    spend_7_prior = sum(
-        t.get("amount", 0) for t in txns
-        if since_14 <= t.get("created_at", now) < since_7
-    )
-    velocity_pct = 0
-    if spend_7_prior > 0:
-        velocity_pct = round((spend_7 - spend_7_prior) / spend_7_prior * 100)
+    spend_7_rs = sum(t.get("amount", 0) for t in txns if t.get("created_at") and t["created_at"] >= since_7) / 100.0
+    avg_daily_spend_7d_rs = spend_7_rs / 7.0
+    
+    if safe_daily_limit_rs > 0:
+        spend_velocity = avg_daily_spend_7d_rs / safe_daily_limit_rs
+    else:
+        spend_velocity = 1.5 if avg_daily_spend_7d_rs > 0 else 0.0
 
     # 5. Exam window
     in_exam_period = False
@@ -326,12 +336,7 @@ async def get_wellness_insights(user_id: str = Depends(get_current_user)):
             except Exception:
                 pass
 
-    # 6. Subscription bleed
-    subs_cursor = db.subscriptions.find({"user_id": user_id, "is_active": {"$ne": False}})
-    subs = await subs_cursor.to_list(length=100)
-    monthly_sub_bleed_paise = sum(s.get("amount", 0) for s in subs)
-
-    # 7. Social signal from cart pools
+    # 6. Social signal from cart pools
     user_doc = await db.users.find_one({"_id": user_id})
     full_name = user_doc.get("full_name", "") if user_doc else ""
     user_hosted_pools = await db.cart_pools.find({"host_id": user_id}).to_list(length=100)
@@ -356,80 +361,76 @@ async def get_wellness_insights(user_id: str = Depends(get_current_user)):
     # Calculate Wellness Score
     score = 100
 
-    # Late-night activity, proxy for routine disruption
-    if late_night_txn_count_7d >= 4:
-        score -= 18
-    elif late_night_txn_count_7d >= 2:
+    # Sleep: late_night_spend_7d > 3 (-20), > 1 (-10)
+    if late_night_spend_7d > 3:
+        score -= 20
+    elif late_night_spend_7d > 1:
         score -= 10
 
-    # Food gap, proxy for skipped meals
-    if food_gap_hours >= 14:
-        score -= 22
-    elif food_gap_hours >= 9:
-        score -= 12
+    # Meal regularity: avg_food_gap_hours_7d > 10 (-20), > 6 (-10)
+    if avg_food_gap_hours_7d > 10:
+        score -= 20
+    elif avg_food_gap_hours_7d > 6:
+        score -= 10
 
-    # Financial runway
-    if runway_days < 4:
-        score -= 22
-    elif runway_days < 8:
-        score -= 12
+    # Runway: runway_days < 5 (-20), < 10 (-10)
+    if runway_days < 5:
+        score -= 20
+    elif runway_days < 10:
+        score -= 10
 
-    # Spending velocity
-    if velocity_pct >= 40:
-        score -= 16
-    elif velocity_pct >= 20:
-        score -= 8
-
-    # Exam window
+    # Exam pressure: in_exam_window: -15
     if in_exam_period:
-        score -= 12
+        score -= 15
 
-    # Subscription bleed
-    if monthly_sub_bleed_paise >= 50000:
+    # Spending control: spend_velocity > 1.4 (-15), > 1.2 (-8)
+    if spend_velocity > 1.4:
+        score -= 15
+    elif spend_velocity > 1.2:
         score -= 8
 
-    # Social signal from cart pools
-    if days_since_last_pool is not None and days_since_last_pool > 10:
-        score -= 6
+    # Social signal: days_since_last_pool > 7 (-10)
+    if days_since_last_pool is not None and days_since_last_pool > 7:
+        score -= 10
 
     score = max(0, min(100, score))
 
-    # Determine status bucket
-    if score >= 80:
+    # Determine status bucket and messages
+    if score >= 70:
         status = "steady"
         label = "Your routine looks steady"
-        fallback_message = "Your routine looks steady this week. Keep meals regular and stay within today's safe spend target."
+        message = "Your routine looks steady this week. Keep meals regular and stay within today's safe spend target."
     elif score >= 50:
         status = "watch"
         label = "A few patterns need attention"
-        fallback_message = "A few patterns need attention: your food timing, spending pace, or exam pressure is starting to stack up. Pick one small reset today: a proper meal, a low-spend window, or a short break."
+        message = "A few patterns need attention: your food timing, spending pace, or exam pressure is starting to stack up. Pick one reset today: a proper meal, a low-spend window, or a short break."
     else:
         status = "stressed"
         label = "Pattern suggests high stress"
-        fallback_message = "Your recent pattern suggests you may be stretched thin. You do not need to fix everything today; start with one meal and one planned spend decision, then check in again."
+        message = "Your recent pattern suggests you may be stretched thin. You do not need to fix everything today; start with one meal and one planned spend decision, then check in again."
 
     # Construct signals list
     signals = []
-    
+
     # Food gap signal
     food_gap_severity = "ok"
-    if food_gap_hours >= 14:
+    if avg_food_gap_hours_7d > 10:
         food_gap_severity = "stressed"
-    elif food_gap_hours >= 9:
+    elif avg_food_gap_hours_7d > 6:
         food_gap_severity = "watch"
     signals.append({
         "key": "food_gap",
-        "label": "Food gap",
-        "value": f"{food_gap_hours:.1f}h" if food_gap_hours > 0 else "—",
+        "label": "Avg Food gap",
+        "value": f"{avg_food_gap_hours_7d:.1f}h" if avg_food_gap_hours_7d < 168.0 else "—",
         "severity": food_gap_severity,
-        "detail": "Long gap since last food transaction" if food_gap_severity != "ok" else "Regular meal timing"
+        "detail": "Long gaps between meals detected" if food_gap_severity != "ok" else "Regular meal timing"
     })
 
     # Runway signal
     runway_severity = "ok"
-    if runway_days < 4:
+    if runway_days < 5:
         runway_severity = "stressed"
-    elif runway_days < 8:
+    elif runway_days < 10:
         runway_severity = "watch"
     signals.append({
         "key": "runway",
@@ -441,34 +442,34 @@ async def get_wellness_insights(user_id: str = Depends(get_current_user)):
 
     # Late night signal
     late_night_severity = "ok"
-    if late_night_txn_count_7d >= 4:
+    if late_night_spend_7d > 3:
         late_night_severity = "stressed"
-    elif late_night_txn_count_7d >= 2:
+    elif late_night_spend_7d > 1:
         late_night_severity = "watch"
     signals.append({
         "key": "late_night",
-        "label": "Late-night activity",
-        "value": f"{late_night_txn_count_7d} txns",
+        "label": "Late-night spending",
+        "value": f"{late_night_spend_7d} txns",
         "severity": late_night_severity,
-        "detail": "Frequent late-night spending" if late_night_severity != "ok" else "Healthy nighttime routine"
+        "detail": "Frequent late-night activity" if late_night_severity != "ok" else "Healthy nighttime routine"
     })
 
     # Velocity signal
     velocity_severity = "ok"
-    if velocity_pct >= 40:
+    if spend_velocity > 1.4:
         velocity_severity = "stressed"
-    elif velocity_pct >= 20:
+    elif spend_velocity > 1.2:
         velocity_severity = "watch"
     signals.append({
         "key": "velocity",
         "label": "Spend velocity",
-        "value": f"{velocity_pct:+}%" if velocity_pct != 0 else "0%",
+        "value": f"{spend_velocity:.2f}x",
         "severity": velocity_severity,
         "detail": "Spending is accelerating rapidly" if velocity_severity == "stressed" else "Spending is slightly elevated" if velocity_severity == "watch" else "Spending velocity is stable"
     })
 
     # Exam signal
-    exam_severity = "watch" if in_exam_period else "ok"
+    exam_severity = "stressed" if in_exam_period else "ok"
     signals.append({
         "key": "exam",
         "label": "Exam period",
@@ -477,71 +478,15 @@ async def get_wellness_insights(user_id: str = Depends(get_current_user)):
         "detail": "Active exam schedule" if in_exam_period else "No exams active"
     })
 
-    # Sub bleed signal
-    sub_severity = "watch" if monthly_sub_bleed_paise >= 50000 else "ok"
-    signals.append({
-        "key": "subscription",
-        "label": "Subscription bleed",
-        "value": f"₹{monthly_sub_bleed_paise/100:.0f}/mo",
-        "severity": sub_severity,
-        "detail": "High subscription overhead" if monthly_sub_bleed_paise >= 50000 else "Subscription overhead is low"
-    })
-
     # Social signal from cart pools
-    pool_severity = "watch" if (days_since_last_pool is not None and days_since_last_pool > 10) else "ok"
+    pool_severity = "stressed" if (days_since_last_pool is not None and days_since_last_pool > 7) else "ok"
     signals.append({
         "key": "cart_pool",
-        "label": "Cart pools",
-        "value": f"{days_since_last_pool}d ago" if days_since_last_pool is not None else "None",
+        "label": "Social index",
+        "value": f"{days_since_last_pool}d idle" if days_since_last_pool is not None else "None",
         "severity": pool_severity,
-        "detail": "Low cart pool participation recently" if pool_severity == "watch" else "Active in cart pools"
+        "detail": "Low cart pool participation recently (possible social withdrawal)" if pool_severity == "stressed" else "Active in cart pools"
     })
-
-    # Optional Bedrock Call
-    from app.core.config import settings
-    message = fallback_message
-    generated_by = "fallback"
-
-    if settings.BEDROCK_ENABLED:
-        try:
-            import boto3
-            import json as _json
-            client = boto3.client(
-                service_name="bedrock-runtime",
-                region_name=settings.AWS_REGION,
-            )
-            prompt = f"""A college student's last 7 days show:
-- Late-night payment count: {late_night_txn_count_7d}
-- Hours since last food transaction: {food_gap_hours:.1f}
-- Financial runway days: {runway_days}
-- In exam period: {str(in_exam_period).lower()}
-- Spending velocity change: {velocity_pct} percent
-
-Write 2 short sentences. Be warm, direct, and non-clinical.
-Give one specific action for today.
-Do not mention diagnosis or medical advice."""
-
-            body = _json.dumps({
-                "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": 150,
-                "messages": [{"role": "user", "content": prompt}],
-            })
-
-            response = client.invoke_model(
-                body=body,
-                modelId=settings.BEDROCK_MODEL_ID,
-                accept="application/json",
-                contentType="application/json",
-            )
-
-            res_body = _json.loads(response.get("body").read())
-            ai_text = res_body.get("content", [{}])[0].get("text", "").strip()
-            if ai_text:
-                message = ai_text
-                generated_by = "bedrock"
-        except Exception as exc:
-            import logging
-            logging.getLogger(__name__).warning("Bedrock wellness message generation failed: %s", exc)
 
     return {
         "score": score,
@@ -549,7 +494,8 @@ Do not mention diagnosis or medical advice."""
         "label": label,
         "message": message,
         "signals": signals,
-        "generated_by": generated_by
+        "generated_by": "local_rules",
+        "avg_food_gap_hours_7d": round(avg_food_gap_hours_7d, 1)
     }
 
 
