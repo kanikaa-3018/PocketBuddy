@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
+import { Sparkles, User, ShoppingBag, Link as LinkIcon, ChevronRight, Sun, Moon } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   ssr: false,
@@ -40,9 +41,30 @@ function useInView(threshold = 0.12) {
   return { ref, inView };
 }
 
+// Helper to watch theme classes on documentElement
+function useTheme() {
+  const [theme, setTheme] = useState<"light" | "dark">(
+    document.documentElement.classList.contains("light") ? "light" : "dark"
+  );
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      const isLight = document.documentElement.classList.contains("light");
+      setTheme(isLight ? "light" : "dark");
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+    return () => observer.disconnect();
+  }, []);
+  return theme;
+}
+
 // ── Particle canvas ────────────────────────────────────────────────────────
 function ParticleCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const theme = useTheme();
+  
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -52,6 +74,8 @@ function ParticleCanvas() {
     const resize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
     resize();
     window.addEventListener("resize", resize);
+
+    const isLight = theme === "light";
     const particles = Array.from({ length: 55 }, () => ({
       x: Math.random() * window.innerWidth,
       y: Math.random() * window.innerHeight,
@@ -60,15 +84,22 @@ function ParticleCanvas() {
       r: Math.random() * 1.4 + 0.3,
       alpha: Math.random() * 0.35 + 0.05,
     }));
+
     const draw = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
       particles.forEach((p) => {
         p.x += p.vx; p.y += p.vy;
         if (p.x < 0) p.x = canvas.width; if (p.x > canvas.width) p.x = 0;
         if (p.y < 0) p.y = canvas.height; if (p.y > canvas.height) p.y = 0;
         ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(194,125,86,${p.alpha})`; ctx.fill();
+        
+        ctx.fillStyle = isLight 
+          ? `rgba(255,107,0,${p.alpha * 0.4})`
+          : `rgba(194,125,86,${p.alpha})`; 
+        ctx.fill();
       });
+
       for (let i = 0; i < particles.length; i++) {
         for (let j = i + 1; j < particles.length; j++) {
           const dx = particles[i].x - particles[j].x;
@@ -77,7 +108,11 @@ function ParticleCanvas() {
           if (dist < 120) {
             ctx.beginPath(); ctx.moveTo(particles[i].x, particles[i].y);
             ctx.lineTo(particles[j].x, particles[j].y);
-            ctx.strokeStyle = `rgba(140,120,83,${0.12 * (1 - dist / 120)})`; ctx.lineWidth = 0.5; ctx.stroke();
+            ctx.strokeStyle = isLight
+              ? `rgba(255,107,0,${0.07 * (1 - dist / 120)})`
+              : `rgba(140,120,83,${0.12 * (1 - dist / 120)})`; 
+            ctx.lineWidth = 0.5; 
+            ctx.stroke();
           }
         }
       }
@@ -85,7 +120,8 @@ function ParticleCanvas() {
     };
     draw();
     return () => { cancelAnimationFrame(animId); window.removeEventListener("resize", resize); };
-  }, []);
+  }, [theme]);
+
   return <canvas ref={canvasRef} style={{ position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none", opacity: 0.65 }} />;
 }
 
@@ -93,48 +129,48 @@ function ParticleCanvas() {
 function DashboardMockup() {
   const { ref, inView } = useInView(0.1);
   return (
-    <div ref={ref} style={{ position: "relative", width: "100%", maxWidth: "400px", margin: "0 auto", opacity: inView ? 1 : 0, transform: inView ? "translateY(0) rotateX(0deg)" : "translateY(40px) rotateX(8deg)", transition: "all 1s cubic-bezier(0.16,1,0.3,1)", perspective: "1000px" }}>
-      <div style={{ position: "absolute", top: "-60px", left: "50%", transform: "translateX(-50%)", width: "300px", height: "300px", background: "radial-gradient(circle, rgba(140,120,83,0.18) 0%, transparent 70%)", pointerEvents: "none" }} />
-      <div style={{ background: "linear-gradient(145deg, #1a1a1a, #0f0f0f)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "28px", padding: "3px", boxShadow: "0 60px 120px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.05), inset 0 1px 0 rgba(255,255,255,0.1)" }}>
-        <div style={{ background: "#0A0A0A", borderRadius: "26px", overflow: "hidden", padding: "20px 18px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "16px", opacity: 0.35 }}>
-            <span style={{ fontSize: "10px", color: "#fff", fontFamily: "monospace" }}>9:41</span>
-            <span style={{ fontSize: "10px", color: "#fff", fontFamily: "monospace" }}>●●●</span>
+    <div ref={ref} className="relative w-full max-w-[360px] mx-auto px-4" style={{ opacity: inView ? 1 : 0, transform: inView ? "translateY(0) rotateX(0deg)" : "translateY(40px) rotateX(8deg)", transition: "all 1s cubic-bezier(0.16,1,0.3,1)", perspective: "1000px" }}>
+      <div className="absolute top-[-60px] left-1/2 -translate-x-1/2 w-[260px] h-[260px] rounded-full pointer-events-none" style={{ background: "radial-gradient(circle, rgba(140,120,83,0.18) 0%, transparent 70%)" }} />
+      <div className="rounded-[32px] border border-border p-1 bg-gradient-to-b from-zinc-800 to-zinc-950 shadow-2xl">
+        <div className="bg-background rounded-[28px] overflow-hidden p-4 sm:p-5 select-none">
+          <div className="flex justify-between mb-4 opacity-35">
+            <span className="text-[10px] text-foreground font-mono">9:41</span>
+            <span className="text-[10px] text-foreground font-mono">●●●</span>
           </div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+          <div className="flex justify-between items-center mb-4">
             <div>
-              <div style={{ fontSize: "8px", letterSpacing: "0.2em", color: "rgba(255,255,255,0.3)", fontFamily: "monospace" }}>POCKETBUDDY</div>
-              <div style={{ fontSize: "11px", fontWeight: 700, color: "rgba(255,255,255,0.8)", marginTop: "2px" }}>Wing 4B · Room 214</div>
+              <div className="text-[8px] tracking-[0.2em] text-muted-foreground font-mono">POCKETBUDDY</div>
+              <div className="text-[11px] font-bold text-foreground mt-0.5">Wing 4B · Room 214</div>
             </div>
-            <div style={{ width: "28px", height: "28px", borderRadius: "50%", background: "linear-gradient(135deg, #8C7853, #C27D56)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <span style={{ color: "#0A0A0A", fontWeight: 900, fontSize: "11px" }}>P</span>
+            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary to-pb-amber flex items-center justify-center">
+              <span className="color-[#0A0A0A] font-black text-[11px]">P</span>
             </div>
           </div>
           {/* Runway card */}
-          <div style={{ background: "#111111", border: "1px solid rgba(255,255,255,0.07)", borderTop: "2px solid #8C7853", borderRadius: "12px", padding: "14px", marginBottom: "10px" }}>
-            <div style={{ fontSize: "7px", letterSpacing: "0.2em", color: "rgba(255,255,255,0.3)", fontFamily: "monospace", marginBottom: "6px" }}>RUNWAY STATUS</div>
-            <div style={{ display: "flex", alignItems: "baseline", gap: "6px", marginBottom: "3px" }}>
-              <span style={{ fontSize: "42px", fontWeight: 900, color: "#4ade80", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>16</span>
-              <span style={{ fontSize: "11px", fontWeight: 700, color: "rgba(255,255,255,0.4)", letterSpacing: "0.15em" }}>DAYS</span>
+          <div className="bg-card border border-border border-t-2 border-t-[#8C7853] rounded-xl p-3 mb-2.5">
+            <div className="text-[7px] tracking-[0.2em] text-muted-foreground font-mono mb-1.5">RUNWAY STATUS</div>
+            <div className="flex items-baseline gap-1 mb-1">
+              <span className="text-3xl font-black text-pb-green leading-none font-display">16</span>
+              <span className="text-[9px] font-bold text-muted-foreground tracking-widest">DAYS</span>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginTop: "10px", paddingTop: "10px", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
-              <div><div style={{ fontSize: "7px", color: "rgba(255,255,255,0.3)", letterSpacing: "0.12em", fontFamily: "monospace" }}>SPENT</div><div style={{ fontSize: "14px", fontWeight: 800, color: "#fff" }}>₹2,840</div></div>
-              <div><div style={{ fontSize: "7px", color: "rgba(255,255,255,0.3)", letterSpacing: "0.12em", fontFamily: "monospace" }}>SAFE/DAY</div><div style={{ fontSize: "14px", fontWeight: 800, color: "#C27D56" }}>₹125</div></div>
+            <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-border">
+              <div><div className="text-[7px] text-muted-foreground tracking-wider font-mono">SPENT</div><div className="text-[12px] font-bold text-foreground">₹2,840</div></div>
+              <div><div className="text-[7px] text-muted-foreground tracking-wider font-mono">SAFE/DAY</div><div className="text-[12px] font-bold text-[#C27D56]">₹125</div></div>
             </div>
           </div>
           {/* AI Alert */}
-          <div style={{ background: "rgba(140,120,83,0.08)", border: "1px solid rgba(140,120,83,0.2)", borderRadius: "10px", padding: "10px", marginBottom: "8px" }}>
-            <div style={{ fontSize: "7px", color: "#C27D56", letterSpacing: "0.15em", fontFamily: "monospace", marginBottom: "5px" }}>⚡ AI GUARD · BEDROCK</div>
-            <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.6)", lineHeight: 1.5 }}>BH-2 Night Canteen: Egg Paratha <span style={{ color: "#C27D56", fontWeight: 700 }}>₹45</span> · Open till 2AM</div>
+          <div className="bg-primary/5 border border-primary/20 rounded-lg p-2.5 mb-2">
+            <div className="text-[7px] text-[#C27D56] tracking-wider font-mono mb-1">⚡ AI GUARD · BEDROCK</div>
+            <div className="text-[9px] text-foreground leading-relaxed">BH-2 Night Canteen: Egg Paratha <span className="text-[#C27D56] font-bold">₹45</span> · Open till 2AM</div>
           </div>
           {/* Pool */}
-          <div style={{ background: "#111111", border: "1px solid rgba(255,255,255,0.07)", borderLeft: "3px solid #F7EC13", borderRadius: "10px", padding: "10px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <div className="bg-card border border-border border-l-2 border-l-[#F7EC13] rounded-lg p-2.5">
+            <div className="flex justify-between">
               <div>
-                <div style={{ fontSize: "8px", color: "#F7EC13", fontFamily: "monospace", letterSpacing: "0.1em" }}>🛒 BLINKIT POOL</div>
-                <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.55)", marginTop: "2px" }}>₹165/₹199 min · 4 members</div>
+                <div className="text-[8px] text-pb-amber font-mono tracking-wider">🛒 BLINKIT POOL</div>
+                <div className="text-[9px] text-muted-foreground mt-0.5">₹165/₹199 min · 4 members</div>
               </div>
-              <div style={{ fontSize: "9px", color: "rgba(255,255,255,0.3)", fontFamily: "monospace" }}>06:14</div>
+              <div className="text-[8px] text-muted-foreground font-mono">06:14</div>
             </div>
           </div>
         </div>
@@ -147,11 +183,11 @@ function DashboardMockup() {
 function FeatureCard({ icon, title, description, accent, delay }: { icon: string; title: string; description: string; accent: string; delay: number }) {
   const { ref, inView } = useInView();
   return (
-    <div ref={ref} style={{ background: "#111111", border: `1px solid rgba(255,255,255,0.07)`, borderTop: `2px solid ${accent}`, borderRadius: "16px", padding: "26px 22px", opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(28px)", transition: `opacity 0.7s ease ${delay}ms, transform 0.7s ease ${delay}ms`, position: "relative", overflow: "hidden" }}>
-      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "100px", background: `radial-gradient(ellipse at 50% -20%, ${accent}15, transparent 70%)`, pointerEvents: "none" }} />
-      <div style={{ fontSize: "26px", marginBottom: "12px" }}>{icon}</div>
-      <h3 style={{ fontSize: "14px", fontWeight: 700, color: "rgba(255,255,255,0.9)", marginBottom: "8px", letterSpacing: "-0.01em" }}>{title}</h3>
-      <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.42)", lineHeight: 1.65 }}>{description}</p>
+    <div ref={ref} className="relative bg-card border border-border rounded-xl p-5 md:p-6 overflow-hidden transition-all duration-300" style={{ borderTop: `2px solid ${accent}`, opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(28px)", transition: `opacity 0.7s ease ${delay}ms, transform 0.7s ease ${delay}ms` }}>
+      <div className="absolute top-0 left-0 right-0 h-24 pointer-events-none" style={{ background: `radial-gradient(ellipse at 50% -20%, ${accent}15, transparent 70%)` }} />
+      <div className="text-2xl mb-3">{icon}</div>
+      <h3 className="text-sm font-bold text-foreground mb-2 tracking-tight">{title}</h3>
+      <p className="text-xs text-muted-foreground leading-relaxed">{description}</p>
     </div>
   );
 }
@@ -160,11 +196,11 @@ function FeatureCard({ icon, title, description, accent, delay }: { icon: string
 function TimelineStep({ n, title, sub, delay }: { n: string; title: string; sub: string; delay: number }) {
   const { ref, inView } = useInView();
   return (
-    <div ref={ref} style={{ display: "flex", gap: "20px", alignItems: "flex-start", opacity: inView ? 1 : 0, transform: inView ? "translateX(0)" : "translateX(-30px)", transition: `all 0.7s ease ${delay}ms` }}>
-      <div style={{ flexShrink: 0, width: "38px", height: "38px", borderRadius: "50%", background: "linear-gradient(135deg, #8C7853, #C27D56)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: 900, color: "#0A0A0A", boxShadow: "0 0 18px rgba(140,120,83,0.3)", fontFamily: "monospace" }}>{n}</div>
-      <div style={{ paddingTop: "7px" }}>
-        <div style={{ fontSize: "14px", fontWeight: 600, color: "rgba(255,255,255,0.9)", marginBottom: "3px" }}>{title}</div>
-        <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.38)", lineHeight: 1.6 }}>{sub}</div>
+    <div ref={ref} className="flex gap-4 items-start transition-all duration-700" style={{ opacity: inView ? 1 : 0, transform: inView ? "translateX(0)" : "translateX(-30px)", transitionDelay: `${delay}ms` }}>
+      <div className="flex-shrink-0 w-9 h-9 rounded-full bg-gradient-to-br from-primary to-pb-amber flex items-center justify-center text-xs font-black text-[#0A0A0A] shadow-md shadow-primary/10 font-mono">{n}</div>
+      <div className="pt-1.5">
+        <h4 className="text-sm font-bold text-foreground mb-1">{title}</h4>
+        <p className="text-xs text-muted-foreground leading-relaxed">{sub}</p>
       </div>
     </div>
   );
@@ -172,12 +208,12 @@ function TimelineStep({ n, title, sub, delay }: { n: string; title: string; sub:
 
 // ── Section label ──────────────────────────────────────────────────────────
 function SectionLabel({ text }: { text: string }) {
-  return <div style={{ fontSize: "10px", letterSpacing: "0.22em", color: "#C27D56", fontFamily: "monospace", marginBottom: "14px", textTransform: "uppercase" }}>{text}</div>;
+  return <div className="text-[10px] tracking-[0.22em] text-[#C27D56] font-mono mb-3 uppercase">{text}</div>;
 }
 
 // ── Section heading ────────────────────────────────────────────────────────
-function SectionHeading({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
-  return <h2 style={{ fontSize: "clamp(24px, 4vw, 44px)", fontWeight: 900, letterSpacing: "0.02em", lineHeight: 1.05, textTransform: "uppercase", ...style }}>{children}</h2>;
+function SectionHeading({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return <h2 className={`text-2xl sm:text-3xl md:text-4xl font-black leading-tight text-foreground uppercase tracking-tight ${className}`}>{children}</h2>;
 }
 
 // ── Main landing page ──────────────────────────────────────────────────────
@@ -187,6 +223,21 @@ function LandingPage() {
   const statsRef = useRef<HTMLDivElement>(null);
   const [statsInView, setStatsInView] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [theme, setTheme] = useState<"light" | "dark">("dark");
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("pb_theme") as "light" | "dark" | null;
+    const t = savedTheme || "dark";
+    setTheme(t);
+  }, []);
+
+  const toggleTheme = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    localStorage.setItem("pb_theme", next);
+    document.documentElement.classList.remove("light", "dark");
+    document.documentElement.classList.add(next);
+  };
 
   useEffect(() => {
     const t = setTimeout(() => setHeroVisible(true), 100);
@@ -198,20 +249,20 @@ function LandingPage() {
   }, []);
 
   const features = [
-    { icon: "📲", title: "Headless UPI Ingestion", description: "A background Android connector silently intercepts UPI push notifications from GPay, PhonePe & Paytm — zero manual entry, ever.", accent: "#8C7853", delay: 0 },
+    { icon: "📲", title: "Headless UPI Ingestion", description: "A background Android connector silently intercepts UPI push notifications from GPay, PhonePe & Paytm ── zero manual entry, ever.", accent: "#8C7853", delay: 0 },
     { icon: "🗺️", title: "Crowdsourced Merchant Mapping", description: "Raw strings like SHREE_BALAJI_ENT resolve into 'Hostel 1 Night Canteen' via 1-tap crowd classification, shared globally across campus.", accent: "#C27D56", delay: 100 },
     { icon: "⚡", title: "Geofenced AI Guard", description: "Amazon Bedrock analyzes your runway against a live campus food database to surface hyper-local, cost-effective meal alternatives.", accent: "#D9A05B", delay: 200 },
-    { icon: "🛒", title: "Wing Cart Pooler", description: "Open a Blinkit/Zepto pool, share it on WhatsApp, let roommates add items — delivery fees split automatically. No install needed.", accent: "#F7EC13", delay: 0 },
+    { icon: "🛒", title: "Wing Cart Pooler", description: "Open a Blinkit/Zepto pool, share it on WhatsApp, let roommates add items ── delivery fees split automatically. No install needed.", accent: "#F7EC13", delay: 0 },
     { icon: "📅", title: "Exam-Week Check-In", description: "If no food transaction is detected for 16+ hours during exam week, PocketBuddy pings you and suggests the nearest open campus canteen.", accent: "#5E17EB", delay: 100 },
     { icon: "🔔", title: "Subscription Collision Guard", description: "Auto-detects recurring Spotify, YouTube & gaming debits, then flags exact days when they'll slice your food runway to dangerous levels.", accent: "#FC8019", delay: 200 },
   ];
 
   const faqs = [
-    { q: "Does PocketBuddy access my bank account or UPI password?", a: "Absolutely not. PocketBuddy only reads push notification strings from UPI apps — it never connects to your bank, never stores credentials, and never initiates transactions. Think of it as a smart clipboard that reads your phone's notification panel." },
-    { q: "What if I don't have the Android companion app?", a: "You can still use PocketBuddy in full manual mode — log transactions in one tap, get AI food suggestions, join Wing Cart Pools, and track subscriptions. The companion just makes it passive and effortless." },
-    { q: "How does the crowdsourced merchant mapping work?", a: "When a new merchant string appears (e.g. SHREE_BALAJI_ENT), you get a 1-tap prompt to classify it. Once classified, it's immediately resolved for every student on your campus — your 10 seconds of effort saves hundreds of others the same friction." },
-    { q: "Is this only for IIT/NIT students?", a: "No — PocketBuddy works for any residential campus. The campus food database is seeded per-college and grows via crowdsourcing. Any university can onboard by seeding their initial food menu." },
-    { q: "How is the Burnout Risk Score calculated?", a: "It's derived from four real signals: food gap hours (time since last food transaction), exam period overlap, spending velocity spike vs. prior week, and late-night transaction patterns. No subjective surveys — it's entirely data-driven." },
+    { q: "Does PocketBuddy access my bank account or UPI password?", a: "Absolutely not. PocketBuddy only reads push notification strings from UPI apps ── it never connects to your bank, never stores credentials, and never initiates transactions. Think of it as a smart clipboard that reads your phone's notification panel." },
+    { q: "What if I don't have the Android companion app?", a: "You can still use PocketBuddy in full manual mode ── log transactions in one tap, get AI food suggestions, join Wing Cart Pools, and track subscriptions. The companion just makes it passive and offline-syncing." },
+    { q: "How does the crowdsourced merchant mapping work?", a: "When a new merchant string appears (e.g. SHREE_BALAJI_ENT), you get a 1-tap prompt to classify it. Once classified, it's immediately resolved for every student on your campus ── your 10 seconds of effort saves hundreds of others the same friction." },
+    { q: "Is this only for IIT/NIT students?", a: "No ── PocketBuddy works for any residential campus. The campus food database is seeded per-college and grows via crowdsourcing. Any university can onboard by seeding their initial food menu." },
+    { q: "How is the Burnout Risk Score calculated?", a: "It's derived from four real signals: food gap hours (time since last food transaction), exam period overlap, spending velocity spike vs. prior week, and late-night transaction patterns. No subjective surveys ── it's entirely data-driven." },
   ];
 
   const comparisons = [
@@ -240,146 +291,156 @@ function LandingPage() {
   ];
 
   return (
-    <div style={{ background: "#0A0A0A", minHeight: "100vh", overflowX: "hidden", color: "#fff", fontFamily: "'Inter', 'Geist', sans-serif" }}>
+    <div className="bg-background min-h-screen overflow-x-hidden text-foreground font-sans antialiased">
       <ParticleCanvas />
 
       {/* ── NAV ──────────────────────────────────────────────────────────── */}
-      <nav style={{ position: "fixed", top: "16px", left: "50%", transform: "translateX(-50%)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "space-between", width: "calc(100% - 48px)", maxWidth: "1100px", padding: "0 20px", height: "56px", background: scrollY > 40 ? "rgba(10,10,10,0.9)" : "rgba(10,10,10,0.4)", backdropFilter: "blur(24px)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "100px", transition: "background 0.4s ease", boxShadow: "0 12px 40px rgba(0,0,0,0.4)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "linear-gradient(135deg, #8C7853, #D9A05B)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 16px rgba(140,120,83,0.4)" }}>
-            <span style={{ fontWeight: 900, fontSize: "13px", color: "#0A0A0A" }}>P</span>
+      <nav className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center justify-between w-[calc(100%-24px)] sm:w-[calc(100%-48px)] max-w-[1100px] px-3.5 sm:px-6 h-14 backdrop-blur-xl border border-border rounded-full transition-all duration-300 shadow-md" style={{ background: scrollY > 40 ? "color-mix(in srgb, var(--background) 90%, transparent)" : "color-mix(in srgb, var(--background) 40%, transparent)" }}>
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-pb-amber flex items-center justify-center shadow-md shadow-primary/20 shrink-0">
+            <span className="font-black text-sm text-[#0A0A0A]">P</span>
           </div>
-          <span style={{ fontWeight: 800, fontSize: "14px", letterSpacing: "-0.02em", color: "#fff" }}>PocketBuddy</span>
+          <span className="font-extrabold text-sm tracking-tight text-foreground hidden min-[400px]:inline">PocketBuddy</span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
-          <a href="#why-us" style={{ fontSize: "12px", fontWeight: 500, color: "rgba(255,255,255,0.5)", textDecoration: "none" }}>Why Us</a>
-          <a href="#features" style={{ fontSize: "12px", fontWeight: 500, color: "rgba(255,255,255,0.5)", textDecoration: "none" }}>Features</a>
-          <a href="#how-it-works" style={{ fontSize: "12px", fontWeight: 500, color: "rgba(255,255,255,0.5)", textDecoration: "none" }}>How It Works</a>
-          <div style={{ display: "flex", gap: "8px" }}>
-            <Link to="/login" style={{ padding: "7px 16px", borderRadius: "100px", fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.6)", textDecoration: "none" }}>Sign In</Link>
-            <Link to="/login" style={{ padding: "7px 18px", borderRadius: "100px", fontSize: "12px", fontWeight: 700, color: "#0A0A0A", background: "linear-gradient(135deg, #8C7853, #C27D56)", textDecoration: "none", boxShadow: "0 0 18px rgba(140,120,83,0.35)" }}>Get Started</Link>
+        <div className="flex items-center gap-2 sm:gap-6">
+          <div className="hidden md:flex items-center gap-6">
+            <a href="#why-us" className="text-xs font-bold text-muted-foreground hover:text-foreground transition-colors text-decoration-none">Why Us</a>
+            <a href="#features" className="text-xs font-bold text-muted-foreground hover:text-foreground transition-colors text-decoration-none">Features</a>
+            <a href="#how-it-works" className="text-xs font-bold text-muted-foreground hover:text-foreground transition-colors text-decoration-none">How It Works</a>
+          </div>
+          <div className="flex items-center gap-1 sm:gap-2">
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-full text-muted-foreground hover:text-foreground hover:bg-surface-raised/50 transition-colors mr-0.5 cursor-pointer flex items-center justify-center shrink-0 border border-transparent active:scale-95"
+              title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
+            >
+              {theme === "dark" ? <Sun className="h-4 w-4 text-[#ff6b00]" /> : <Moon className="h-4 w-4 text-[#ff6b00]" />}
+            </button>
+            <Link to="/login" className="px-2.5 sm:px-3.5 py-1.5 rounded-full text-xs font-bold text-muted-foreground hover:text-foreground transition-colors text-decoration-none whitespace-nowrap">Sign In</Link>
+            <Link to="/login" className="px-3 sm:px-4 py-1.5 rounded-full text-xs font-extrabold text-[#0A0A0A] bg-gradient-to-br from-primary to-[#D9A05B] hover:scale-[1.03] active:scale-[0.97] transition-all shadow-md shadow-primary/10 text-decoration-none whitespace-nowrap">Get Started</Link>
           </div>
         </div>
       </nav>
 
       {/* ── HERO ─────────────────────────────────────────────────────────── */}
-      <section style={{ position: "relative", minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "120px 24px 80px", textAlign: "center", overflow: "hidden" }}>
-        <div style={{ position: "absolute", top: "30%", left: "50%", transform: "translate(-50%,-50%)", width: "700px", height: "500px", background: "radial-gradient(ellipse, rgba(140,120,83,0.12) 0%, transparent 65%)", pointerEvents: "none" }} />
-        <div style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px)", backgroundSize: "48px 48px", pointerEvents: "none", maskImage: "radial-gradient(ellipse 80% 60% at 50% 50%, black, transparent)" }} />
+      <section className="relative min-h-screen flex flex-col items-center justify-center px-4 sm:px-6 py-28 text-center overflow-hidden">
+        <div className="absolute top-[30%] left-1/2 -translate-x-1/2 -translate-y-1/2 w-[320px] sm:w-[700px] h-[320px] sm:h-[500px] rounded-full pointer-events-none" style={{ background: "radial-gradient(circle, rgba(140,120,83,0.1) 0%, transparent 70%)" }} />
+        <div className="absolute inset-0 pointer-events-none mask-image-radial" style={{ backgroundImage: "linear-gradient(color-mix(in srgb, var(--border) 18%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--border) 18%, transparent) 1px, transparent 1px)", backgroundSize: "48px 48px" }} />
 
         {/* Badge */}
-        <div style={{ display: "inline-flex", alignItems: "center", gap: "10px", padding: "7px 18px", borderRadius: "100px", background: "rgba(140,120,83,0.08)", border: "1px solid rgba(140,120,83,0.2)", fontSize: "9px", fontWeight: 700, color: "#C27D56", letterSpacing: "0.22em", marginBottom: "40px", opacity: heroVisible ? 1 : 0, transform: heroVisible ? "translateY(0)" : "translateY(20px)", transition: "all 0.8s cubic-bezier(0.16,1,0.3,1) 0.1s", fontFamily: "monospace", textTransform: "uppercase" }}>
-          <span style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#4ade80", boxShadow: "0 0 8px #4ade80", animation: "pulse 2s infinite", flexShrink: 0 }} />
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/5 border border-primary/10 text-[9px] font-bold text-[#C27D56] tracking-[0.16em] mb-8 animate-fade-in font-mono uppercase">
+          <span className="w-1.5 h-1.5 rounded-full bg-pb-green shadow-[0_0_8px_var(--pb-green)] pulse-dot flex-shrink-0" />
           POWERED BY AMAZON BEDROCK&nbsp;&nbsp;·&nbsp;&nbsp;AWS HACKATHON 2025
         </div>
 
-        <h1 style={{ fontSize: "clamp(28px, 6vw, 72px)", fontWeight: 900, lineHeight: 1.0, letterSpacing: "0.04em", marginBottom: "28px", opacity: heroVisible ? 1 : 0, transform: heroVisible ? "translateY(0)" : "translateY(30px)", transition: "all 0.9s cubic-bezier(0.16,1,0.3,1) 0.2s", maxWidth: "920px", textTransform: "uppercase", textAlign: "center" }}>
-          <span style={{ display: "block", color: "rgba(255,255,255,0.85)", marginBottom: "2px" }}>YOUR CAMPUS MONEY,</span>
-          <span style={{ display: "block", background: "linear-gradient(135deg, #8C7853 0%, #D9A05B 45%, #C27D56 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
+        <h1 className="text-3xl sm:text-5xl md:text-7xl font-black leading-[1.05] tracking-tight mb-6 max-w-[940px] uppercase text-center" style={{ opacity: heroVisible ? 1 : 0, transform: heroVisible ? "translateY(0)" : "translateY(30px)", transition: "all 0.9s cubic-bezier(0.16,1,0.3,1) 0.2s" }}>
+          <span className="block text-foreground mb-1">YOUR CAMPUS MONEY,</span>
+          <span className="block bg-gradient-to-r from-[#8C7853] via-[#D9A05B] to-[#C27D56] bg-clip-text text-transparent">
             FINALLY WATCHING OVER YOU.
           </span>
         </h1>
 
-        {/* Subheading — monospace editorial style */}
-        <p style={{ fontSize: "clamp(11px, 1.4vw, 14px)", color: "rgba(255,255,255,0.35)", lineHeight: 1.9, maxWidth: "520px", marginBottom: "44px", opacity: heroVisible ? 1 : 0, transform: heroVisible ? "translateY(0)" : "translateY(20px)", transition: "all 0.9s cubic-bezier(0.16,1,0.3,1) 0.35s", fontFamily: "monospace", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+        {/* Subheading */}
+        <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed max-w-[540px] mb-10 font-mono tracking-wide uppercase" style={{ opacity: heroVisible ? 1 : 0, transform: heroVisible ? "translateY(0)" : "translateY(20px)", transition: "all 0.9s cubic-bezier(0.16,1,0.3,1) 0.35s" }}>
           Passive UPI tracking · AI burnout detection<br />Wing cart pools · Campus meal intelligence
         </p>
 
-        <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", justifyContent: "center", opacity: heroVisible ? 1 : 0, transform: heroVisible ? "translateY(0)" : "translateY(20px)", transition: "all 0.9s cubic-bezier(0.16,1,0.3,1) 0.5s" }}>
-          <Link to="/login" id="hero-cta-primary" style={{ padding: "14px 32px", borderRadius: "100px", fontSize: "11px", fontWeight: 700, color: "#0A0A0A", background: "linear-gradient(135deg, #8C7853, #C27D56)", textDecoration: "none", letterSpacing: "0.12em", textTransform: "uppercase", boxShadow: "0 0 30px rgba(140,120,83,0.4), 0 4px 20px rgba(0,0,0,0.4)", display: "inline-block", transition: "all 0.2s ease" }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.transform = "scale(1.04)"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.transform = "scale(1)"; }}>
+        <div className="flex gap-3 flex-wrap justify-center" style={{ opacity: heroVisible ? 1 : 0, transform: heroVisible ? "translateY(0)" : "translateY(20px)", transition: "all 0.9s cubic-bezier(0.16,1,0.3,1) 0.5s" }}>
+          <Link to="/login" className="px-7 py-3.5 rounded-full text-xs font-black text-[#0A0A0A] bg-gradient-to-br from-primary to-pb-amber hover:scale-[1.03] active:scale-[0.97] transition-all shadow-lg shadow-primary/15 text-decoration-none">
             Start Tracking Free →
           </Link>
-          <a href="#features" style={{ padding: "14px 32px", borderRadius: "100px", fontSize: "11px", fontWeight: 600, color: "rgba(255,255,255,0.55)", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", textDecoration: "none", letterSpacing: "0.12em", textTransform: "uppercase", transition: "all 0.2s ease" }}>See How It Works</a>
+          <a href="#features" className="px-7 py-3.5 rounded-full text-xs font-bold text-muted-foreground bg-surface-raised hover:bg-surface-interactive border border-border hover:scale-[1.02] active:scale-[0.98] transition-all text-decoration-none">See How It Works</a>
         </div>
 
-        <div style={{ position: "absolute", bottom: "40px", left: "50%", transform: "translateX(-50%)", display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", opacity: heroVisible ? 0.3 : 0, transition: "opacity 1s ease 1.2s", animation: "bounce 2s infinite 1.5s" }}>
-          <div style={{ fontSize: "10px", letterSpacing: "0.15em", color: "rgba(255,255,255,0.5)", fontFamily: "monospace" }}>SCROLL</div>
-          <div style={{ width: "1px", height: "30px", background: "linear-gradient(to bottom, rgba(255,255,255,0.4), transparent)" }} />
+        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 cursor-pointer opacity-40 hover:opacity-85 transition-opacity" style={{ animation: "bounce 2.2s infinite" }}>
+          <div className="text-[9px] tracking-widest text-muted-foreground font-mono">SCROLL</div>
+          <div className="w-[1px] h-8 bg-gradient-to-b from-border to-transparent" />
         </div>
       </section>
 
       {/* ── THE PROBLEM ──────────────────────────────────────────────────── */}
-      <section style={{ padding: "80px 24px", borderTop: "1px solid rgba(255,255,255,0.04)", position: "relative" }}>
-        <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse at 50% 100%, rgba(239,68,68,0.05), transparent 60%)", pointerEvents: "none" }} />
-        <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
-          <div style={{ textAlign: "center", marginBottom: "56px" }}>
+      <section className="relative py-20 px-4 sm:px-6 border-t border-border">
+        <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at 50% 100%, rgba(239,68,68,0.03), transparent 60%)" }} />
+        <div className="max-w-[1100px] mx-auto">
+          <div className="text-center mb-14">
             <SectionLabel text="The Problem We Solve" />
-            <SectionHeading>Indian hostel students are financially<br /><span style={{ color: "rgba(255,255,255,0.25)" }}>flying blind, every single month.</span></SectionHeading>
+            <SectionHeading>Indian hostel students are financially<br /><span className="text-muted-foreground/60">flying blind, every single month.</span></SectionHeading>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "16px" }}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {problems.map(({ icon, stat, sub, color }) => {
               const { ref, inView } = useInView();
               return (
-                <div key={stat} ref={ref} style={{ background: "#111111", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "16px", padding: "24px 20px", opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(24px)", transition: "all 0.7s ease", textAlign: "center" }}>
-                  <div style={{ fontSize: "28px", marginBottom: "10px" }}>{icon}</div>
-                  <div style={{ fontSize: "clamp(28px, 4vw, 38px)", fontWeight: 900, color, letterSpacing: "-0.03em", lineHeight: 1, marginBottom: "8px" }}>{stat}</div>
-                  <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", lineHeight: 1.6 }}>{sub}</p>
+                <div key={stat} ref={ref} className="bg-card border border-border rounded-2xl p-6 text-center transition-all duration-700" style={{ opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(24px)" }}>
+                  <div className="text-3xl mb-3">{icon}</div>
+                  <div className="text-3xl font-extrabold tracking-tight mb-2 leading-none" style={{ color }}>{stat}</div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">{sub}</p>
                 </div>
               );
             })}
           </div>
-          <div style={{ marginTop: "48px", background: "#111111", border: "1px solid rgba(255,255,255,0.06)", borderLeft: "3px solid #C27D56", borderRadius: "16px", padding: "28px 32px", maxWidth: "780px", margin: "48px auto 0" }}>
-            <p style={{ fontSize: "clamp(14px, 2vw, 17px)", color: "rgba(255,255,255,0.65)", lineHeight: 1.75, fontStyle: "italic" }}>
-              "Existing apps demand active manual entry or complex bank PDF parsing. Students try them for 3 days and abandon them. Meanwhile, they keep running out of money mid-month — right when exam pressure peaks — and respond by skipping meals."
+          <div className="mt-12 bg-card border border-border border-l-4 border-l-[#C27D56] rounded-2xl p-6 sm:p-8 max-w-[780px] mx-auto shadow-sm">
+            <p className="text-sm sm:text-base text-foreground leading-relaxed font-medium italic">
+              "Existing apps demand active manual entry or complex bank PDF parsing. Students try them for 3 days and abandon them. Meanwhile, they keep running out of money mid-month ── right when exam pressure peaks ── and respond by skipping meals."
             </p>
-            <p style={{ fontSize: "11px", color: "#C27D56", marginTop: "14px", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" }}>— PocketBuddy Research Report, 2025</p>
+            <p className="text-[10px] text-[#C27D56] mt-4 font-black tracking-widest uppercase font-mono">— PocketBuddy Research Report, 2025</p>
           </div>
         </div>
       </section>
 
       {/* ── DASHBOARD MOCKUP + COPY ───────────────────────────────────────── */}
-      <section style={{ padding: "80px 24px 100px", maxWidth: "1100px", margin: "0 auto", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "80px", alignItems: "center" }}>
-        <div>
+      <section className="py-20 px-4 sm:px-6 max-w-[1100px] mx-auto grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+        <div className="space-y-6">
           <SectionLabel text="The Dashboard" />
-          <SectionHeading style={{ marginBottom: "18px" }}>Your financial runway, live.</SectionHeading>
-          <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.42)", lineHeight: 1.75, marginBottom: "28px" }}>One glance tells you everything — days until broke, safe daily spend limit, AI-suggested campus meals, active Wing pools, and your burnout risk index. All computed passively from your UPI notifications.</p>
-          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          <SectionHeading>Your financial runway, live.</SectionHeading>
+          <p className="text-sm text-muted-foreground leading-relaxed">One glance tells you everything ── days until broke, safe daily spend limit, AI-suggested campus meals, active Wing pools, and your burnout risk index. All computed passively from your UPI notifications.</p>
+          <div className="space-y-3 pt-2">
             {["Live runway countdown with exact HH:MM:SS timer", "AI burnout risk score from 5 real behavioral signals", "Hyper-local Bedrock meal suggestions", "Crowdsourced merchant recognition", "Subscription collision calendar"].map((item) => (
-              <div key={item} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#C27D56", flexShrink: 0 }} />
-                <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.55)" }}>{item}</span>
+              <div key={item} className="flex items-center gap-3">
+                <div className="w-1.5 h-1.5 rounded-full bg-[#C27D56] shrink-0" />
+                <span className="text-xs sm:text-sm text-muted-foreground">{item}</span>
               </div>
             ))}
           </div>
         </div>
-        <DashboardMockup />
+        <div className="w-full flex justify-center py-4">
+          <DashboardMockup />
+        </div>
       </section>
 
       {/* ── STATS ────────────────────────────────────────────────────────── */}
-      <section ref={statsRef} style={{ padding: "70px 24px", background: "linear-gradient(to bottom, transparent, rgba(140,120,83,0.04), transparent)", borderTop: "1px solid rgba(255,255,255,0.04)", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-        <div style={{ maxWidth: "960px", margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "40px" }}>
+      <section ref={statsRef} className="py-14 px-4 sm:px-6 bg-gradient-to-b from-transparent to-primary/2 via-transparent border-t border-b border-border">
+        <div className="max-w-[960px] mx-auto grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-10">
           {[
             { value: "₹0", label: "MANUAL ENTRIES NEEDED" },
             { value: "16+h", label: "BURNOUT DETECTION THRESHOLD" },
             { value: "75%", label: "TOKEN COST REDUCTION VIA RAG" },
             { value: "∞", label: "CAMPUS MERCHANTS MAPPABLE" },
           ].map(({ value, label }) => (
-            <div key={label} style={{ textAlign: "center", opacity: statsInView ? 1 : 0, transform: statsInView ? "scale(1)" : "scale(0.85)", transition: "all 0.8s cubic-bezier(0.16,1,0.3,1)" }}>
-              <div style={{ fontSize: "clamp(32px, 5vw, 52px)", fontWeight: 900, background: "linear-gradient(135deg, #8C7853, #D9A05B)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", lineHeight: 1 }}>{value}</div>
-              <div style={{ fontSize: "9px", color: "rgba(255,255,255,0.3)", marginTop: "8px", letterSpacing: "0.1em", fontFamily: "monospace" }}>{label}</div>
+            <div key={label} className="text-center transition-all duration-800" style={{ opacity: statsInView ? 1 : 0, transform: statsInView ? "scale(1)" : "scale(0.85)" }}>
+              <div className="text-3xl sm:text-4xl md:text-5xl font-black bg-gradient-to-r from-[#8C7853] to-[#D9A05B] bg-clip-text text-transparent leading-none">{value}</div>
+              <div className="text-[9px] text-muted-foreground mt-2.5 tracking-wider font-mono uppercase">{label}</div>
             </div>
           ))}
         </div>
       </section>
 
       {/* ── WHY US ───────────────────────────────────────────────────────── */}
-      <section id="why-us" style={{ padding: "100px 24px", maxWidth: "1100px", margin: "0 auto" }}>
-        <div style={{ textAlign: "center", marginBottom: "56px" }}>
+      <section id="why-us" className="py-20 px-4 sm:px-6 max-w-[1100px] mx-auto">
+        <div className="text-center mb-14">
           <SectionLabel text="Why PocketBuddy Wins" />
-          <SectionHeading>We built what the others<br /><span style={{ color: "rgba(255,255,255,0.25)" }}>forgot to build.</span></SectionHeading>
-          <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.38)", maxWidth: "500px", margin: "16px auto 0", lineHeight: 1.7 }}>Every competitor app requires either your bank credentials, manual input, or ignores the Indian UPI ecosystem entirely. PocketBuddy solves all three.</p>
+          <SectionHeading>We built what the others<br /><span className="text-muted-foreground/60">forgot to build.</span></SectionHeading>
+          <p className="text-xs sm:text-sm text-muted-foreground max-w-[500px] mx-auto mt-4 leading-relaxed">Every competitor app requires either your bank credentials, manual input, or ignores the Indian UPI ecosystem entirely. PocketBuddy solves all three.</p>
         </div>
-        {/* Comparison table */}
-        <div style={{ overflowX: "auto", borderRadius: "20px", border: "1px solid rgba(255,255,255,0.07)" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+        
+        {/* Comparison table wrapper */}
+        <div className="overflow-x-auto rounded-2xl border border-border shadow-sm">
+          <table className="w-full min-w-[640px] border-collapse text-left text-[11px] sm:text-xs">
             <thead>
-              <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-                <th style={{ padding: "16px 20px", textAlign: "left", color: "rgba(255,255,255,0.35)", fontWeight: 600, letterSpacing: "0.05em", background: "#111111" }}>Feature</th>
+              <tr className="border-bottom border-border">
+                <th className="p-4 sm:p-5 text-muted-foreground font-bold uppercase tracking-wider bg-card">Feature</th>
                 {["PocketBuddy", "Fi Money", "Mint / Walnut", "Splitwise"].map((app, i) => (
-                  <th key={app} style={{ padding: "16px 20px", textAlign: "center", fontWeight: 700, background: i === 0 ? "rgba(140,120,83,0.12)" : "#111111", color: i === 0 ? "#C27D56" : "rgba(255,255,255,0.45)", borderLeft: "1px solid rgba(255,255,255,0.05)", letterSpacing: i === 0 ? "0.05em" : 0 }}>
-                    {i === 0 && <span style={{ display: "block", fontSize: "9px", color: "#4ade80", marginBottom: "2px" }}>★ THIS</span>}
+                  <th key={app} className="p-4 sm:p-5 text-center font-black border-l border-border bg-card" style={{ color: i === 0 ? "var(--primary)" : "var(--muted-foreground)" }}>
+                    {i === 0 && <span className="block text-[8px] text-pb-green tracking-widest mb-0.5">★ THIS</span>}
                     {app}
                   </th>
                 ))}
@@ -389,11 +450,11 @@ function LandingPage() {
               {comparisons.map(({ feature, us, fi, mint, splitwise }, idx) => {
                 const vals = [us, fi, mint, splitwise];
                 return (
-                  <tr key={feature} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                    <td style={{ padding: "13px 20px", color: "rgba(255,255,255,0.6)", background: idx % 2 === 0 ? "#0A0A0A" : "transparent", fontWeight: 500 }}>{feature}</td>
+                  <tr key={feature} className="border-b border-border hover:bg-surface-raised/20 transition-colors">
+                    <td className="p-4 sm:p-5 font-semibold text-foreground" style={{ background: idx % 2 === 0 ? "var(--background)" : "transparent" }}>{feature}</td>
                     {vals.map((v, ci) => (
-                      <td key={ci} style={{ padding: "13px 20px", textAlign: "center", background: ci === 0 ? (idx % 2 === 0 ? "rgba(140,120,83,0.06)" : "rgba(140,120,83,0.03)") : (idx % 2 === 0 ? "#0A0A0A" : "transparent"), borderLeft: "1px solid rgba(255,255,255,0.04)" }}>
-                        {v ? <span style={{ color: ci === 0 ? "#4ade80" : "#6b7280", fontSize: "16px" }}>✓</span> : <span style={{ color: "rgba(255,255,255,0.12)", fontSize: "14px" }}>—</span>}
+                      <td key={ci} className="p-4 sm:p-5 text-center border-l border-border font-bold text-xs" style={{ background: ci === 0 ? (idx % 2 === 0 ? "rgba(255,107,0,0.05)" : "rgba(255,107,0,0.02)") : (idx % 2 === 0 ? "var(--background)" : "transparent") }}>
+                        {v ? <span className="text-pb-green text-sm">✓</span> : <span className="text-border text-xs">—</span>}
                       </td>
                     ))}
                   </tr>
@@ -404,19 +465,19 @@ function LandingPage() {
         </div>
 
         {/* 3 differentiators */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px", marginTop: "48px" }}>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mt-12">
           {[
-            { icon: "🔒", title: "No Bank Access Ever", body: "PocketBuddy never asks for your bank login, MPIN, or OTP. It works entirely from UPI push notification strings — publicly visible text on your own device.", accent: "#4ade80" },
-            { icon: "🧠", title: "Campus-Native Intelligence", body: "Unlike generic finance apps, PocketBuddy's AI context is scoped to real campus prices, mess schedules, and hostel geography — not internet averages.", accent: "#C27D56" },
+            { icon: "🔒", title: "No Bank Access Ever", body: "PocketBuddy never asks for your bank login, MPIN, or OTP. It works entirely from UPI push notification strings ── publicly visible text on your own device.", accent: "#16a34a" },
+            { icon: "🧠", title: "Campus-Native Intelligence", body: "Unlike generic finance apps, PocketBuddy's AI context is scoped to real campus prices, mess schedules, and hostel geography ── not internet averages.", accent: "#C27D56" },
             { icon: "🤝", title: "Network Effects by Design", body: "Every merchant classification, every pool created, every check-in improves the experience for every other student on campus. It compounds.", accent: "#5E17EB" },
           ].map(({ icon, title, body, accent }) => {
             const { ref, inView } = useInView();
             return (
-              <div key={title} ref={ref} style={{ background: "#111111", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "16px", padding: "24px 20px", opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(24px)", transition: "all 0.7s ease", position: "relative", overflow: "hidden" }}>
-                <div style={{ position: "absolute", top: 0, right: 0, width: "80px", height: "80px", background: `radial-gradient(circle at top right, ${accent}15, transparent 70%)`, pointerEvents: "none" }} />
-                <div style={{ fontSize: "26px", marginBottom: "12px" }}>{icon}</div>
-                <h4 style={{ fontSize: "14px", fontWeight: 700, color: "#fff", marginBottom: "8px" }}>{title}</h4>
-                <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)", lineHeight: 1.65 }}>{body}</p>
+              <div key={title} ref={ref} className="relative bg-card border border-border rounded-2xl p-6 overflow-hidden transition-all duration-750" style={{ opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(24px)" }}>
+                <div className="absolute top-0 right-0 w-20 h-20 pointer-events-none" style={{ background: `radial-gradient(circle at top right, ${accent}15, transparent 70%)` }} />
+                <div className="text-2xl mb-3">{icon}</div>
+                <h4 className="text-sm font-bold text-foreground mb-2">{title}</h4>
+                <p className="text-xs text-muted-foreground leading-relaxed">{body}</p>
               </div>
             );
           })}
@@ -424,27 +485,27 @@ function LandingPage() {
       </section>
 
       {/* ── FEATURES GRID ────────────────────────────────────────────────── */}
-      <section id="features" style={{ padding: "80px 24px", background: "rgba(255,255,255,0.015)", borderTop: "1px solid rgba(255,255,255,0.04)", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-        <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
-          <div style={{ textAlign: "center", marginBottom: "56px" }}>
+      <section id="features" className="py-20 px-4 sm:px-6 bg-gradient-to-b from-border/10 to-transparent border-t border-b border-border">
+        <div className="max-w-[1100px] mx-auto">
+          <div className="text-center mb-14">
             <SectionLabel text="Core Feature Set" />
-            <SectionHeading>Five loops that protect<br /><span style={{ color: "rgba(255,255,255,0.25)" }}>your campus survival.</span></SectionHeading>
+            <SectionHeading>Five loops that protect<br /><span className="text-muted-foreground/60">your campus survival.</span></SectionHeading>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))", gap: "14px" }}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {features.map((f) => <FeatureCard key={f.title} {...f} />)}
           </div>
         </div>
       </section>
 
       {/* ── HOW IT WORKS ─────────────────────────────────────────────────── */}
-      <section id="how-it-works" style={{ padding: "100px 24px" }}>
-        <div style={{ maxWidth: "680px", margin: "0 auto" }}>
-          <div style={{ textAlign: "center", marginBottom: "56px" }}>
+      <section id="how-it-works" className="py-20 px-4 sm:px-6">
+        <div className="max-w-[640px] mx-auto">
+          <div className="text-center mb-14">
             <SectionLabel text="Under The Hood" />
             <SectionHeading>How it actually works</SectionHeading>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "32px", position: "relative" }}>
-            <div style={{ position: "absolute", left: "18px", top: "38px", bottom: "38px", width: "1px", background: "linear-gradient(to bottom, #8C7853, transparent)" }} />
+          <div className="relative flex flex-col gap-8">
+            <div className="absolute left-[18px] top-6 bottom-6 w-[1px] bg-gradient-to-b from-primary to-transparent" />
             <TimelineStep n="01" title="UPI notification fires" sub="You pay ₹30 at the hostel canteen. Your Android companion app silently intercepts the GPay push string in the background." delay={0} />
             <TimelineStep n="02" title="FastAPI parses the payload" sub="The string hits an async webhook endpoint. Bedrock extracts merchant ID, amount, and timestamp without touching your bank." delay={80} />
             <TimelineStep n="03" title="Merchant gets crowd-classified" sub="If the merchant is new, one 1-tap prompt classifies it globally for your entire campus. Next student gets it automatically." delay={160} />
@@ -455,22 +516,24 @@ function LandingPage() {
       </section>
 
       {/* ── TESTIMONIALS ─────────────────────────────────────────────────── */}
-      <section style={{ padding: "80px 24px", background: "rgba(255,255,255,0.015)", borderTop: "1px solid rgba(255,255,255,0.04)", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-        <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
-          <div style={{ textAlign: "center", marginBottom: "48px" }}>
+      <section className="py-20 px-4 sm:px-6 bg-gradient-to-b from-border/10 to-transparent border-t border-b border-border">
+        <div className="max-w-[1100px] mx-auto">
+          <div className="text-center mb-14">
             <SectionLabel text="Beta Voices" />
-            <SectionHeading>Students who tested it<br /><span style={{ color: "rgba(255,255,255,0.25)" }}>don't want to go back.</span></SectionHeading>
+            <SectionHeading>Students who tested it<br /><span className="text-muted-foreground/60">don't want to go back.</span></SectionHeading>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px" }}>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             {testimonials.map(({ quote, name, role }, i) => {
               const { ref, inView } = useInView();
               return (
-                <div key={name} ref={ref} style={{ background: "#111111", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "16px", padding: "24px", opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(24px)", transition: `all 0.7s ease ${i * 100}ms` }}>
-                  <div style={{ fontSize: "20px", color: "#C27D56", marginBottom: "12px", lineHeight: 1 }}>"</div>
-                  <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.6)", lineHeight: 1.7, marginBottom: "16px", fontStyle: "italic" }}>{quote}</p>
-                  <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: "12px" }}>
-                    <p style={{ fontSize: "12px", fontWeight: 700, color: "rgba(255,255,255,0.85)" }}>{name}</p>
-                    <p style={{ fontSize: "10px", color: "rgba(255,255,255,0.3)", marginTop: "2px" }}>{role}</p>
+                <div key={name} ref={ref} className="bg-card border border-border rounded-2xl p-6 flex flex-col justify-between transition-all duration-750" style={{ opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(24px)", transitionDelay: `${i * 100}ms` }}>
+                  <div>
+                    <div className="text-2xl text-[#C27D56] font-bold leading-none mb-3">"</div>
+                    <p className="text-xs sm:text-sm text-muted-foreground italic leading-relaxed mb-6">{quote}</p>
+                  </div>
+                  <div className="border-t border-border pt-4">
+                    <p className="text-xs font-bold text-foreground">{name}</p>
+                    <p className="text-[10px] text-muted-foreground mt-1 font-mono">{role}</p>
                   </div>
                 </div>
               );
@@ -480,12 +543,12 @@ function LandingPage() {
       </section>
 
       {/* ── TECH STACK ───────────────────────────────────────────────────── */}
-      <section style={{ padding: "80px 24px", maxWidth: "1100px", margin: "0 auto" }}>
-        <div style={{ textAlign: "center", marginBottom: "48px" }}>
+      <section className="py-20 px-4 sm:px-6 max-w-[1100px] mx-auto">
+        <div className="text-center mb-14">
           <SectionLabel text="Architecture" />
-          <SectionHeading>Built for speed.<br /><span style={{ color: "rgba(255,255,255,0.25)" }}>Built to scale.</span></SectionHeading>
+          <SectionHeading>Built for speed.<br /><span className="text-muted-foreground/60">Built to scale.</span></SectionHeading>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))", gap: "12px" }}>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {[
             { layer: "AI Engine", tech: "Amazon Bedrock", color: "#FF9900" },
             { layer: "Frontend", tech: "React + TanStack", color: "#61DAFB" },
@@ -496,42 +559,42 @@ function LandingPage() {
           ].map(({ layer, tech, color }) => {
             const { ref, inView } = useInView();
             return (
-              <div key={tech} ref={ref} style={{ background: "#111111", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "14px", padding: "18px", opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(18px)", transition: "all 0.6s ease" }}>
-                <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: color, marginBottom: "10px", boxShadow: `0 0 10px ${color}66` }} />
-                <div style={{ fontSize: "9px", color: "rgba(255,255,255,0.3)", letterSpacing: "0.1em", fontFamily: "monospace", marginBottom: "3px" }}>{layer}</div>
-                <div style={{ fontSize: "13px", fontWeight: 600, color: "rgba(255,255,255,0.85)" }}>{tech}</div>
+              <div key={tech} ref={ref} className="bg-card border border-border rounded-xl p-4 transition-all duration-600" style={{ opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(18px)" }}>
+                <div className="w-2 h-2 rounded-full mb-3" style={{ background: color, boxShadow: `0 0 10px ${color}66` }} />
+                <div className="text-[9px] text-muted-foreground tracking-wider font-mono uppercase mb-1">{layer}</div>
+                <div className="text-xs sm:text-sm font-bold text-foreground">{tech}</div>
               </div>
             );
           })}
         </div>
 
-        {/* Architecture flow */}
-        <div style={{ marginTop: "40px", background: "#111111", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "16px", padding: "24px 28px" }}>
-          <p style={{ fontSize: "9px", color: "#C27D56", letterSpacing: "0.15em", fontFamily: "monospace", marginBottom: "16px" }}>DATA FLOW</p>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", fontSize: "11px", color: "rgba(255,255,255,0.5)", fontWeight: 500 }}>
+        {/* Architecture flow wrapper */}
+        <div className="mt-8 bg-card border border-border rounded-2xl p-5 sm:p-6 shadow-sm overflow-hidden">
+          <p className="text-[9px] text-[#C27D56] tracking-widest font-mono mb-4 uppercase">DATA FLOW PATH</p>
+          <div className="flex flex-wrap items-center gap-2 text-[10px] sm:text-xs text-muted-foreground font-semibold">
             {["Android Companion", "→", "UPI Push String", "→", "FastAPI Webhook", "→", "Bedrock Extraction", "→", "MongoDB", "→", "React Dashboard"].map((item, i) => (
-              <span key={i} style={{ color: item === "→" ? "rgba(255,255,255,0.15)" : i === 0 ? "#4ade80" : i === 10 ? "#C27D56" : "rgba(255,255,255,0.5)", fontWeight: item === "→" ? 300 : 600 }}>{item}</span>
+              <span key={i} style={{ color: item === "→" ? "var(--border)" : i === 0 ? "#16a34a" : i === 10 ? "var(--primary)" : "var(--muted-foreground)" }}>{item}</span>
             ))}
           </div>
         </div>
       </section>
 
       {/* ── FAQ ──────────────────────────────────────────────────────────── */}
-      <section style={{ padding: "80px 24px", background: "rgba(255,255,255,0.015)", borderTop: "1px solid rgba(255,255,255,0.04)" }}>
-        <div style={{ maxWidth: "720px", margin: "0 auto" }}>
-          <div style={{ textAlign: "center", marginBottom: "48px" }}>
+      <section className="py-20 px-4 sm:px-6 bg-gradient-to-b from-border/10 to-transparent border-t border-border">
+        <div className="max-w-[720px] mx-auto">
+          <div className="text-center mb-14">
             <SectionLabel text="FAQ" />
-            <SectionHeading>Questions we get asked<br /><span style={{ color: "rgba(255,255,255,0.25)" }}>every time we demo.</span></SectionHeading>
+            <SectionHeading>Questions we get asked<br /><span className="text-muted-foreground/60">every time we demo.</span></SectionHeading>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+          <div className="space-y-3">
             {faqs.map(({ q, a }, i) => (
-              <div key={i} style={{ background: "#111111", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "14px", overflow: "hidden", transition: "border-color 0.2s", borderColor: openFaq === i ? "rgba(140,120,83,0.3)" : "rgba(255,255,255,0.07)" }}>
-                <button onClick={() => setOpenFaq(openFaq === i ? null : i)} style={{ width: "100%", textAlign: "left", padding: "18px 20px", background: "none", border: "none", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "16px" }}>
-                  <span style={{ fontSize: "13px", fontWeight: 600, color: "rgba(255,255,255,0.85)", lineHeight: 1.4 }}>{q}</span>
-                  <span style={{ color: "#C27D56", fontSize: "18px", flexShrink: 0, transition: "transform 0.3s", transform: openFaq === i ? "rotate(45deg)" : "rotate(0deg)" }}>+</span>
+              <div key={i} className="bg-card border border-border rounded-xl overflow-hidden transition-all duration-300" style={{ borderColor: openFaq === i ? "var(--primary)" : "var(--border)" }}>
+                <button onClick={() => setOpenFaq(openFaq === i ? null : i)} className="w-full flex justify-between items-center gap-4 p-4 sm:p-5 bg-transparent border-none cursor-pointer outline-none text-left">
+                  <span className="text-xs sm:text-sm font-bold text-foreground leading-normal">{q}</span>
+                  <span className="text-base text-[#C27D56] font-extrabold flex-shrink-0 transition-transform duration-300" style={{ transform: openFaq === i ? "rotate(45deg)" : "rotate(0deg)" }}>+</span>
                 </button>
                 {openFaq === i && (
-                  <div style={{ padding: "0 20px 18px", fontSize: "12px", color: "rgba(255,255,255,0.45)", lineHeight: 1.75 }}>{a}</div>
+                  <div className="px-4 sm:px-5 pb-5 text-xs text-muted-foreground leading-relaxed animate-fade-in">{a}</div>
                 )}
               </div>
             ))}
@@ -540,51 +603,54 @@ function LandingPage() {
       </section>
 
       {/* ── CTA BANNER ───────────────────────────────────────────────────── */}
-      <section style={{ padding: "80px 24px 120px" }}>
-        <div style={{ maxWidth: "800px", margin: "0 auto", textAlign: "center", background: "linear-gradient(135deg, rgba(140,120,83,0.12), rgba(194,125,86,0.06))", border: "1px solid rgba(140,120,83,0.2)", borderRadius: "28px", padding: "64px 40px", position: "relative", overflow: "hidden" }}>
-          <div style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", width: "400px", height: "200px", background: "radial-gradient(ellipse at 50% 0%, rgba(140,120,83,0.22), transparent 70%)", pointerEvents: "none" }} />
+      <section className="py-20 px-4 sm:px-6">
+        <div className="max-w-[800px] mx-auto text-center rounded-[28px] border border-primary/20 bg-gradient-to-br from-primary/8 to-primary/3 p-8 sm:p-14 relative overflow-hidden shadow-md">
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[240px] sm:w-[400px] h-[200px] pointer-events-none" style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(255,107,0,0.18), transparent 70%)" }} />
           <SectionLabel text="Don't Go Broke Before Exams" />
-          <SectionHeading style={{ marginBottom: "18px" }}>Your financial guard<br />is one tap away.</SectionHeading>
-          <p style={{ fontSize: "15px", color: "rgba(255,255,255,0.42)", marginBottom: "36px", lineHeight: 1.65 }}>Free for all campus students. No credit card. No complex setup.<br />Just install the Android companion and you're live in 60 seconds.</p>
-          <Link to="/login" id="footer-cta" style={{ display: "inline-block", padding: "15px 36px", borderRadius: "100px", fontSize: "14px", fontWeight: 700, color: "#0A0A0A", background: "linear-gradient(135deg, #8C7853, #C27D56)", textDecoration: "none", letterSpacing: "0.03em", boxShadow: "0 0 40px rgba(140,120,83,0.5), 0 4px 24px rgba(0,0,0,0.4)" }}
-            onMouseEnter={(e) => { const el = e.currentTarget as HTMLAnchorElement; el.style.transform = "scale(1.04)"; el.style.boxShadow = "0 0 60px rgba(140,120,83,0.65), 0 4px 24px rgba(0,0,0,0.4)"; }}
-            onMouseLeave={(e) => { const el = e.currentTarget as HTMLAnchorElement; el.style.transform = "scale(1)"; el.style.boxShadow = "0 0 40px rgba(140,120,83,0.5), 0 4px 24px rgba(0,0,0,0.4)"; }}>
+          <SectionHeading className="mb-4">Your financial guard<br />is one tap away.</SectionHeading>
+          <p className="text-xs sm:text-sm text-muted-foreground mb-8 max-w-[480px] mx-auto leading-relaxed">Free for all campus students. No credit card. No complex setup.<br />Just install the Android companion and you're live in 60 seconds.</p>
+          <Link to="/login" className="inline-block px-8 py-3.5 rounded-full text-xs font-black text-[#0A0A0A] bg-gradient-to-br from-primary to-pb-amber hover:scale-[1.03] active:scale-[0.97] transition-all shadow-lg shadow-primary/20 text-decoration-none">
             Create Free Account →
           </Link>
           {/* Trust badges */}
-          <div style={{ display: "flex", justifyContent: "center", gap: "24px", marginTop: "32px", flexWrap: "wrap" }}>
+          <div className="flex justify-center gap-4 sm:gap-6 mt-8 flex-wrap">
             {["🔒 No bank access", "📱 Works offline", "🎓 Built for India", "⚡ Setup in 60s"].map((b) => (
-              <span key={b} style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)", fontWeight: 600 }}>{b}</span>
+              <span key={b} className="text-[10px] sm:text-xs text-muted-foreground font-semibold font-mono">{b}</span>
             ))}
           </div>
         </div>
       </section>
 
       {/* ── FOOTER ───────────────────────────────────────────────────────── */}
-      <footer style={{ borderTop: "1px solid rgba(255,255,255,0.05)", padding: "28px 24px", maxWidth: "1100px", margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "linear-gradient(135deg, #8C7853, #D9A05B)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <span style={{ fontWeight: 900, fontSize: "10px", color: "#0A0A0A" }}>P</span>
+      <footer className="border-t border-border py-8 px-4 sm:px-6 max-w-[1100px] mx-auto flex flex-col md:flex-row justify-between items-center gap-4 text-center md:text-left">
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 rounded-full bg-gradient-to-br from-primary to-[#D9A05B] flex items-center justify-center">
+            <span className="font-black text-[10px] text-[#0A0A0A]">P</span>
           </div>
-          <span style={{ fontSize: "13px", fontWeight: 700, color: "rgba(255,255,255,0.4)" }}>PocketBuddy</span>
+          <span className="text-xs font-extrabold text-muted-foreground">PocketBuddy</span>
         </div>
-        <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.18)", fontFamily: "monospace" }}>CAMPUS FINANCIAL GUARD · AWS HACKATHON 2025 · THEME 4: AI FOR CAMPUS</div>
-        <Link to="/login" style={{ fontSize: "12px", color: "#C27D56", textDecoration: "none", fontWeight: 600 }}>Sign In →</Link>
+        <div className="text-[10px] text-muted-foreground opacity-75 font-mono">CAMPUS FINANCIAL GUARD · AWS HACKATHON 2025 · THEME 4: AI FOR CAMPUS</div>
+        <Link to="/login" className="text-xs font-bold text-[#C27D56] hover:text-[#b45309] transition-colors text-decoration-none">Sign In →</Link>
       </footer>
 
       <style>{`
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-        @keyframes bounce { 0%, 100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(-8px); } }
+        @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
         * { box-sizing: border-box; }
         html { scroll-behavior: smooth; }
         ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-track { background: #0A0A0A; }
-        ::-webkit-scrollbar-thumb { background: #1E1E1E; border-radius: 2px; }
-        @media (max-width: 768px) {
-          nav > div:last-child > a:not(:last-child):not(:nth-last-child(2)) { display: none; }
-          section[style*="grid-template-columns: 1fr 1fr"] { grid-template-columns: 1fr !important; }
-          section[style*="grid-template-columns: repeat(4, 1fr)"] { grid-template-columns: repeat(2, 1fr) !important; }
-          section[style*="grid-template-columns: repeat(3, 1fr)"] { grid-template-columns: 1fr !important; }
+        ::-webkit-scrollbar-track { background: var(--background); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+        .mask-image-radial {
+          mask-image: radial-gradient(ellipse 80% 60% at 50% 50%, black, transparent);
+          -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 50%, black, transparent);
+        }
+        .animate-fade-in {
+          animation: fadeIn 0.4s ease-out;
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
     </div>

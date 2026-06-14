@@ -113,12 +113,12 @@ function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4 relative overflow-hidden">
-      {/* Cinematic gold/bronze ambient light overlay */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-[450px] w-[450px] rounded-full bg-accent-bronze/5 blur-[120px] pointer-events-none" />
+      {/* Cinematic ambient light overlay */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-[450px] w-[450px] rounded-full bg-primary/5 blur-[120px] pointer-events-none" />
 
       <div className="w-full max-w-[360px] relative z-10">
         <div className="text-center mb-8">
-          <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-tr from-accent-bronze to-accent-amber shadow-[0_0_24px_rgba(140,120,83,0.25)] mb-4">
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-primary shadow-[0_0_24px_rgba(255,107,0,0.25)] mb-4">
             <span className="text-[#0A0A0A] font-black text-xl leading-none tracking-tighter">P</span>
           </div>
           <h1
@@ -193,7 +193,7 @@ function LoginPage() {
             <>
               <div className="space-y-1">
                 <label className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest pl-1">Phone Number</label>
-                <div className="flex items-center rounded-md border border-border bg-surface-raised/40 focus-within:ring-1 focus-within:ring-accent-bronze/40 focus-within:border-accent-bronze/40 hover:border-white/15 transition-all">
+                <div className="flex items-center rounded-md border border-border bg-surface-raised/40 focus-within:ring-1 focus-within:ring-primary/40 focus-within:border-primary/40 hover:border-white/15 transition-all">
                   <span className="px-3 text-xs text-muted-foreground font-bold border-r border-border">+91</span>
                   <input
                     id="input-login-phone"
@@ -248,7 +248,7 @@ function LoginPage() {
           <button
             id="link-create-account"
             onClick={() => setMode(mode === "signup" ? "signin" : "signup")}
-            className="text-[11px] font-bold tracking-wide text-accent-bronze hover:text-accent-amber transition-colors uppercase cursor-pointer"
+            className="text-[11px] font-bold tracking-wide text-primary hover:text-primary/80 transition-colors uppercase cursor-pointer"
           >
             {mode === "signup" ? "Have an account? Sign in" : "New student? Create account"}
           </button>

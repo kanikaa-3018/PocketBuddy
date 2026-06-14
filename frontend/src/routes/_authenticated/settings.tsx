@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
-import { AppShell } from "@/components/AppShell";
+import { AppShell, MobileMenuButton } from "@/components/AppShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -243,28 +243,31 @@ function SettingsPage() {
           alignItems: "center",
           justifyContent: "space-between",
           height: "56px",
-          borderBottom: "1px solid rgba(255,255,255,0.06)",
-          background: "rgba(10,10,10,0.92)",
+          borderBottom: "1px solid var(--border)",
+          background: "color-mix(in srgb, var(--background) 92%, transparent)",
           backdropFilter: "blur(20px)",
-          margin: "0 -32px",
-          padding: "0 32px",
+          padding: "0 16px",
         }}
       >
-        <h1
-          style={{
-            fontSize: "11px",
-            fontWeight: 600,
-            letterSpacing: "0.18em",
-            color: "rgba(255,255,255,0.5)",
-            fontFamily: "var(--font-mono)",
-          }}
-        >
-          SETTINGS
-        </h1>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <MobileMenuButton />
+          <h1
+            style={{
+              fontSize: "18px",
+              fontWeight: 900,
+              letterSpacing: "0.25em",
+              color: "var(--foreground)",
+              fontFamily: "var(--font-display)",
+              textTransform: "uppercase",
+            }}
+          >
+            Settings
+          </h1>
+        </div>
         <div
           style={{
-            fontSize: "11px",
-            color: "rgba(255,255,255,0.25)",
+            fontSize: "12px",
+            color: "var(--muted-foreground)",
             fontFamily: "var(--font-mono)",
           }}
         >
@@ -286,21 +289,15 @@ function SettingsPage() {
         <SectionHeader icon={<User size={13} />} label="CAMPUS PROFILE" />
         <div
           style={{
-            background: "#111111",
-            border: "1px solid rgba(255,255,255,0.07)",
+            background: "var(--card)",
+            border: "1px solid var(--border)",
             borderRadius: "14px",
             overflow: "hidden",
             marginBottom: "24px",
           }}
         >
           {/* Two-column grid for compact fields */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: "0",
-            }}
-          >
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-0">
             <SettingsField label="Monthly Allowance (₹)" noBorderRight>
               <Input
                 type="number"
@@ -329,17 +326,11 @@ function SettingsPage() {
           <div
             style={{
               height: "1px",
-              background: "rgba(255,255,255,0.05)",
+              background: "var(--border)",
             }}
           />
 
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr 1fr",
-              gap: "0",
-            }}
-          >
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-0">
             <SettingsField label="Hostel Block" noBorderRight>
               <Input
                 value={hostel}
@@ -369,11 +360,11 @@ function SettingsPage() {
           <div
             style={{
               height: "1px",
-              background: "rgba(255,255,255,0.05)",
+              background: "var(--border)",
             }}
           />
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0" }}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-0">
             <SettingsField label="Exam Start" noBorderRight>
               <Input
                 type="date"
@@ -395,7 +386,7 @@ function SettingsPage() {
           <div
             style={{
               height: "1px",
-              background: "rgba(255,255,255,0.05)",
+              background: "var(--border)",
             }}
           />
 
@@ -412,7 +403,7 @@ function SettingsPage() {
           <div
             style={{
               height: "1px",
-              background: "rgba(255,255,255,0.05)",
+              background: "var(--border)",
             }}
           />
 
@@ -426,10 +417,10 @@ function SettingsPage() {
             }}
           >
             <div>
-              <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.85)", fontWeight: 500 }}>
+              <p style={{ fontSize: "13px", color: "var(--foreground)", fontWeight: 500 }}>
                 Mess Enrolled
               </p>
-              <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)", marginTop: "2px" }}>
+              <p style={{ fontSize: "12px", color: "var(--muted-foreground)", marginTop: "2px" }}>
                 Include mess fees in spending calculations
               </p>
             </div>
@@ -439,7 +430,7 @@ function SettingsPage() {
           <div
             style={{
               height: "1px",
-              background: "rgba(255,255,255,0.05)",
+              background: "var(--border)",
             }}
           />
 
@@ -453,11 +444,11 @@ function SettingsPage() {
                 width: "100%",
                 padding: "11px 20px",
                 background: saving
-                  ? "rgba(140,120,83,0.3)"
-                  : "linear-gradient(135deg, #8C7853 0%, #C27D56 100%)",
+                  ? "rgba(255,107,0,0.3)"
+                  : "var(--primary)",
                 border: "none",
                 borderRadius: "9px",
-                color: "#fff",
+                color: "var(--primary-foreground)",
                 fontSize: "13px",
                 fontWeight: 600,
                 letterSpacing: "0.04em",
@@ -482,8 +473,8 @@ function SettingsPage() {
         <SectionHeader icon={<Smartphone size={13} />} label="COMPANION DEVICE" />
         <div
           style={{
-            background: "#111111",
-            border: "1px solid rgba(255,255,255,0.07)",
+            background: "var(--card)",
+            border: "1px solid var(--border)",
             borderRadius: "14px",
             overflow: "hidden",
             marginBottom: "24px",
@@ -502,15 +493,15 @@ function SettingsPage() {
                     animation: "pulse 2s infinite",
                   }}
                 />
-                <Wifi size={14} color="rgba(255,255,255,0.6)" />
-                <p style={{ fontSize: "14px", fontWeight: 600, color: "rgba(255,255,255,0.9)" }}>
+                <Wifi size={14} color="var(--muted-foreground)" />
+                <p style={{ fontSize: "14px", fontWeight: 600, color: "var(--foreground)" }}>
                   {profile.companion_device_name}
                 </p>
               </div>
               <p
                 style={{
-                  fontSize: "11px",
-                  color: "rgba(255,255,255,0.35)",
+                  fontSize: "12px",
+                  color: "var(--muted-foreground)",
                   fontFamily: "var(--font-mono)",
                   marginBottom: "14px",
                 }}
@@ -523,7 +514,7 @@ function SettingsPage() {
                   to="/companion"
                   style={{
                     fontSize: "12px",
-                    color: "#C27D56",
+                    color: "var(--primary)",
                     textDecoration: "none",
                     fontWeight: 500,
                     display: "flex",
@@ -533,12 +524,12 @@ function SettingsPage() {
                 >
                   Manage Device <ChevronRight size={12} />
                 </Link>
-                <span style={{ color: "rgba(255,255,255,0.15)" }}>·</span>
+                <span style={{ color: "var(--border)" }}>·</span>
                 <Link
                   to="/companion"
                   style={{
                     fontSize: "12px",
-                    color: "rgba(255,255,255,0.4)",
+                    color: "var(--muted-foreground)",
                     textDecoration: "none",
                     fontWeight: 500,
                     display: "flex",
@@ -553,15 +544,15 @@ function SettingsPage() {
           ) : (
             <div style={{ padding: "18px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
-                <WifiOff size={14} color="rgba(255,255,255,0.25)" />
-                <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.45)" }}>
+                <WifiOff size={14} color="var(--muted-foreground)" />
+                <p style={{ fontSize: "13px", color: "var(--muted-foreground)" }}>
                   No device connected
                 </p>
               </div>
               <p
                 style={{
-                  fontSize: "11px",
-                  color: "rgba(255,255,255,0.25)",
+                  fontSize: "12px",
+                  color: "var(--muted-foreground)",
                   marginBottom: "14px",
                 }}
               >
@@ -572,9 +563,9 @@ function SettingsPage() {
                   style={{
                     padding: "9px 16px",
                     background: "transparent",
-                    border: "1px solid rgba(194,125,86,0.4)",
+                    border: "1px solid rgba(255,107,0,0.4)",
                     borderRadius: "8px",
-                    color: "#C27D56",
+                    color: "var(--primary)",
                     fontSize: "12px",
                     fontWeight: 600,
                     cursor: "pointer",
@@ -583,11 +574,11 @@ function SettingsPage() {
                     fontFamily: "var(--font-sans)",
                   }}
                   onMouseEnter={(e) => {
-                    (e.target as HTMLButtonElement).style.borderColor = "#C27D56";
-                    (e.target as HTMLButtonElement).style.background = "rgba(194,125,86,0.08)";
+                    (e.target as HTMLButtonElement).style.borderColor = "var(--primary)";
+                    (e.target as HTMLButtonElement).style.background = "rgba(255,107,0,0.08)";
                   }}
                   onMouseLeave={(e) => {
-                    (e.target as HTMLButtonElement).style.borderColor = "rgba(194,125,86,0.4)";
+                    (e.target as HTMLButtonElement).style.borderColor = "rgba(255,107,0,0.4)";
                     (e.target as HTMLButtonElement).style.background = "transparent";
                   }}
                 >
@@ -616,11 +607,11 @@ function SettingsPage() {
               alignItems: "center",
               gap: "5px",
               padding: "6px 12px",
-              background: "rgba(140,120,83,0.12)",
-              border: "1px solid rgba(140,120,83,0.3)",
+              background: "rgba(255,107,0,0.12)",
+              border: "1px solid rgba(255,107,0,0.3)",
               borderRadius: "20px",
-              color: "#C27D56",
-              fontSize: "11px",
+              color: "var(--primary)",
+              fontSize: "12px",
               fontWeight: 600,
               letterSpacing: "0.05em",
               cursor: "pointer",
@@ -629,13 +620,13 @@ function SettingsPage() {
             }}
             onMouseEnter={(e) => {
               const btn = e.currentTarget;
-              btn.style.background = "rgba(140,120,83,0.22)";
-              btn.style.borderColor = "rgba(140,120,83,0.6)";
+              btn.style.background = "rgba(255,107,0,0.22)";
+              btn.style.borderColor = "rgba(255,107,0,0.6)";
             }}
             onMouseLeave={(e) => {
               const btn = e.currentTarget;
-              btn.style.background = "rgba(140,120,83,0.12)";
-              btn.style.borderColor = "rgba(140,120,83,0.3)";
+              btn.style.background = "rgba(255,107,0,0.12)";
+              btn.style.borderColor = "rgba(255,107,0,0.3)";
             }}
           >
             <Plus size={11} />
@@ -644,8 +635,8 @@ function SettingsPage() {
         </div>
         <div
           style={{
-            background: "#111111",
-            border: "1px solid rgba(255,255,255,0.07)",
+            background: "var(--card)",
+            border: "1px solid var(--border)",
             borderRadius: "14px",
             overflow: "hidden",
             marginBottom: "24px",
@@ -656,7 +647,7 @@ function SettingsPage() {
               style={{
                 padding: "32px 18px",
                 textAlign: "center",
-                color: "rgba(255,255,255,0.25)",
+                color: "var(--muted-foreground)",
                 fontSize: "13px",
               }}
             >
@@ -667,7 +658,7 @@ function SettingsPage() {
               <div key={s.id}>
                 {i > 0 && (
                   <div
-                    style={{ height: "1px", background: "rgba(255,255,255,0.05)", margin: "0 18px" }}
+                    style={{ height: "1px", background: "var(--border)", margin: "0 18px" }}
                   />
                 )}
                 <div
@@ -680,7 +671,7 @@ function SettingsPage() {
                   }}
                   onMouseEnter={(e) => {
                     (e.currentTarget as HTMLDivElement).style.background =
-                      "rgba(255,255,255,0.02)";
+                      "var(--surface-raised)";
                   }}
                   onMouseLeave={(e) => {
                     (e.currentTarget as HTMLDivElement).style.background = "transparent";
@@ -692,7 +683,7 @@ function SettingsPage() {
                         style={{
                           fontSize: "13px",
                           fontWeight: 500,
-                          color: "rgba(255,255,255,0.85)",
+                          color: "var(--foreground)",
                         }}
                       >
                         {s.service_name ?? s.name}
@@ -700,14 +691,14 @@ function SettingsPage() {
                       {s.detected_from === "auto_detected" && (
                         <span
                           style={{
-                            fontSize: "9px",
+                            fontSize: "11px",
                             fontWeight: 700,
                             letterSpacing: "0.08em",
                             padding: "2px 6px",
-                            background: "rgba(140,120,83,0.15)",
-                            border: "1px solid rgba(140,120,83,0.3)",
+                            background: "rgba(255,107,0,0.15)",
+                            border: "1px solid rgba(255,107,0,0.3)",
                             borderRadius: "20px",
-                            color: "#C27D56",
+                            color: "var(--primary)",
                             fontFamily: "var(--font-mono)",
                           }}
                         >
@@ -718,7 +709,7 @@ function SettingsPage() {
                     <p
                       style={{
                         fontSize: "12px",
-                        color: "rgba(255,255,255,0.35)",
+                        color: "var(--muted-foreground)",
                         marginTop: "2px",
                         fontFamily: "var(--font-mono)",
                       }}
@@ -742,8 +733,8 @@ function SettingsPage() {
                         height: "28px",
                         borderRadius: "6px",
                         background: "transparent",
-                        border: "1px solid rgba(255,255,255,0.06)",
-                        color: "rgba(255,255,255,0.3)",
+                        border: "1px solid var(--border)",
+                        color: "var(--muted-foreground)",
                         cursor: "pointer",
                         transition: "all 0.2s ease",
                       }}
@@ -756,8 +747,8 @@ function SettingsPage() {
                       onMouseLeave={(e) => {
                         const btn = e.currentTarget;
                         btn.style.background = "transparent";
-                        btn.style.borderColor = "rgba(255,255,255,0.06)";
-                        btn.style.color = "rgba(255,255,255,0.3)";
+                        btn.style.borderColor = "var(--border)";
+                        btn.style.color = "var(--muted-foreground)";
                       }}
                     >
                       <Trash2 size={13} />
@@ -773,8 +764,8 @@ function SettingsPage() {
         <SectionHeader icon={<Database size={13} />} label="DATA & EXPORT" />
         <div
           style={{
-            background: "#111111",
-            border: "1px solid rgba(255,255,255,0.07)",
+            background: "var(--card)",
+            border: "1px solid var(--border)",
             borderRadius: "14px",
             overflow: "hidden",
             marginBottom: "24px",
@@ -786,14 +777,14 @@ function SettingsPage() {
             description="Download all transactions as CSV"
             onClick={exportCsv}
           />
-          <div style={{ height: "1px", background: "rgba(255,255,255,0.05)", margin: "0 18px" }} />
+          <div style={{ height: "1px", background: "var(--border)", margin: "0 18px" }} />
           <DataActionRow
             id="btn-export-report"
             label="Export Spending Report"
             description="Current cycle summary as text"
             onClick={exportReport}
           />
-          <div style={{ height: "1px", background: "rgba(255,255,255,0.05)", margin: "0 18px" }} />
+          <div style={{ height: "1px", background: "var(--border)", margin: "0 18px" }} />
           <DataActionRow
             id="btn-reset-cycle"
             label="Reset Current Cycle"
@@ -807,8 +798,8 @@ function SettingsPage() {
         <SectionHeader icon={<LogOut size={13} />} label="ACCOUNT" />
         <div
           style={{
-            background: "#111111",
-            border: "1px solid rgba(255,255,255,0.07)",
+            background: "var(--card)",
+            border: "1px solid var(--border)",
             borderRadius: "14px",
             overflow: "hidden",
           }}
@@ -817,15 +808,15 @@ function SettingsPage() {
             <div style={{ marginBottom: "12px" }}>
               <p
                 style={{
-                  fontSize: "11px",
-                  color: "rgba(255,255,255,0.3)",
+                  fontSize: "12px",
+                  color: "var(--muted-foreground)",
                   fontFamily: "var(--font-mono)",
                   marginBottom: "2px",
                 }}
               >
                 SIGNED IN AS
               </p>
-              <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.7)", fontWeight: 400 }}>
+              <p style={{ fontSize: "14px", color: "var(--foreground)", fontWeight: 400 }}>
                 {user?.email}
               </p>
             </div>
@@ -868,8 +859,8 @@ function SettingsPage() {
         <DialogContent
           id="dialog-add-sub"
           style={{
-            background: "#111111",
-            border: "1px solid rgba(255,255,255,0.1)",
+            background: "var(--card)",
+            border: "1px solid var(--border)",
             borderRadius: "16px",
           }}
         >
@@ -905,13 +896,13 @@ function SectionHeader({
         marginBottom: noMargin ? "0" : "10px",
       }}
     >
-      <span style={{ color: "rgba(255,255,255,0.3)" }}>{icon}</span>
+      <span style={{ color: "var(--muted-foreground)" }}>{icon}</span>
       <span
         style={{
-          fontSize: "10px",
+          fontSize: "12px",
           fontWeight: 700,
           letterSpacing: "0.18em",
-          color: "rgba(255,255,255,0.3)",
+          color: "var(--muted-foreground)",
           fontFamily: "var(--font-mono)",
         }}
       >
@@ -932,17 +923,16 @@ function SettingsField({
 }) {
   return (
     <div
-      style={{
-        padding: "14px 18px",
-        borderRight: noBorderRight ? "1px solid rgba(255,255,255,0.05)" : "none",
-      }}
+      className={`p-[14px] px-[18px] border-b last:border-b-0 md:border-b-0 border-border ${
+        noBorderRight ? "md:border-r" : ""
+      }`}
     >
       <label
         style={{
-          fontSize: "10px",
+          fontSize: "12px",
           fontWeight: 600,
           letterSpacing: "0.1em",
-          color: "rgba(255,255,255,0.3)",
+          color: "var(--muted-foreground)",
           fontFamily: "var(--font-mono)",
           display: "block",
           marginBottom: "8px",
@@ -984,7 +974,7 @@ function DataActionRow({
         background: hovered
           ? danger
             ? "rgba(239,68,68,0.05)"
-            : "rgba(255,255,255,0.02)"
+            : "var(--surface-raised)"
           : "transparent",
         border: "none",
         cursor: "pointer",
@@ -998,25 +988,25 @@ function DataActionRow({
           style={{
             fontSize: "13px",
             fontWeight: 500,
-            color: danger ? "#ef4444" : "rgba(255,255,255,0.8)",
+            color: danger ? "#ef4444" : "var(--foreground)",
           }}
         >
           {label}
         </p>
-        <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)", marginTop: "2px" }}>
+        <p style={{ fontSize: "12px", color: "var(--muted-foreground)", marginTop: "2px" }}>
           {description}
         </p>
       </div>
-      <ChevronRight size={14} color={danger ? "#ef4444" : "rgba(255,255,255,0.2)"} />
+      <ChevronRight size={14} color={danger ? "#ef4444" : "var(--muted-foreground)"} />
     </button>
   );
 }
 
 const inputStyle: React.CSSProperties = {
-  background: "rgba(255,255,255,0.04)",
-  border: "1px solid rgba(255,255,255,0.08)",
+  background: "var(--surface-raised)",
+  border: "1px solid var(--border)",
   borderRadius: "8px",
-  color: "rgba(255,255,255,0.85)",
+  color: "var(--foreground)",
   fontSize: "13px",
   padding: "8px 12px",
   width: "100%",
@@ -1069,7 +1059,7 @@ function AddSubForm({ onClose }: { onClose: () => void }) {
         <div>
           <label
             style={{
-              fontSize: "10px",
+              fontSize: "12px",
               fontWeight: 700,
               letterSpacing: "0.1em",
               color: "rgba(255,255,255,0.3)",
@@ -1090,7 +1080,7 @@ function AddSubForm({ onClose }: { onClose: () => void }) {
         <div>
           <label
             style={{
-              fontSize: "10px",
+              fontSize: "12px",
               fontWeight: 700,
               letterSpacing: "0.1em",
               color: "rgba(255,255,255,0.3)",
@@ -1112,7 +1102,7 @@ function AddSubForm({ onClose }: { onClose: () => void }) {
         <div>
           <label
             style={{
-              fontSize: "10px",
+              fontSize: "12px",
               fontWeight: 700,
               letterSpacing: "0.1em",
               color: "rgba(255,255,255,0.3)",
@@ -1137,7 +1127,7 @@ function AddSubForm({ onClose }: { onClose: () => void }) {
           style={{
             width: "100%",
             padding: "11px 20px",
-            background: "linear-gradient(135deg, #8C7853 0%, #C27D56 100%)",
+            background: "var(--primary)",
             border: "none",
             borderRadius: "9px",
             color: "#fff",

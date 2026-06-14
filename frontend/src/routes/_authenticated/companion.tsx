@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
 import { getProfile, updateProfile, getCompanionSyncLogs } from "@/lib/api/db.functions";
-import { AppShell } from "@/components/AppShell";
+import { AppShell, MobileMenuButton } from "@/components/AppShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -137,10 +137,11 @@ function CompanionPage() {
   return (
     <AppShell>
       <div className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-surface px-4">
+        <MobileMenuButton />
         <button onClick={() => nav({ to: "/settings" })} className="text-muted-foreground">
           <ChevronLeft className="h-5 w-5" />
         </button>
-        <h1 className="text-[14px] font-semibold tracking-[0.15em]">COMPANION DEVICE</h1>
+        <h1 className="text-lg font-black tracking-wider text-foreground uppercase">Companion Device</h1>
       </div>
 
       <div className="space-y-4 px-4 py-4">
@@ -168,7 +169,7 @@ function CompanionPage() {
             </Card>
 
             <div>
-              <h3 className="text-[11px] font-semibold tracking-[0.15em] text-muted-foreground">
+              <h3 className="text-xs font-semibold tracking-[0.15em] text-muted-foreground">
                 RECENT SYNC ACTIVITY
               </h3>
               <div id="list-sync-log" className="mt-2 space-y-1.5">
@@ -229,7 +230,7 @@ function CompanionPage() {
                     Build and install from the repository Android module.
                   </p>
                 </div>
-                <Badge variant="outline" className="text-[10px]">
+                <Badge variant="outline" className="text-xs">
                   Wireless ready
                 </Badge>
               </div>
@@ -255,7 +256,7 @@ function CompanionPage() {
                   Copy
                 </Button>
               </div>
-              <pre className="mt-3 overflow-x-auto rounded-md bg-surface p-3 text-left text-[11px] leading-5 text-muted-foreground">
+              <pre className="mt-3 overflow-x-auto rounded-md bg-surface p-3 text-left text-xs leading-5 text-muted-foreground">
                 {connectorConfig}
               </pre>
             </Card>
@@ -281,13 +282,13 @@ function CompanionPage() {
 function StatusBadge({ status }: { status: string }) {
   if (status === "parsed")
     return (
-      <Badge className="bg-success/20 text-success text-[10px]">
+      <Badge className="bg-success/20 text-success text-xs">
         Tracked
       </Badge>
     );
   if (status === "pending")
     return (
-      <Badge className="bg-warning/20 text-warning text-[10px]">
+      <Badge className="bg-warning/20 text-warning text-xs">
         Processing
       </Badge>
     );
@@ -317,7 +318,7 @@ function StatusBadge({ status }: { status: string }) {
     );
   if (status === "failed")
     return (
-      <Badge className="bg-destructive/20 text-destructive text-[10px]">
+      <Badge className="bg-destructive/20 text-destructive text-xs">
         Failed
       </Badge>
     );

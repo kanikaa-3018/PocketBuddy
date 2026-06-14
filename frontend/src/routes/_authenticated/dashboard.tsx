@@ -2,7 +2,11 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
-import { AppShell } from "@/components/AppShell";
+import { AppShell, MobileMenuButton } from "@/components/AppShell";
+import {
+  Plus, ChevronRight, AlertTriangle, Users, Utensils, ShoppingBag,
+  Bus, Receipt, MoreHorizontal, Wallet, Timer, MessageSquare, Phone, Mail, MapPin, ExternalLink
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -41,10 +45,16 @@ import {
   getCampusIntel,
   getWingFeed,
   getWellnessInsights,
+  updateTransaction,
 } from "@/lib/api/db.functions";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   ssr: false,
+  validateSearch: (search: Record<string, unknown>) => {
+    return {
+      log: search.log === "true" || search.log === true || undefined
+    };
+  },
   component: Dashboard,
 });
 
@@ -104,12 +114,12 @@ function SpendBar({ days }: { days: { date: string; amount_paise: number }[] }) 
                 style={{
                   height: `${Math.max(pct, 6)}%`,
                   background: isToday
-                    ? "linear-gradient(to top, #C27D56, #D9A05B)"
+                    ? "linear-gradient(to top, var(--primary), var(--color-pb-amber))"
                     : "rgba(255,255,255,0.1)",
                 }}
               />
             </div>
-            <span className={`text-[8px] font-bold uppercase tracking-wide ${isToday ? "text-accent-bronze" : "text-zinc-600"}`}>
+            <span className={`text-[8px] font-bold uppercase tracking-wide ${isToday ? "text-primary" : "text-zinc-600"}`}>
               {d.date}
             </span>
           </div>
@@ -172,7 +182,7 @@ function SurviveCountdown({ runwayMs }: { runwayMs: number }) {
       <span className="text-[9px] text-zinc-500 font-bold mb-1">h</span>
       <span className="text-[22px] font-black leading-none text-foreground">{pad(mins)}</span>
       <span className="text-[9px] text-zinc-500 font-bold mb-1">m</span>
-      <span className="text-[22px] font-black leading-none" style={{ color: secs % 2 === 0 ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.5)", transition: "color 0.3s" }}>{pad(secs)}</span>
+      <span className="text-[22px] font-black leading-none text-foreground transition-opacity duration-300" style={{ opacity: secs % 2 === 0 ? 1 : 0.5 }}>{pad(secs)}</span>
       <span className="text-[9px] text-zinc-500 font-bold mb-1">s</span>
     </div>
   );
@@ -225,9 +235,9 @@ function CategoryDonut({ breakdown }: { breakdown: { category: string; pct: numb
 
 // ── Nudge popup card ─────────────────────────────────────────────────────
 function NudgeCard({
-  icon, accent, title, body, onDismiss,
+  icon: Icon, accent, title, body, onDismiss,
 }: {
-  icon: string; accent: string; title: string; body: string; onDismiss: () => void;
+  icon: any; accent: string; title: string; body: string; onDismiss: () => void;
 }) {
   return (
     <div
@@ -237,10 +247,12 @@ function NudgeCard({
       <div className="absolute inset-0 pointer-events-none"
         style={{ background: `radial-gradient(ellipse at top left, ${accent}10, transparent 60%)` }} />
       <div className="flex items-start gap-3">
-        <span className="text-xl shrink-0">{icon}</span>
+        <div className="p-2 rounded-xl bg-white/5 border border-white/10 shrink-0">
+          <Icon className="h-4.5 w-4.5" style={{ color: accent }} />
+        </div>
         <div className="flex-1 min-w-0">
-          <p className="text-[11px] font-bold uppercase tracking-wider mb-1" style={{ color: accent }}>{title}</p>
-          <p className="text-[12px] text-zinc-300 leading-relaxed">{body}</p>
+          <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: accent }}>{title}</p>
+          <p className="text-xs text-zinc-300 leading-relaxed">{body}</p>
         </div>
         <button onClick={onDismiss} className="text-zinc-600 hover:text-zinc-400 text-xs shrink-0 cursor-pointer leading-none">✕</button>
       </div>
@@ -429,6 +441,7 @@ function Dashboard() {
 
   // Dialogs
   const [identifying, setIdentifying] = useState<Txn | null>(null);
+  const [editingTxn, setEditingTxn] = useState<Txn | null>(null);
   const [adding, setAdding] = useState(false);
   const [showFoodSheet, setShowFoodSheet] = useState(false);
 
@@ -437,6 +450,10 @@ function Dashboard() {
   const [checkInExpanded, setCheckInExpanded] = useState(false);
   const [stressNote, setStressNote] = useState("");
   const checkinChecked = useRef(false);
+
+  // Red State Wellness Check-in
+  const [redCheckinText, setRedCheckinText] = useState("");
+  const [redCheckinSubmitting, setRedCheckinSubmitting] = useState(false);
 
   useEffect(() => {
     if (checkinChecked.current || !profile || !txns) return;
@@ -455,14 +472,13 @@ function Dashboard() {
     setShowCheckIn(true);
   }, [profile, txns]);
 
+  const search = Route.useSearch();
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("log") === "true") {
+    if (search.log) {
       setAdding(true);
-      const newUrl = window.location.pathname;
-      window.history.replaceState({}, "", newUrl);
+      nav({ to: "/dashboard", search: (prev: any) => ({ ...prev, log: undefined }), replace: true });
     }
-  }, []);
+  }, [search.log]);
 
 
   const foodGapHours = useMemo(() => {
@@ -475,12 +491,12 @@ function Dashboard() {
   const dismiss = (id: string) => setDismissedNudges((s) => new Set([...s, id]));
 
   const nudges = useMemo(() => {
-    const list: { id: string; icon: string; accent: string; title: string; body: string }[] = [];
+    const list: { id: string; icon: any; accent: string; title: string; body: string }[] = [];
     if (!insights) {
       // Hardcoded fallback when no data yet
       list.push({
         id: "onboard",
-        icon: "👋",
+        icon: Wallet,
         accent: "#8C7853",
         title: "Welcome to PocketBuddy",
         body: "Your AI spending guard is active. Start logging transactions or pair the Android companion to begin tracking automatically.",
@@ -494,7 +510,7 @@ function Dashboard() {
     if (delivCount > 5 && delivCount > messCount) {
       list.push({
         id: "delivery_overuse",
-        icon: "🍕",
+        icon: Utensils,
         accent: "#FC8019",
         title: "Heavy on delivery apps",
         body: `You've ordered ${delivCount}× via delivery this month vs ${messCount} mess visits. Switching 3 meals/week to mess saves ~₹${Math.round(delivCount * 35)} monthly.`,
@@ -506,7 +522,7 @@ function Dashboard() {
     if (lateTotal > 500) {
       list.push({
         id: "late_night",
-        icon: "🌙",
+        icon: Timer,
         accent: "#5E17EB",
         title: "Late-night spending detected",
         body: `₹${Math.round(lateTotal)} spent between 11PM–4AM this month. Late orders often cost 1.5× more with surge fees — try stocking room snacks.`,
@@ -517,7 +533,7 @@ function Dashboard() {
     if (insights.exam?.in_exam_period) {
       list.push({
         id: "exam_stress",
-        icon: "📚",
+        icon: AlertTriangle,
         accent: "#ef4444",
         title: `Exam period — ${insights.exam.days_left}d left`,
         body: "Your budget matters most right now. Aim for mess meals to keep daily food cost under ₹80. Campus canteens are usually open late.",
@@ -529,7 +545,7 @@ function Dashboard() {
     if (vel > 30) {
       list.push({
         id: "velocity_spike",
-        icon: "📈",
+        icon: AlertTriangle,
         accent: "#f59e0b",
         title: `Spending up ${vel}% this week`,
         body: `You're spending significantly more than last week. At this pace your runway shrinks by ~${Math.round(vel / 10)} extra days.`,
@@ -541,7 +557,7 @@ function Dashboard() {
     if (subBleed > 300 && calc && calc.safeDailyLimit < 150) {
       list.push({
         id: "sub_bleed",
-        icon: "💸",
+        icon: Receipt,
         accent: "#C27D56",
         title: "Subscription bleed warning",
         body: `₹${Math.round(subBleed)}/month in active subscriptions. With your current runway, consider pausing non-essential ones.`,
@@ -654,14 +670,44 @@ function Dashboard() {
     }
   }
 
+  async function handleRedCheckinSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!redCheckinText.trim() || !user || !wellness) return;
+    setRedCheckinSubmitting(true);
+    try {
+      const foodGapSig = wellness.avg_food_gap_hours_7d || 0;
+      await insertCheckinLog({
+        data: {
+          response: "wellness_text_response",
+          stress_note: `User wellness check-in: ${redCheckinText}`,
+          food_gap_hours: foodGapSig,
+          suggestion_given: "wellness_index",
+        },
+      });
+      toast.success("Thank you for sharing. Hang in there!");
+      setRedCheckinText("");
+      qc.invalidateQueries({ queryKey: ["wellness-insights"] });
+      qc.invalidateQueries({ queryKey: ["insights"] });
+      qc.invalidateQueries({ queryKey: ["txns"] });
+      qc.invalidateQueries({ queryKey: ["wing-feed"] });
+    } catch (err) {
+      toast.error("Failed to submit check-in");
+    } finally {
+      setRedCheckinSubmitting(false);
+    }
+  }
+
   return (
     <AppShell>
-      <div className="pb-16 pt-8">
+      <div className="pb-16 pt-2">
         {/* Top bar mobile */}
-        <div className="flex md:hidden items-center justify-between px-2 mb-6">
-          <h1 id="logo-dashboard" className="text-[12px] font-black tracking-[0.2em] text-foreground uppercase">
-            Dashboard
-          </h1>
+        <div className="flex md:hidden items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <MobileMenuButton />
+            <h1 id="logo-dashboard" className="text-lg font-black tracking-wider text-foreground uppercase">
+              Dashboard
+            </h1>
+          </div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => nav({ to: "/companion" })}
@@ -701,20 +747,17 @@ function Dashboard() {
               
               <div className="p-5 md:p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <p className="text-[10px] font-bold tracking-[0.2em] text-zinc-500 uppercase flex items-center gap-1.5">
-                    <span>🧠 Student Wellness Index</span>
-                    {wellness?.generated_by === "bedrock" && (
-                      <span className="text-[8px] font-black text-accent-bronze uppercase tracking-wider border border-accent-bronze/30 px-1.5 py-0.5 rounded-full">AI</span>
-                    )}
+                  <p className="text-xs font-bold tracking-[0.2em] text-zinc-500 uppercase flex items-center gap-1.5 font-display">
+                    <span>Student Wellness Index</span>
                   </p>
                   
                   {wellness && (
-                    <Badge variant="outline" className="font-bold text-[10px] px-2 py-0.5" style={{
-                      borderColor: wellness.status === "steady" ? "rgba(16,185,129,0.3)" : wellness.status === "watch" ? "rgba(245,158,11,0.3)" : "rgba(239,68,68,0.3)",
-                      color: wellness.status === "steady" ? "#10b981" : wellness.status === "watch" ? "#f59e0b" : "#ef4444",
-                      background: wellness.status === "steady" ? "rgba(16,185,129,0.05)" : wellness.status === "watch" ? "rgba(245,158,11,0.05)" : "rgba(239,68,68,0.05)"
+                    <Badge variant="outline" className="font-bold text-xs px-2 py-0.5" style={{
+                      borderColor: wellness.status === "steady" ? "rgba(22,163,74,0.3)" : wellness.status === "watch" ? "rgba(217,119,6,0.3)" : "rgba(220,38,38,0.3)",
+                      color: wellness.status === "steady" ? "var(--pb-green)" : wellness.status === "watch" ? "var(--pb-amber)" : "var(--pb-red)",
+                      background: wellness.status === "steady" ? "rgba(22,163,74,0.05)" : wellness.status === "watch" ? "rgba(217,119,6,0.05)" : "rgba(220,38,38,0.05)"
                     }}>
-                      {wellness.status === "steady" ? "✓ STEADY" : wellness.status === "watch" ? "⚠ WATCH" : "⚡ STRESSED"}
+                      {wellness.status === "steady" ? "STEADY" : wellness.status === "watch" ? "WATCH" : "STRESSED"}
                     </Badge>
                   )}
                 </div>
@@ -728,16 +771,16 @@ function Dashboard() {
                 ) : wellnessError ? (
                   <div className="rounded-xl border border-dashed border-destructive/20 bg-destructive/5 p-4">
                     <p className="text-xs font-semibold text-destructive uppercase tracking-wider">Wellness metrics unavailable</p>
-                    <p className="text-[11px] text-zinc-500 mt-1">We couldn't load your wellness metrics. Please try again later.</p>
+                    <p className="text-xs text-zinc-500 mt-1">We couldn't load your wellness metrics. Please try again later.</p>
                   </div>
                 ) : (txns ?? []).length === 0 ? (
                   <div className="rounded-xl border border-dashed border-border bg-surface-raised/40 p-4 text-center">
                     <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">No Transaction History</p>
-                    <p className="text-[11px] text-zinc-500 mt-1">Add a few spends to build your wellness pattern.</p>
+                    <p className="text-xs text-zinc-500 mt-1">Add a few spends to build your wellness pattern.</p>
                     <div className="mt-3">
                       <Button
                         variant="secondary"
-                        className="text-[9px] uppercase tracking-wider font-bold h-7 bg-surface-raised border-border"
+                        className="text-xs uppercase tracking-wider font-bold h-7 bg-surface-raised border-border"
                         onClick={() => setAdding(true)}
                       >
                         Log Transaction
@@ -747,70 +790,128 @@ function Dashboard() {
                 ) : (
                   <>
                     <div className="flex items-baseline gap-2 mb-2">
-                      <span className="text-3xl md:text-4xl font-black tracking-tighter text-foreground tnum leading-none" style={{
-                        color: wellness.status === "steady" ? "#10b981" : wellness.status === "watch" ? "#f59e0b" : "#ef4444"
+                      <span className="text-3xl md:text-4xl font-black tracking-tighter text-foreground tnum leading-none font-display" style={{
+                        color: wellness.status === "steady" ? "var(--pb-green)" : wellness.status === "watch" ? "var(--pb-amber)" : "var(--pb-red)"
                       }}>
                         {wellness.score}
                       </span>
-                      <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-widest">/ 100 Wellness Score</span>
+                      <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest font-mono">/ 100 Wellness Score</span>
                     </div>
 
                     <p className="text-xs md:text-sm text-zinc-300 font-medium leading-relaxed mb-4">
-                      {wellness.message}
+                      {wellness.status === "stressed" 
+                        ? "We noticed a stack of stressful signals today. Remember, your runway and meals don't define you. Taking it one step at a time is enough. You can do this." 
+                        : wellness.message}
                     </p>
 
+                    {/* Contributing Signals */}
                     <div className="border-t border-border pt-4 mt-2 mb-4">
-                      <p className="text-[9px] font-bold tracking-widest text-zinc-500 uppercase mb-3">Contributing Signals</p>
+                      <p className="text-xs font-bold tracking-widest text-zinc-500 uppercase mb-3 font-mono">Contributing Signals</p>
                       
                       <div className="flex flex-wrap gap-2">
                         {wellness.signals?.map((sig: any) => (
-                          <div key={sig.key} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border bg-surface-raised/40 text-[11px]" style={{
+                          <div key={sig.key} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border bg-surface-raised/40 text-xs font-medium" style={{
                             borderColor: sig.severity === "stressed" 
                               ? "rgba(239,68,68,0.25)" 
                               : sig.severity === "watch" 
                                 ? "rgba(245,158,11,0.25)" 
-                                : "rgba(255,255,255,0.05)"
+                                : "var(--border)"
                           }}>
                             <span className="text-zinc-400 font-medium">{sig.label}:</span>
                             <span className="font-bold text-foreground">{sig.value}</span>
                             <span className="w-1.5 h-1.5 rounded-full" style={{
                               background: sig.severity === "stressed" 
-                                ? "#ef4444" 
+                                ? "var(--pb-red)" 
                                 : sig.severity === "watch" 
-                                  ? "#f59e0b" 
-                                  : "#10b981"
+                                  ? "var(--pb-amber)" 
+                                  : "var(--pb-green)"
                             }} title={sig.detail} />
                           </div>
                         ))}
                       </div>
                     </div>
 
-                    <div className="border-t border-border pt-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                      <span className="text-[9px] font-bold tracking-widest text-zinc-500 uppercase mb-1 sm:mb-0 sm:mr-2">Quick Check-in:</span>
-                      <div className="flex flex-wrap gap-2 flex-1">
-                        <button
-                          id="btn-wellness-ate"
-                          onClick={() => handleWellnessAction("ate")}
-                          className="flex-1 min-h-[44px] px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-wider text-success hover:text-success/90 bg-success/5 hover:bg-success/10 border border-success/20 hover:border-success/30 rounded-xl transition-all cursor-pointer"
-                        >
-                          I Ate 🍽️
-                        </button>
-                        <button
-                          id="btn-wellness-break"
-                          onClick={() => handleWellnessAction("break")}
-                          className="flex-1 min-h-[44px] px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-wider text-warning hover:text-warning/90 bg-warning/5 hover:bg-warning/10 border border-warning/20 hover:border-warning/30 rounded-xl transition-all cursor-pointer"
-                        >
-                          I Need a Break ☕
-                        </button>
-                        <button
-                          id="btn-wellness-spending"
-                          onClick={() => handleWellnessAction("spending")}
-                          className="flex-1 min-h-[44px] px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-wider text-foreground hover:text-foreground/90 bg-white/5 hover:bg-white/10 border border-border hover:border-white/15 rounded-xl transition-all cursor-pointer"
-                        >
-                          I'll Plan Spending 📊
-                        </button>
+                    {/* Conditional layouts based on status */}
+                    {wellness.status === "watch" && (
+                      <div className="border-t border-border pt-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                        <span className="text-xs font-bold tracking-widest text-zinc-500 uppercase mb-1 sm:mb-0 sm:mr-2 font-mono">Quick Check-in:</span>
+                        <div className="flex flex-wrap gap-2 flex-1">
+                          <button
+                            id="btn-wellness-ate"
+                            onClick={() => handleWellnessAction("ate")}
+                            className="flex-1 min-h-[44px] px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider text-success hover:text-success/90 bg-success/5 hover:bg-success/10 border border-success/20 hover:border-success/30 rounded-xl transition-all cursor-pointer"
+                          >
+                            I Ate Meal
+                          </button>
+                          <button
+                            id="btn-wellness-break"
+                            onClick={() => handleWellnessAction("break")}
+                            className="flex-1 min-h-[44px] px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider text-warning hover:text-warning/90 bg-warning/5 hover:bg-warning/10 border border-warning/20 hover:border-warning/30 rounded-xl transition-all cursor-pointer"
+                          >
+                            I Need a Break
+                          </button>
+                          <button
+                            id="btn-wellness-spending"
+                            onClick={() => handleWellnessAction("spending")}
+                            className="flex-1 min-h-[44px] px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider text-foreground hover:text-foreground/90 bg-white/5 hover:bg-white/10 border border-border hover:border-white/15 rounded-xl transition-all cursor-pointer"
+                          >
+                            I'll Plan Spending
+                          </button>
+                        </div>
                       </div>
-                    </div>
+                    )}
+
+                    {wellness.status === "stressed" && (
+                      <div className="border-t border-border pt-4 mt-4 space-y-4">
+                        <form onSubmit={handleRedCheckinSubmit} className="space-y-3">
+                          <p className="text-xs font-bold tracking-widest text-zinc-500 uppercase pl-1 font-mono">Submit Feedback Check-in</p>
+                          <textarea 
+                            value={redCheckinText} 
+                            onChange={(e) => setRedCheckinText(e.target.value)} 
+                            placeholder="How are you feeling today? Write down any notes, feelings or stress points..." 
+                            className="w-full min-h-[88px] bg-background/50 border border-border rounded-xl p-3 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary/40 resize-none text-foreground placeholder:text-muted-foreground/50 leading-relaxed transition-all" 
+                            disabled={redCheckinSubmitting} 
+                          />
+                          <button 
+                            type="submit" 
+                            disabled={redCheckinSubmitting || !redCheckinText.trim()} 
+                            className="w-full min-h-[44px] rounded-xl bg-primary text-primary-foreground text-xs font-bold uppercase tracking-wider transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none cursor-pointer flex items-center justify-center gap-2"
+                          >
+                            {redCheckinSubmitting ? "Submitting..." : "Submit Check-in"}
+                          </button>
+                        </form>
+
+                        <div className="rounded-xl border border-red-950/40 bg-red-950/10 p-4 space-y-2.5">
+                          <p className="text-xs font-bold tracking-[0.15em] text-red-400 uppercase flex items-center gap-1.5 font-mono">
+                            <Phone className="h-3.5 w-3.5" />
+                            <span>Campus Counseling Services</span>
+                          </p>
+                          <p className="text-xs text-zinc-400 leading-relaxed">
+                            If you feel overwhelmed, please reach out to the campus support team. It is completely confidential, free, and designed for students.
+                          </p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-zinc-500 font-medium pt-1">
+                            <div className="flex items-center gap-1.5">
+                              <MapPin className="h-3 w-3 shrink-0 text-zinc-600" />
+                              <span>Wellness Cell, Room 102, Admin Block</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <Phone className="h-3 w-3 shrink-0 text-zinc-600" />
+                              <a href="tel:+911123456789" className="hover:text-primary transition-colors hover:underline flex items-center gap-0.5">
+                                +91 11 2345 6789
+                                <ExternalLink className="h-2 w-2" />
+                              </a>
+                            </div>
+                            <div className="flex items-center gap-1.5 col-span-full">
+                              <Mail className="h-3 w-3 shrink-0 text-zinc-600" />
+                              <a href="mailto:wellness@institute.edu" className="hover:text-primary transition-colors hover:underline flex items-center gap-0.5">
+                                wellness@institute.edu
+                                <ExternalLink className="h-2 w-2" />
+                              </a>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </>
                 )}
               </div>
@@ -821,9 +922,9 @@ function Dashboard() {
               <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-accent-bronze via-accent-amber to-accent-copper opacity-80" />
               <div className="p-6 md:p-8">
                 <div className="flex items-center justify-between mb-6">
-                  <p className="text-[10px] font-bold tracking-[0.2em] text-zinc-500 uppercase">Runway Status</p>
+                  <p className="text-xs font-bold tracking-[0.2em] text-zinc-500 uppercase">Runway Status</p>
                   <div className="hidden md:flex items-center gap-3">
-                    <Badge variant="outline" className="bg-white/5 border-border text-foreground font-bold text-[10px] px-2.5 py-0.5">
+                    <Badge variant="outline" className="bg-white/5 border-border text-foreground font-bold text-xs px-2.5 py-0.5">
                       {profile?.wing_label ?? "—"}
                     </Badge>
                     <button
@@ -852,22 +953,22 @@ function Dashboard() {
 
                     <div className="mt-8 grid grid-cols-3 gap-3 md:gap-6 border-t border-border pt-6">
                       <div className="flex flex-col gap-1">
-                        <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Balance</p>
+                        <p className="text-xs text-zinc-500 font-bold uppercase tracking-widest">Balance</p>
                         <p className="text-[18px] md:text-[22px] font-black text-foreground tnum">{rupees(calc.remaining * 100)}</p>
                       </div>
                       <div className="flex flex-col gap-1 border-l border-border pl-4 md:pl-6">
-                        <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Safe Limit</p>
+                        <p className="text-xs text-zinc-500 font-bold uppercase tracking-widest">Safe Limit</p>
                         <p className="text-[18px] md:text-[22px] font-black text-foreground tnum">{rupees(calc.safeDailyLimit * 100)}</p>
                       </div>
                       <div className="flex flex-col gap-1 border-l border-border pl-4 md:pl-6">
-                        <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Today</p>
+                        <p className="text-xs text-zinc-500 font-bold uppercase tracking-widest">Today</p>
                         <p className="text-[18px] md:text-[22px] font-black text-foreground tnum">{rupees(calc.spentToday * 100)}</p>
                       </div>
                     </div>
 
                     <div className="mt-8">
                       <Progress id="progress-runway" value={calc.pct} className="h-1 bg-surface-raised" />
-                      <div className="mt-3 text-[11px] text-muted-foreground flex items-center justify-between font-medium">
+                      <div className="mt-3 text-xs text-muted-foreground flex items-center justify-between font-medium">
                         {profile?.companion_paired ? (
                           <span className="flex items-center gap-1.5 text-zinc-400">
                             <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
@@ -891,12 +992,12 @@ function Dashboard() {
 
               {/* 7-day spend bar chart */}
               <div className="bg-surface border border-border rounded-2xl p-5">
-                <p className="text-[9px] font-bold tracking-[0.2em] text-zinc-500 uppercase mb-4">7-Day Spend</p>
+                <p className="text-xs font-bold tracking-[0.2em] text-zinc-500 uppercase mb-4">7-Day Spend</p>
                 {insights?.daily_spend_7d ? (
                   <>
                     <SpendBar days={insights.daily_spend_7d} />
                     {(insights.velocity?.pct_change ?? 0) !== 0 && (
-                      <p className={`mt-3 text-[10px] font-bold ${insights.velocity.pct_change > 0 ? "text-destructive" : "text-success"}`}>
+                      <p className={`mt-3 text-xs font-bold ${insights.velocity.pct_change > 0 ? "text-destructive" : "text-success"}`}>
                         {insights.velocity.pct_change > 0 ? "▲" : "▼"} {Math.abs(insights.velocity.pct_change)}% vs last week
                       </p>
                     )}
@@ -906,7 +1007,7 @@ function Dashboard() {
                     {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => (
                       <div key={i} className="flex flex-col items-center gap-1 flex-1">
                         <div className="w-full rounded-sm bg-white/10" style={{ height: `${20 + Math.random() * 60}%`, minHeight: "8px" }} />
-                        <span className="text-[8px] text-zinc-600 font-bold">{d}</span>
+                        <span className="text-[10px] text-zinc-600 font-bold">{d}</span>
                       </div>
                     ))}
                   </div>
@@ -915,13 +1016,13 @@ function Dashboard() {
 
               {/* Category breakdown donut */}
               <div className="bg-surface border border-border rounded-2xl p-5">
-                <p className="text-[9px] font-bold tracking-[0.2em] text-zinc-500 uppercase mb-4">Spend by Category</p>
+                <p className="text-xs font-bold tracking-[0.2em] text-zinc-500 uppercase mb-4">Spend by Category</p>
                 {insights?.category_breakdown?.length ? (
                   <CategoryDonut breakdown={insights.category_breakdown} />
                 ) : (
                   <div className="flex items-center gap-4">
-                    <div className="w-16 h-16 rounded-full border-4 border-white/10 border-t-accent-bronze" />
-                    <p className="text-[11px] text-zinc-500">No data yet — start logging transactions</p>
+                    <div className="w-16 h-16 rounded-full border-4 border-white/10 border-t-primary animate-spin" />
+                    <p className="text-xs text-zinc-500">No data yet — start logging transactions</p>
                   </div>
                 )}
               </div>
@@ -929,53 +1030,53 @@ function Dashboard() {
 
             {/* ── Food & Wellness Strip ───────────────────────────────── */}
             <div className="bg-surface border border-border rounded-2xl p-5">
-              <p className="text-[9px] font-bold tracking-[0.2em] text-zinc-500 uppercase mb-4">Food & Wellness</p>
+              <p className="text-xs font-bold tracking-[0.2em] text-zinc-500 uppercase mb-4">Food & Wellness</p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 {/* Food gap */}
                 <div className="flex flex-col gap-1">
-                  <p className="text-[8px] text-zinc-600 uppercase tracking-wider font-bold">Last meal</p>
+                  <p className="text-[10px] text-zinc-600 uppercase tracking-wider font-bold">Last meal</p>
                   {insights ? (
-                    <p className={`text-[15px] font-black tnum ${insights.food.gap_hours > 12 ? "text-destructive" : insights.food.gap_hours > 6 ? "text-warning" : "text-success"}`}>
+                    <p className={`text-[16px] font-black tnum ${insights.food.gap_hours > 12 ? "text-destructive" : insights.food.gap_hours > 6 ? "text-warning" : "text-success"}`}>
                       {insights.food.gap_hours > 0 ? `${Math.round(insights.food.gap_hours)}h ago` : "—"}
                     </p>
                   ) : (
-                    <p className="text-[15px] font-black text-zinc-400">{foodGapHours > 0 ? `${Math.round(foodGapHours)}h ago` : "—"}</p>
+                    <p className="text-[16px] font-black text-zinc-400">{foodGapHours > 0 ? `${Math.round(foodGapHours)}h ago` : "—"}</p>
                   )}
-                  <p className="text-[9px] text-zinc-600">food gap</p>
+                  <p className="text-xs text-zinc-600">food gap</p>
                 </div>
 
                 {/* Delivery vs mess */}
                 <div className="flex flex-col gap-1">
-                  <p className="text-[8px] text-zinc-600 uppercase tracking-wider font-bold">Delivery</p>
-                  <p className="text-[15px] font-black text-foreground">
+                  <p className="text-[10px] text-zinc-600 uppercase tracking-wider font-bold">Delivery</p>
+                  <p className="text-[16px] font-black text-foreground">
                     {insights?.food?.delivery_count_30d ?? "—"}×
                   </p>
-                  <p className="text-[9px] text-zinc-600">vs {insights?.food?.mess_count_30d ?? "—"} mess visits</p>
+                  <p className="text-xs text-zinc-600">vs {insights?.food?.mess_count_30d ?? "—"} mess visits</p>
                 </div>
 
                 {/* Late night */}
                 <div className="flex flex-col gap-1">
-                  <p className="text-[8px] text-zinc-600 uppercase tracking-wider font-bold">Late Night 🌙</p>
-                  <p className="text-[15px] font-black text-foreground tnum">
+                  <p className="text-[10px] text-zinc-600 uppercase tracking-wider font-bold">Late Night</p>
+                  <p className="text-[16px] font-black text-foreground tnum">
                     {insights ? rupees(insights.late_night.total_paise) : "—"}
                   </p>
-                  <p className="text-[9px] text-zinc-600">{insights?.late_night?.txn_count ?? 0} txns after 11PM</p>
+                  <p className="text-xs text-zinc-600">{insights?.late_night?.txn_count ?? 0} txns after 11PM</p>
                 </div>
 
                 {/* Sub bleed */}
                 <div className="flex flex-col gap-1">
-                  <p className="text-[8px] text-zinc-600 uppercase tracking-wider font-bold">Sub Bleed</p>
-                  <p className="text-[15px] font-black text-foreground tnum">
+                  <p className="text-[10px] text-zinc-600 uppercase tracking-wider font-bold">Sub Bleed</p>
+                  <p className="text-[16px] font-black text-foreground tnum">
                     {insights ? rupees(insights.subscriptions.monthly_bleed_paise) : "—"}
                   </p>
-                  <p className="text-[9px] text-zinc-600">/month in {insights?.subscriptions?.count ?? 0} subs</p>
+                  <p className="text-xs text-zinc-600">/month in {insights?.subscriptions?.count ?? 0} subs</p>
                 </div>
               </div>
 
               {/* Mess vs delivery bar */}
               {insights?.food && (insights.food.delivery_count_30d + insights.food.mess_count_30d) > 0 && (
                 <div className="mt-5 pt-4 border-t border-border">
-                  <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Mess vs Delivery ratio (30d)</p>
+                  <p className="text-xs text-zinc-500 font-bold uppercase tracking-wider mb-2">Mess vs Delivery ratio (30d)</p>
                   <div className="flex h-2 rounded-full overflow-hidden gap-0.5">
                     <div
                       className="bg-success rounded-full transition-all"
@@ -987,8 +1088,8 @@ function Dashboard() {
                     />
                   </div>
                   <div className="flex justify-between mt-1.5">
-                    <span className="text-[8px] text-success font-bold">Mess {insights.food.mess_count_30d}</span>
-                    <span className="text-[8px] text-warning font-bold">Delivery {insights.food.delivery_count_30d}</span>
+                    <span className="text-[10px] text-success font-bold">Mess {insights.food.mess_count_30d}</span>
+                    <span className="text-[10px] text-warning font-bold">Delivery {insights.food.delivery_count_30d}</span>
                   </div>
                 </div>
               )}
@@ -997,7 +1098,7 @@ function Dashboard() {
             {/* Active Pools */}
             <section id="section-active-pools" className="space-y-4 pt-2">
               <div className="flex items-center justify-between px-1">
-                <h3 className="text-[10px] font-bold tracking-[0.25em] text-zinc-500 uppercase">Active Wing Pools</h3>
+                <h3 className="text-xs font-bold tracking-[0.25em] text-zinc-500 uppercase">Active Wing Pools</h3>
                 <Link
                   to="/pool"
                   id="btn-new-pool-dash"
@@ -1011,7 +1112,7 @@ function Dashboard() {
                 {(pools ?? []).filter((p) => p.status === "open" && new Date(p.expires_at).getTime() > Date.now()).length === 0 && (
                   <div className="col-span-full py-10 text-center border border-dashed border-border rounded-2xl bg-surface-raised/40">
                     <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">No active pools in your wing.</p>
-                    <p className="text-[11px] text-zinc-500 mt-1">Start one now to split quick commerce delivery fees.</p>
+                    <p className="text-xs text-zinc-500 mt-1">Start one now to split quick commerce delivery fees.</p>
                   </div>
                 )}
                 {(pools ?? [])
@@ -1029,9 +1130,9 @@ function Dashboard() {
                             <div className="flex items-center justify-between mb-3">
                               <div className="flex items-center gap-2">
                                 <span className="text-xs font-black uppercase tracking-wider text-foreground">{p.platform.replace("_", " ")}</span>
-                                <Badge variant="outline" className="text-muted-foreground bg-white/5 border-border text-[9px] font-bold">{p.wing_label}</Badge>
+                                <Badge variant="outline" className="text-muted-foreground bg-white/5 border-border text-[10px] font-bold">{p.wing_label}</Badge>
                               </div>
-                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border border-border bg-background tnum ${minsLeft < 5 ? "text-destructive animate-pulse border-destructive/20 bg-destructive/5" : "text-foreground"}`}>
+                              <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border border-border bg-background tnum ${minsLeft < 5 ? "text-destructive animate-pulse border-destructive/20 bg-destructive/5" : "text-foreground"}`}>
                                 {minsLeft}m left
                               </span>
                             </div>
@@ -1039,11 +1140,11 @@ function Dashboard() {
                           </div>
                           <div className="mt-6 pt-4 border-t border-border flex items-center justify-between">
                             <div className="flex flex-col">
-                              <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider">Cart</span>
+                              <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Cart</span>
                               <span className="text-xs font-black text-foreground">{rupees(total)} <span className="text-zinc-500 font-normal text-[10px]">/ {rupees(p.min_cart_value)} min</span></span>
                             </div>
                             <div className="flex flex-col text-right">
-                              <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider">Split Est.</span>
+                              <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Split Est.</span>
                               <span className="text-xs font-black text-success">{rupees(perPerson)} <span className="text-zinc-500 font-normal text-[10px]">/ person</span></span>
                             </div>
                           </div>
@@ -1060,10 +1161,10 @@ function Dashboard() {
 
             {/* ── Survive Until Broke Card ─────────────────── */}
             <div className="bg-surface border border-border rounded-2xl p-5 relative overflow-hidden">
-              <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at top right, rgba(140,120,83,0.05), transparent 65%)" }} />
+              <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at top right, rgba(255,107,0,0.05), transparent 65%)" }} />
               <div className="flex items-center justify-between mb-3">
-                <p className="text-[9px] font-bold tracking-[0.2em] text-zinc-500 uppercase">Survive Until Broke</p>
-                <span className="text-[9px] font-black px-2 py-0.5 rounded-full border text-accent-bronze border-accent-bronze/30 bg-accent-bronze/5">
+                <p className="text-xs font-bold tracking-[0.2em] text-zinc-500 uppercase">Survive Until Broke</p>
+                <span className="text-xs font-black px-2 py-0.5 rounded-full border text-primary border-primary/30 bg-primary/5">
                   LIVE COUNTDOWN
                 </span>
               </div>
@@ -1073,7 +1174,7 @@ function Dashboard() {
                 ) : (
                   <p className="text-[13px] font-black text-zinc-400">—</p>
                 )}
-                <p className="text-[11px] text-zinc-400 leading-relaxed mt-2">
+                <p className="text-xs text-zinc-400 leading-relaxed mt-2">
                   Estimated exact date and time your allowance will run out based on your 7-day spending pace.
                 </p>
               </div>
@@ -1081,18 +1182,18 @@ function Dashboard() {
 
             {/* ── AI Campus Intelligence (Bedrock) ──────────────────── */}
             <div className="bg-surface border border-border rounded-2xl p-5 relative overflow-hidden">
-              <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at top left, rgba(140,120,83,0.07), transparent 60%)" }} />
+              <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at top left, rgba(255,107,0,0.07), transparent 60%)" }} />
               <div className="flex items-center gap-2 mb-3">
-                <div className="w-5 h-5 rounded-full bg-gradient-to-br from-accent-bronze to-accent-amber flex items-center justify-center shrink-0">
-                  <span style={{ fontSize: "9px", fontWeight: 900, color: "#0A0A0A" }}>AI</span>
+                <div className="w-5.5 h-5.5 rounded-full bg-gradient-to-br from-primary to-pb-amber flex items-center justify-center shrink-0">
+                  <span style={{ fontSize: "11px", fontWeight: 900, color: "#0A0A0A" }}>AI</span>
                 </div>
-                <p className="text-[9px] font-bold tracking-[0.2em] text-zinc-500 uppercase">Campus Intelligence</p>
+                <p className="text-xs font-bold tracking-[0.2em] text-zinc-500 uppercase">Campus Intelligence</p>
                 {campusIntel?.source === "bedrock" && (
-                  <span className="ml-auto text-[8px] font-black text-accent-bronze uppercase tracking-wider border border-accent-bronze/30 px-1.5 py-0.5 rounded-full">Bedrock</span>
+                  <span className="ml-auto text-[10px] font-black text-primary uppercase tracking-wider border border-primary/30 px-1.5 py-0.5 rounded-full">Bedrock</span>
                 )}
               </div>
               {campusIntel?.summary ? (
-                <p className="text-[12px] text-zinc-300 leading-relaxed">{campusIntel.summary}</p>
+                <p className="text-[13px] text-zinc-300 leading-relaxed">{campusIntel.summary}</p>
               ) : (
                 <div className="space-y-1.5">
                   <div className="h-2.5 rounded bg-white/5 w-full animate-pulse" />
@@ -1103,12 +1204,12 @@ function Dashboard() {
               {campusIntel && (
                 <div className="mt-3 pt-3 border-t border-border flex gap-4">
                   <div>
-                    <p className="text-[8px] text-zinc-600 uppercase tracking-wider">This Week</p>
-                    <p className="text-[12px] font-black text-foreground tnum">{rupees((campusIntel.spend_7d ?? 0) * 100)}</p>
+                    <p className="text-[10px] text-zinc-600 uppercase tracking-wider">This Week</p>
+                    <p className="text-xs font-black text-foreground tnum">{rupees((campusIntel.spend_7d ?? 0) * 100)}</p>
                   </div>
                   <div>
-                    <p className="text-[8px] text-zinc-600 uppercase tracking-wider">Last Meal</p>
-                    <p className={`text-[12px] font-black tnum ${(campusIntel.last_food_hours ?? 0) > 8 ? "text-warning" : "text-success"}`}>
+                    <p className="text-[10px] text-zinc-600 uppercase tracking-wider">Last Meal</p>
+                    <p className={`text-xs font-black tnum ${(campusIntel.last_food_hours ?? 0) > 8 ? "text-warning" : "text-success"}`}>
                       {campusIntel.last_food_hours > 0 ? `${Math.round(campusIntel.last_food_hours)}h ago` : "—"}
                     </p>
                   </div>
@@ -1119,8 +1220,8 @@ function Dashboard() {
             {/* ── Wing Activity Feed ────────────────────────────────── */}
             <div className="bg-surface border border-border rounded-2xl p-5">
               <div className="flex items-center justify-between mb-4">
-                <p className="text-[9px] font-bold tracking-[0.2em] text-zinc-500 uppercase">Wing Activity</p>
-                <span className="flex items-center gap-1.5 text-[8px] text-zinc-600 font-bold">
+                <p className="text-xs font-bold tracking-[0.2em] text-zinc-500 uppercase">Wing Activity</p>
+                <span className="flex items-center gap-1.5 text-[10px] text-zinc-600 font-bold">
                   <span className={`w-1.5 h-1.5 rounded-full ${wingEvents.length ? "bg-success animate-pulse" : "bg-zinc-600"}`} />
                   {wingEvents.length ? "Live" : "No Live Events"}
                 </span>
@@ -1129,10 +1230,20 @@ function Dashboard() {
                 {wingEvents.length ? (
                   wingEvents.map((ev: any, i: number) => (
                     <div key={i} className="flex items-start gap-3 animate-[fadeIn_0.4s_ease-out]" style={{ animationDelay: `${i * 80}ms` }}>
-                      <span className="text-sm shrink-0 mt-0.5">{ev.icon}</span>
+                      <span className="shrink-0 mt-0.5 text-zinc-500">
+                        {ev.type === "pool_created" ? (
+                          <ShoppingBag className="h-4 w-4" />
+                        ) : ev.type === "merchant_mapped" ? (
+                          <MapPin className="h-4 w-4" />
+                        ) : ev.text.includes("skipping") ? (
+                          <AlertTriangle className="h-4 w-4 text-destructive" />
+                        ) : (
+                          <Utensils className="h-4 w-4 text-success" />
+                        )}
+                      </span>
                       <div className="flex-1 min-w-0">
-                        <p className="text-[11px] text-zinc-300 leading-snug">{ev.text}</p>
-                        <p className="text-[9px] text-zinc-600 mt-0.5 font-bold">
+                        <p className="text-xs text-zinc-300 leading-snug">{ev.text}</p>
+                        <p className="text-[10px] text-zinc-600 mt-0.5 font-bold">
                           {ev.mins_ago === 0 ? "just now" : ev.mins_ago < 60 ? `${ev.mins_ago}m ago` : `${Math.floor(ev.mins_ago / 60)}h ago`}
                         </p>
                       </div>
@@ -1140,8 +1251,8 @@ function Dashboard() {
                   ))
                 ) : (
                   <div className="rounded-xl border border-dashed border-border bg-surface-raised/40 p-4">
-                    <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">No wing activity yet</p>
-                    <p className="mt-1 text-[11px] leading-relaxed text-zinc-600">
+                    <p className="text-xs font-bold uppercase tracking-wider text-zinc-400">No wing activity yet</p>
+                    <p className="mt-1 text-xs leading-relaxed text-zinc-600">
                       Start a cart pool, identify a merchant, or check in from the dashboard to populate this feed.
                     </p>
                   </div>
@@ -1154,10 +1265,10 @@ function Dashboard() {
               <div className="relative rounded-2xl overflow-hidden border border-red-500/20 bg-red-500/5 p-5">
                 <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at top, rgba(239,68,68,0.1), transparent 70%)" }} />
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-[8px] font-black text-red-400 uppercase tracking-widest">📚 Exam Mode Active</span>
-                  <span className="text-[8px] text-red-400 font-bold">· {insights.exam.days_left}d left</span>
+                  <span className="text-xs font-black text-red-400 uppercase tracking-widest">Exam Mode Active</span>
+                  <span className="text-xs text-red-400 font-bold">· {insights.exam.days_left}d left</span>
                 </div>
-                <p className="text-[12px] text-zinc-300 leading-relaxed">
+                <p className="text-xs text-zinc-300 leading-relaxed">
                   Stress and skipped meals are correlated. PocketBuddy is watching your food gap — check in if you skip a meal.
                 </p>
                 <div className="mt-3 h-1 rounded-full bg-white/5 overflow-hidden">
@@ -1172,14 +1283,14 @@ function Dashboard() {
                 <div className="absolute top-0 left-0 w-[3px] h-full bg-destructive" />
                 <div className="flex items-center gap-2 mb-2">
                   <span className="h-1.5 w-1.5 rounded-full bg-destructive animate-pulse" />
-                  <p className="text-[10px] font-bold text-destructive tracking-widest uppercase">Runway Warning</p>
+                  <p className="text-xs font-bold text-destructive tracking-widest uppercase">Runway Warning</p>
                 </div>
                 <p className="text-xs font-medium text-foreground leading-relaxed">
                   Daily limit is <span className="text-destructive font-bold">{rupees(calc.safeDailyLimit * 100)}</span>. Skip delivery orders tonight.
                 </p>
                 {bestFood && (
                   <div className="mt-4 rounded-lg border border-success/20 bg-success/5 p-3.5 space-y-1">
-                    <p className="text-[9px] font-bold tracking-widest text-success uppercase">Dine In Option</p>
+                    <p className="text-xs font-bold tracking-widest text-success uppercase">Dine In Option</p>
                     <p className="text-xs text-foreground leading-relaxed">
                       <span className="font-bold">{bestFood.venue_name}</span> has{" "}
                       <span className="font-semibold">{bestFood.item_name}</span> for{" "}
@@ -1189,7 +1300,7 @@ function Dashboard() {
                 )}
                 <button
                   onClick={() => setShowFoodSheet(true)}
-                  className="mt-3 text-[11px] font-bold text-foreground hover:underline uppercase tracking-wider cursor-pointer"
+                  className="mt-3 text-xs font-bold text-foreground hover:underline uppercase tracking-wider cursor-pointer"
                 >
                   All Campus Foods →
                 </button>
@@ -1199,11 +1310,11 @@ function Dashboard() {
             {/* Collisions */}
             {collisions.length > 0 && (
               <section id="section-collisions" className="space-y-3">
-                <h3 className="text-[10px] font-bold tracking-[0.25em] text-zinc-500 uppercase px-1">Budget Collisions</h3>
+                <h3 className="text-xs font-bold tracking-[0.25em] text-zinc-500 uppercase px-1">Budget Collisions</h3>
                 <div className="space-y-3">
                   {collisions.length > 1 && (
-                    <div className="bg-destructive/5 border border-destructive/20 rounded-xl p-4 text-[11px]">
-                      <p className="font-bold tracking-wider text-[9px] text-destructive uppercase mb-1">Cumulative Debit Impact</p>
+                    <div className="bg-destructive/5 border border-destructive/20 rounded-xl p-4 text-xs">
+                      <p className="font-bold tracking-wider text-xs text-destructive uppercase mb-1">Cumulative Debit Impact</p>
                       <p className="font-medium text-zinc-400 leading-relaxed">
                         If all {collisions.length} debits hit this week, your safe limit drops to <strong className="text-foreground">{rupees(cumulativeCollisionLimit * 100)}</strong>/day.
                       </p>
@@ -1218,16 +1329,16 @@ function Dashboard() {
                         <p className="text-xs font-bold text-foreground flex items-center">
                           {c.service_name ?? c.name}
                           {c.detected_from === "auto_detected" && (
-                            <Badge className="ml-2 bg-white/5 border border-border text-[9px] font-bold px-1.5 py-0">Auto</Badge>
+                            <Badge className="ml-2 bg-white/5 border border-border text-[10px] font-bold px-1.5 py-0">Auto</Badge>
                           )}
                         </p>
                         <p className="text-xs font-bold text-destructive tnum">−{rupees(c.amount)}</p>
                       </div>
-                      <div className="flex items-center justify-between text-[11px]">
+                      <div className="flex items-center justify-between text-xs">
                         <p className="text-zinc-500 font-semibold">{shortDate(new Date(c.next_debit_date))}</p>
                         <p className="text-zinc-500">
                           Limit: <span className="text-foreground font-bold">{rupees(c.newLimit * 100)}</span>
-                          {c.critical && <span className="ml-1.5 text-destructive font-bold">⚠</span>}
+                          {c.critical && <span className="ml-1.5 text-destructive font-black text-xs font-mono uppercase tracking-widest bg-destructive/10 border border-destructive/20 px-1 py-0.5 rounded">CRITICAL</span>}
                         </p>
                       </div>
                     </Card>
@@ -1239,8 +1350,8 @@ function Dashboard() {
             {/* Recent Ledger */}
             <section id="section-recent" className="space-y-3">
               <div className="flex items-center justify-between px-1">
-                <h3 className="text-[10px] font-bold tracking-[0.25em] text-zinc-500 uppercase">Recent Ledger</h3>
-                <Link to="/transactions" id="link-see-all-txns" className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors">
+                <h3 className="text-xs font-bold tracking-[0.25em] text-zinc-500 uppercase">Recent Ledger</h3>
+                <Link to="/transactions" id="link-see-all-txns" className="text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors">
                   See all →
                 </Link>
               </div>
@@ -1263,23 +1374,30 @@ function Dashboard() {
                           </p>
                           <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                             {t.category && (
-                              <span className="text-[9px] font-black tracking-widest text-zinc-500 uppercase">{t.category}</span>
+                              <span className="text-[10px] font-black tracking-widest text-zinc-500 uppercase">{t.category}</span>
                             )}
                             {t.source !== "manual" && (
                               <>
-                                <span className="text-[9px] text-zinc-600 font-bold">•</span>
-                                <span className="text-[9px] font-black text-zinc-500 uppercase tracking-wider">{t.source.split("_")[1]}</span>
+                                <span className="text-[10px] text-zinc-600 font-bold">•</span>
+                                <span className="text-[10px] font-black text-zinc-500 uppercase tracking-wider">{t.source.split("_")[1]}</span>
                               </>
                             )}
                             {!t.is_mapped && (
                               <button
                                 id={`btn-identify-${t.id}`}
                                 onClick={() => setIdentifying(t)}
-                                className="ml-1 rounded-full px-2 py-0.5 text-[9px] font-bold bg-white/5 border border-border hover:bg-white/10 hover:border-white/15 transition-all cursor-pointer uppercase text-foreground"
+                                className="ml-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-white/5 border border-border hover:bg-white/10 hover:border-white/15 transition-all cursor-pointer uppercase text-foreground"
                               >
                                 Identify?
                               </button>
                             )}
+                            <button
+                              id={`btn-edit-ledger-${t.id}`}
+                              onClick={() => setEditingTxn(t)}
+                              className="ml-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-white/5 border border-border hover:bg-white/10 hover:border-white/15 transition-all cursor-pointer uppercase text-foreground"
+                            >
+                              Edit
+                            </button>
                           </div>
                         </div>
                         <div className="text-right flex-shrink-0">
@@ -1294,7 +1412,7 @@ function Dashboard() {
                   <Button
                     id="btn-add-transaction"
                     variant="secondary"
-                    className="w-full text-[10px] uppercase tracking-wider font-bold h-9 bg-surface-raised hover:bg-surface-interactive border-border"
+                    className="w-full text-xs uppercase tracking-wider font-bold h-9 bg-surface-raised hover:bg-surface-interactive border-border"
                     onClick={() => setAdding(true)}
                   >
                     Log Transaction
@@ -1315,6 +1433,23 @@ function Dashboard() {
           <DialogContent id="dialog-merchant-mapping">
             {identifying && (
               <IdentifyForm txn={identifying} onClose={() => { setIdentifying(null); qc.invalidateQueries(); }} />
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit transaction dialog */}
+        <Dialog open={!!editingTxn} onOpenChange={(o) => !o && setEditingTxn(null)}>
+          <DialogContent className="sm:max-w-md bg-background border border-border text-foreground" id="dialog-edit-transaction">
+            {editingTxn && (
+              <EditTxnForm
+                txn={editingTxn}
+                onClose={() => {
+                  setEditingTxn(null);
+                  qc.invalidateQueries({ queryKey: ["txns"] });
+                  qc.invalidateQueries({ queryKey: ["insights"] });
+                  qc.invalidateQueries({ queryKey: ["wellness-insights"] });
+                }}
+              />
             )}
           </DialogContent>
         </Dialog>
@@ -1419,12 +1554,15 @@ function Dashboard() {
 function IdentifyForm({ txn, onClose }: { txn: Txn; onClose: () => void }) {
   const [name, setName] = useState("");
   const [cat, setCat] = useState<string>("food");
+  const [customCat, setCustomCat] = useState("");
   const [busy, setBusy] = useState(false);
   async function save() {
     if (!name) { toast.error("Enter shop name"); return; }
+    if (cat === "other" && !customCat.trim()) { toast.error("Enter custom category"); return; }
     setBusy(true);
     try {
-      await identifyMerchant({ data: { txn_id: txn.id, raw_merchant_string: txn.raw_merchant_string, display_name: name, category: cat } });
+      const finalCategory = cat === "other" ? customCat.trim().toLowerCase() : cat;
+      await identifyMerchant({ data: { txn_id: txn.id, raw_merchant_string: txn.raw_merchant_string, display_name: name, category: finalCategory } });
       toast.success("Mapped! This helps everyone on campus.");
       onClose();
     } catch (err: any) {
@@ -1446,6 +1584,12 @@ function IdentifyForm({ txn, onClose }: { txn: Txn; onClose: () => void }) {
           <button key={c.v} onClick={() => setCat(c.v)} className={`rounded-md border p-3 text-center text-sm ${cat === c.v ? "border-primary bg-primary/10" : "border-border bg-surface"}`}>{c.l}</button>
         ))}
       </div>
+      {cat === "other" && (
+        <div className="space-y-1">
+          <label className="text-[12px] text-muted-foreground">Custom Category</label>
+          <Input id="input-map-custom-category" value={customCat} onChange={(e) => setCustomCat(e.target.value)} placeholder="e.g., Laundry, Books, Printing" />
+        </div>
+      )}
       <DialogFooter>
         <Button id="btn-save-merchant" disabled={busy} onClick={save} className="w-full bg-success text-white hover:bg-success/90">
           Save for everyone on campus
@@ -1459,12 +1603,15 @@ function AddTxnForm({ onClose }: { onClose: () => void }) {
   const [amount, setAmount] = useState("");
   const [merchant, setMerchant] = useState("");
   const [cat, setCat] = useState<string>("food");
+  const [customCat, setCustomCat] = useState("");
   const [busy, setBusy] = useState(false);
   async function save() {
     if (!amount || !merchant) { toast.error("Fill all fields"); return; }
+    if (cat === "other" && !customCat.trim()) { toast.error("Enter custom category"); return; }
     setBusy(true);
     try {
-      await insertTransaction({ data: { amount: Math.round(parseFloat(amount) * 100), raw_merchant_string: merchant, mapped_merchant_name: merchant, category: cat, source: "manual" } });
+      const finalCategory = cat === "other" ? customCat.trim().toLowerCase() : cat;
+      await insertTransaction({ data: { amount: Math.round(parseFloat(amount) * 100), raw_merchant_string: merchant, mapped_merchant_name: merchant, category: finalCategory, source: "manual" } });
       toast.success("Transaction logged.");
       onClose();
     } catch (err: any) {
@@ -1486,8 +1633,111 @@ function AddTxnForm({ onClose }: { onClose: () => void }) {
           <button key={c.v} onClick={() => setCat(c.v)} className={`rounded-md border p-3 text-center text-sm ${cat === c.v ? "border-primary bg-primary/10" : "border-border bg-surface"}`}>{c.l}</button>
         ))}
       </div>
+      {cat === "other" && (
+        <div className="space-y-1">
+          <label className="text-[12px] text-muted-foreground">Custom Category</label>
+          <Input id="input-txn-custom-category" value={customCat} onChange={(e) => setCustomCat(e.target.value)} placeholder="e.g., Laundry, Books, Printing" />
+        </div>
+      )}
       <DialogFooter>
         <Button id="btn-submit-txn" disabled={busy} onClick={save} className="w-full">Add</Button>
+      </DialogFooter>
+    </>
+  );
+}
+
+function EditTxnForm({ txn, onClose }: { txn: Txn; onClose: () => void }) {
+  const [name, setName] = useState(txn.mapped_merchant_name ?? txn.raw_merchant_string);
+  const isStandardCat = ["food", "stationery", "travel", "subscription"].includes(txn.category ?? "");
+  const [cat, setCat] = useState<string>(isStandardCat ? (txn.category ?? "food") : "other");
+  const [customCat, setCustomCat] = useState(isStandardCat ? "" : (txn.category ?? ""));
+  const [busy, setBusy] = useState(false);
+
+  async function save() {
+    if (!name.trim()) {
+      toast.error("Enter merchant display name");
+      return;
+    }
+    if (cat === "other" && !customCat.trim()) {
+      toast.error("Enter custom category");
+      return;
+    }
+    setBusy(true);
+    try {
+      const finalCategory = cat === "other" ? customCat.trim().toLowerCase() : cat;
+      await updateTransaction({
+        id: txn.id,
+        data: {
+          mapped_merchant_name: name.trim(),
+          category: finalCategory,
+        },
+      });
+      toast.success("Transaction updated.");
+      onClose();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update transaction");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>Edit Transaction</DialogTitle>
+      </DialogHeader>
+      
+      <div className="space-y-4 py-4">
+        <div className="space-y-1">
+          <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Original Reference</label>
+          <code className="block rounded bg-surface-raised px-3 py-1.5 text-xs select-all border border-border truncate">{txn.raw_merchant_string}</code>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Display Name</label>
+          <Input
+            id="input-edit-txn-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Canteen, Stationery Shop"
+          />
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1 block">Category</label>
+          <div className="grid grid-cols-2 gap-2">
+            {CATEGORIES.map((c) => (
+              <button
+                key={c.v}
+                type="button"
+                onClick={() => setCat(c.v)}
+                className={`rounded-md border p-3 text-center text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                  cat === c.v ? "border-primary bg-primary/10 text-foreground" : "border-border bg-surface text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {c.l}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {cat === "other" && (
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Custom Category</label>
+            <Input
+              id="input-edit-txn-custom-category"
+              value={customCat}
+              onChange={(e) => setCustomCat(e.target.value)}
+              placeholder="e.g., Laundry, Books, Printing"
+            />
+          </div>
+        )}
+      </div>
+
+      <DialogFooter>
+        <Button id="btn-save-edit-txn" disabled={busy} onClick={save} className="w-full bg-success text-white hover:bg-success/90">
+          Save Changes
+        </Button>
       </DialogFooter>
     </>
   );

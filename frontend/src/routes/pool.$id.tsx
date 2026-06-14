@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { ChevronLeft, Share2, Trash2, Check, X, AlertCircle, Sparkles, ExternalLink, User, ShoppingBag } from "lucide-react";
+import { ChevronLeft, Share2, Trash2, Check, X, AlertCircle, Sparkles, ExternalLink, User, ShoppingBag, Clock, Shield, Link as LinkIcon } from "lucide-react";
 import { toast } from "sonner";
 import { rupees, relativeTime } from "@/lib/format";
 import { useAuth } from "@/lib/auth-context";
@@ -181,7 +181,10 @@ function PoolDetail() {
         .reduce((s, i) => s + i.estimated_price, 0);
 
       const payment = (pool.payments ?? []).find((pay: any) => pay.name === p);
-      const isHostUser = p.toLowerCase() === (pool.created_by_name ?? "").toLowerCase();
+      const isHostUser = 
+        p.trim().toLowerCase() === (pool.created_by_name ?? "").trim().toLowerCase() ||
+        p.trim().toLowerCase() === "host" ||
+        (user && pool.host_id === user.id && p.trim().toLowerCase() === (profile?.full_name ?? "").trim().toLowerCase());
 
       splitBreakdown[p] = {
         name: p,
@@ -203,7 +206,10 @@ function PoolDetail() {
         .filter((i) => i.is_purchased !== false)
         .reduce((s, i) => s + i.estimated_price, 0);
 
-      const isHostUser = p.toLowerCase() === (pool.created_by_name ?? "").toLowerCase();
+      const isHostUser = 
+        p.trim().toLowerCase() === (pool.created_by_name ?? "").trim().toLowerCase() ||
+        p.trim().toLowerCase() === "host" ||
+        (user && pool.host_id === user.id && p.trim().toLowerCase() === (profile?.full_name ?? "").trim().toLowerCase());
 
       splitBreakdown[p] = {
         name: p,
@@ -424,8 +430,8 @@ function PoolDetail() {
           }} className="text-muted-foreground">
             <ChevronLeft className="h-5 w-5" />
           </button>
-          <span className="text-[14px] font-bold tracking-[0.15em] flex items-center gap-1.5 uppercase">
-            <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+          <span className="text-lg font-black tracking-wider flex items-center gap-2 uppercase">
+            <span className="h-2.5 w-2.5 rounded-full bg-green-500 animate-pulse" />
             Pooler
           </span>
         </div>
@@ -445,7 +451,7 @@ function PoolDetail() {
           </Button>
         </div>
       </div>      {/* Platform Theme Hero Segment */}
-      <div className={`w-full bg-[#111111] border border-border border-t-4 ${
+      <div className={`w-full bg-card border border-border border-t-4 ${
         pool.platform === "zepto" 
           ? "border-t-[#5E17EB]" 
           : pool.platform === "blinkit" 
@@ -458,7 +464,7 @@ function PoolDetail() {
           <Sparkles className="h-32 w-32 text-foreground" />
         </div>
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-500">Quick Commerce Pooling</p>
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-zinc-500">Quick Commerce Pooling</p>
           <h2 className="text-2xl font-black mt-2 uppercase tracking-tight text-foreground">
             {theme.name} Pool
           </h2>
@@ -469,19 +475,20 @@ function PoolDetail() {
 
         <div className="mt-8 flex justify-between items-end border-t border-border pt-5">
           <div>
-            <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider">Target Cart Total</p>
+            <p className="text-xs text-zinc-500 font-bold uppercase tracking-wider">Target Cart Total</p>
             <p className="text-xl font-black text-foreground tnum mt-0.5">{rupees(cartTotal)} <span className="text-zinc-500 text-xs font-semibold">/ {rupees(pool.min_cart_value)} min</span></p>
           </div>
           <div>
             {pool.status === "completed" ? (
-              <Badge className="bg-green-600/10 border border-green-600/30 text-green-500 font-bold text-[10px] px-3 py-1">FINALIZED</Badge>
+              <Badge className="bg-green-600/10 border border-green-600/30 text-green-500 font-bold text-xs px-3 py-1">FINALIZED</Badge>
             ) : pool.status === "cancelled" ? (
-              <Badge className="bg-red-600/10 border border-red-600/30 text-red-500 font-bold text-[10px] px-3 py-1">CANCELLED</Badge>
+              <Badge className="bg-red-600/10 border border-red-600/30 text-red-500 font-bold text-xs px-3 py-1">CANCELLED</Badge>
             ) : expired ? (
-              <Badge className="bg-zinc-800 border border-border text-muted-foreground font-bold text-[10px] px-3 py-1">CLOSED</Badge>
+              <Badge className="bg-zinc-800 border border-border text-muted-foreground font-bold text-xs px-3 py-1">CLOSED</Badge>
             ) : (
-              <span id="timer-pool" className="text-[10px] font-bold bg-white/5 border border-border rounded-full px-3.5 py-1.5 tnum uppercase tracking-wider text-foreground">
-                ⚡ {minsLeft}m left
+              <span id="timer-pool" className="inline-flex items-center gap-1.5 text-xs font-bold bg-white/5 border border-border rounded-full px-3.5 py-1.5 tnum uppercase tracking-wider text-foreground">
+                <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                <span>{minsLeft}m left</span>
               </span>
             )}
           </div>
@@ -492,14 +499,14 @@ function PoolDetail() {
         {/* Progress bar to target minimum */}
         {pool.status === "open" && (
           <Card className="p-5 bg-surface border border-border">
-            <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider mb-2 text-zinc-500">
+            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider mb-2 text-zinc-500">
               <span>Cart Threshold Progress</span>
               <span className="text-foreground">{cartPct}% Complete</span>
             </div>
             <Progress id="progress-pool-cart" value={cartPct} className="h-1 bg-surface-raised" />
             <p className="mt-3 text-xs text-muted-foreground font-semibold leading-relaxed">
               {cartTotal >= pool.min_cart_value
-                ? "🎉 Target cart minimum reached! Small-cart fees are fully stripped."
+                ? "Target cart minimum reached! Small-cart fees are fully stripped."
                 : `Need ${rupees(pool.min_cart_value - cartTotal)} more in items to bypass small-cart fees.`}
             </p>
           </Card>
@@ -509,10 +516,11 @@ function PoolDetail() {
         {isHost && (
           <Card className="p-5 border border-border bg-surface-raised/40 space-y-4">
             <div className="flex items-center justify-between border-b border-border pb-3">
-              <h3 className="text-[10px] font-bold text-zinc-400 tracking-[0.2em] uppercase">
-                🛡️ Host Control Deck
+              <h3 className="text-xs font-bold text-zinc-400 tracking-[0.2em] uppercase flex items-center gap-1.5">
+                <Shield className="h-3.5 w-3.5" />
+                <span>Host Control Deck</span>
               </h3>
-              <Badge variant="outline" className="text-[9px] border-accent-bronze/35 text-accent-bronze font-bold uppercase tracking-wider px-2 py-0.5">
+              <Badge variant="outline" className="text-xs border-primary/35 text-primary font-bold uppercase tracking-wider px-2 py-0.5">
                 Host Mode
               </Badge>
             </div>
@@ -545,9 +553,10 @@ function PoolDetail() {
 
                 {itemsWithLinks.length > 0 && (
                   <div className="bg-surface p-4 rounded-xl border border-border space-y-3">
-                    <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 pl-0.5">
-                      <span>🔗 Roommate Item Links</span>
-                      <span className="bg-white/5 border border-border px-2 py-0.5 rounded-full text-[9px] font-bold text-foreground">{itemsWithLinks.length}</span>
+                    <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 pl-0.5">
+                      <LinkIcon className="h-3 w-3 text-zinc-600" />
+                      <span>Roommate Item Links</span>
+                      <span className="bg-white/5 border border-border px-2 py-0.5 rounded-full text-xs font-bold text-foreground">{itemsWithLinks.length}</span>
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {itemsWithLinks.map((it: any) => (
@@ -581,17 +590,17 @@ function PoolDetail() {
                       <div key={pay.name} className="flex items-center justify-between bg-surface p-3.5 rounded-xl border border-border text-xs">
                         <div className="space-y-0.5">
                           <p className="font-bold capitalize text-foreground">{pay.name}</p>
-                          <p className="text-[10px] text-muted-foreground font-mono">UTR ID: {pay.utr}</p>
+                          <p className="text-xs text-muted-foreground font-mono">UTR ID: {pay.utr}</p>
                         </div>
                         <div className="flex items-center gap-1.5">
                           {pay.status === "verified" ? (
-                            <Badge className="bg-green-600/10 border border-green-600/20 text-green-500 font-bold py-1 px-2.5">VERIFIED ✓</Badge>
+                            <Badge className="bg-green-600/10 border border-green-600/20 text-green-500 font-bold py-1 px-2.5">VERIFIED</Badge>
                           ) : (
                             <>
                               <Button
                                 size="sm"
                                 onClick={() => handleVerifyPayment(pay.name, "verify")}
-                                className="h-8 bg-green-600 text-white hover:bg-green-700 py-1 px-3 text-[10px] uppercase font-bold tracking-wider"
+                                className="h-8 bg-green-600 text-white hover:bg-green-700 py-1 px-3 text-xs uppercase font-bold tracking-wider"
                               >
                                 Approve
                               </Button>
@@ -599,7 +608,7 @@ function PoolDetail() {
                                 size="sm"
                                 variant="outline"
                                 onClick={() => handleVerifyPayment(pay.name, "reject")}
-                                className="h-8 border-destructive/20 text-destructive hover:bg-destructive/5 py-1 px-3 text-[10px] uppercase font-bold tracking-wider"
+                                className="h-8 border-destructive/20 text-destructive hover:bg-destructive/5 py-1 px-3 text-xs uppercase font-bold tracking-wider"
                               >
                                 Reject
                               </Button>
@@ -612,11 +621,11 @@ function PoolDetail() {
                 </div>
 
                 <div className="flex gap-2 pt-3 border-t border-border">
-                  <div className="text-[11px] font-bold bg-white/5 border border-border px-3 py-1.5 rounded-full text-foreground uppercase tracking-wider">
+                  <div className="text-xs font-bold bg-white/5 border border-border px-3 py-1.5 rounded-full text-foreground uppercase tracking-wider">
                     Overhead: <strong>{rupees(pool.final_overhead)}</strong>
                   </div>
                   {pool.final_discount > 0 && (
-                    <div className="text-[11px] font-bold bg-success/5 border border-success/20 text-success px-3 py-1.5 rounded-full uppercase tracking-wider">
+                    <div className="text-xs font-bold bg-success/5 border border-success/20 text-success px-3 py-1.5 rounded-full uppercase tracking-wider">
                       Saved: <strong>{rupees(pool.final_discount)}</strong>
                     </div>
                   )}
@@ -631,8 +640,8 @@ function PoolDetail() {
         {/* Splits breakdown summary */}
         {participants.length > 0 && (
           <Card id="card-split-summary" className="p-5 bg-surface border border-border space-y-4">
-            <h3 className="text-[10px] font-bold text-zinc-500 tracking-[0.25em] uppercase border-b border-border pb-2">
-              {pool.status === "completed" ? "💵 Final Split Ledger" : "📊 Estimated Splits"}
+            <h3 className="text-xs font-bold text-zinc-500 tracking-[0.25em] uppercase border-b border-border pb-2">
+              {pool.status === "completed" ? "Final Split Ledger" : "Estimated Splits"}
             </h3>
             <div className="space-y-3 mt-3">
               {Object.entries(splitBreakdown).map(([pName, details]) => (
@@ -652,23 +661,23 @@ function PoolDetail() {
                       )}
                       <span className="font-bold capitalize text-foreground truncate">{pName}</span>
                       {pName === name && (
-                        <Badge variant="outline" className="text-[9px] py-0 px-1.5 border-border bg-white/5 font-black text-muted-foreground uppercase shrink-0">You</Badge>
+                        <Badge variant="outline" className="text-xs py-0 px-1.5 border-border bg-white/5 font-black text-muted-foreground uppercase shrink-0">You</Badge>
                       )}
                     </div>
-                    <span className="text-[10px] text-muted-foreground font-semibold pl-4">
+                    <span className="text-xs text-muted-foreground font-semibold pl-4">
                       Items: {rupees(details.itemsTotal)} + Share: {rupees(details.share)}
                     </span>
                   </div>
                   <div className="text-right flex flex-col items-end shrink-0 pl-2">
                     <span className="font-black text-foreground tnum">{rupees(details.total)}</span>
                     {pool.status === "completed" && (
-                      <span className="text-[9px] font-black uppercase tracking-wider mt-0.5">
+                      <span className="text-xs font-black uppercase tracking-wider mt-0.5">
                         {details.paymentStatus === "verified" ? (
                           <span className="text-green-500">Paid</span>
                         ) : details.paymentStatus === "pending" ? (
                           <span className="text-amber-500 animate-pulse">Pending</span>
                         ) : details.paymentStatus === "host" ? (
-                          <span className="text-accent-bronze">Host</span>
+                          <span className="text-primary">Host</span>
                         ) : (
                           <span className="text-destructive">Unpaid</span>
                         )}
@@ -679,7 +688,7 @@ function PoolDetail() {
               ))}
             </div>
 
-            <div className="mt-4 pt-3 border-t border-border flex justify-between text-[10px] text-zinc-500 font-bold uppercase tracking-wider">
+            <div className="mt-4 pt-3 border-t border-border flex justify-between text-xs text-zinc-500 font-bold uppercase tracking-wider">
               <span>Overhead per person:</span>
               {pool.status === "completed" ? (
                 <span>{rupees(splitBreakdown[Object.keys(splitBreakdown)[0]]?.share ?? 0)} each</span>
@@ -691,13 +700,13 @@ function PoolDetail() {
         )}
 
         {/* UPI Payments Portal */}
-        {pool.status === "completed" && (
+        {pool.status === "completed" && !isHost && (
           <Card className="p-5 border border-border bg-surface-raised/40 space-y-4">
             <div className="flex items-center justify-between border-b border-border pb-3">
-              <h3 className="text-[10px] font-bold text-zinc-400 tracking-[0.2em] uppercase flex items-center gap-1.5">
-                <Sparkles className="h-4 w-4 text-accent-bronze" /> UPI Split Settlement
+              <h3 className="text-xs font-bold text-zinc-400 tracking-[0.2em] uppercase flex items-center gap-1.5">
+                <Sparkles className="h-4 w-4 text-primary" /> UPI Split Settlement
               </h3>
-              <Badge className="bg-white/5 border border-border text-foreground text-[9px] font-bold uppercase tracking-wider px-2 py-0.5">VPA Direct</Badge>
+              <Badge className="bg-white/5 border border-border text-foreground text-xs font-bold uppercase tracking-wider px-2 py-0.5">VPA Direct</Badge>
             </div>
 
             {!pool.upi_id ? (
@@ -710,9 +719,9 @@ function PoolDetail() {
             ) : (
               <div className="space-y-4">
                 <div className="flex flex-col gap-2">
-                  <label className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest pl-0.5">Select roommate to pay:</label>
+                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest pl-0.5">Select roommate to pay:</label>
                   <select
-                    className="w-full bg-surface text-foreground border border-border rounded-md py-2 px-3 text-xs font-bold uppercase tracking-wider focus:outline-none focus:border-accent-bronze/40"
+                    className="w-full bg-surface text-foreground border border-border rounded-md py-2 px-3 text-xs font-bold uppercase tracking-wider focus:outline-none focus:border-primary/40"
                     value={selectedPayeeName || name}
                     onChange={(e) => setSelectedPayeeName(e.target.value)}
                   >
@@ -721,12 +730,12 @@ function PoolDetail() {
                       <option key={p} value={p}>
                         {p} ({rupees(splitBreakdown[p].total)}) - {
                           splitBreakdown[p].paymentStatus === "verified"
-                            ? "Verified ✓"
+                            ? "Verified"
                             : splitBreakdown[p].paymentStatus === "pending"
-                              ? "Pending Verify ⏳"
+                              ? "Pending Verify"
                               : splitBreakdown[p].paymentStatus === "host"
-                                ? "Host 🏠"
-                                : "Unpaid ❌"
+                                ? "Host Mode"
+                                : "Unpaid"
                         }
                       </option>
                     ))}
@@ -736,9 +745,9 @@ function PoolDetail() {
                 {payeeDetails ? (
                   <div className="bg-surface rounded-xl p-5 border border-border flex flex-col items-center justify-center text-center space-y-4">
                     <div className="text-center space-y-1">
-                      <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider">Final Pay Share</p>
+                      <p className="text-xs text-zinc-500 font-bold uppercase tracking-wider">Final Pay Share</p>
                       <h4 className="text-2xl font-black text-foreground tnum">{rupees(payeeDetails.total)}</h4>
-                      <p className="text-[10px] text-muted-foreground">UPI ID: <code className="bg-white/5 px-2 py-0.5 rounded border border-border font-mono select-all text-foreground text-[10px]">{pool.upi_id}</code></p>
+                      <p className="text-xs text-muted-foreground">UPI ID: <code className="bg-white/5 px-2 py-0.5 rounded border border-border font-mono select-all text-foreground text-xs">{pool.upi_id}</code></p>
                     </div>
 
                     {payeeDetails.paymentStatus === "verified" ? (
@@ -748,32 +757,32 @@ function PoolDetail() {
                     ) : payeeDetails.paymentStatus === "pending" ? (
                       <div className="text-center space-y-1.5">
                         <div className="inline-flex items-center gap-1.5 text-xs text-amber-500 bg-amber-500/10 border border-amber-500/20 px-4 py-2 rounded-full font-bold">
-                          Pending Verification ⏳
+                          Pending Verification
                         </div>
-                        <p className="text-[9px] text-muted-foreground font-mono">UTR: {payeeDetails.utr}</p>
+                        <p className="text-xs text-muted-foreground font-mono">UTR: {payeeDetails.utr}</p>
                       </div>
                     ) : payeeDetails.paymentStatus === "host" ? (
-                      <div className="flex items-center gap-1.5 text-xs text-accent-bronze bg-accent-bronze/10 border border-accent-bronze/20 px-4 py-2 rounded-full font-bold">
-                         Host User
+                      <div className="flex items-center gap-1.5 text-xs text-green-500 bg-green-600/10 border border-green-600/20 px-4 py-2 rounded-full font-bold">
+                        <Check className="h-4 w-4" /> Host User (Automatically Verified)
                       </div>
                     ) : (
                       <div className="w-full space-y-4 text-center">
                         {/* QR Code Container for desktop */}
                         <div className="hidden sm:flex flex-col items-center gap-2 p-4 bg-white rounded-xl border border-border max-w-[200px] mx-auto shadow-md">
                           <img src={qrCodeUrl} alt="UPI Pay QR" className="h-32 w-32" />
-                          <span className="text-[8px] text-gray-500 font-black uppercase tracking-wider">Scan with UPI App</span>
+                          <span className="text-xs text-gray-500 font-black uppercase tracking-wider">Scan with UPI App</span>
                         </div>
 
                         {/* Step 1: Make Payment */}
                         <div className="w-full space-y-2 text-left bg-surface-raised/40 p-4 rounded-xl border border-border">
-                          <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
-                            <span className="bg-primary text-primary-foreground w-4 h-4 rounded-full inline-flex items-center justify-center text-[9px] font-bold">1</span>
+                          <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
+                            <span className="bg-primary text-primary-foreground w-4 h-4 rounded-full inline-flex items-center justify-center text-xs font-bold">1</span>
                             <span>Pay Host</span>
                           </p>
-                          {/* Mobile Click to Pay Button */}
+                          {/* Click to Pay Button (All Screens) */}
                           <a
                             href={upiPayUrl}
-                            className="block w-full sm:hidden"
+                            className="block w-full"
                             onClick={() => {
                               toast.info("Opening UPI mobile app...");
                             }}
@@ -782,15 +791,15 @@ function PoolDetail() {
                               Pay via UPI App <ExternalLink className="h-4 w-4" />
                             </Button>
                           </a>
-                          <p className="text-[11px] text-muted-foreground mt-1.5 leading-normal">
+                          <p className="text-xs text-muted-foreground mt-1.5 leading-normal">
                             Transfer exactly <strong className="text-foreground">{rupees(payeeDetails.total)}</strong> to the host.
                           </p>
                         </div>
 
                         {/* Step 2: Confirm Payment */}
                         <div className="w-full space-y-2 text-left bg-surface-raised/40 p-4 rounded-xl border border-border">
-                          <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
-                            <span className="bg-success text-white w-4 h-4 rounded-full inline-flex items-center justify-center text-[9px] font-bold">2</span>
+                          <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
+                            <span className="bg-success text-white w-4 h-4 rounded-full inline-flex items-center justify-center text-xs font-bold">2</span>
                             <span>Verify UTR</span>
                           </p>
                           <Button
@@ -801,7 +810,7 @@ function PoolDetail() {
                           >
                             Enter 12-Digit UTR
                           </Button>
-                          <p className="text-[11px] text-muted-foreground mt-1.5 leading-normal">
+                          <p className="text-xs text-muted-foreground mt-1.5 leading-normal">
                             Enter the UPI Ref / UTR number from your receipt to notify the host to verify your transfer.
                           </p>
                         </div>
@@ -810,16 +819,16 @@ function PoolDetail() {
                   </div>
                 ) : (
                   <div className="text-center p-6 border border-dashed border-border rounded-xl bg-surface-raised/40 text-xs text-muted-foreground font-semibold">
-                    💡 Select your name in the dropdown list above to fetch splits, scan QR, and confirm transfer.
+                    Select your name in the dropdown list above to fetch splits, scan QR, and confirm transfer.
                   </div>
                 )}
 
                 {/* General payment checklist */}
                 <div className="bg-surface p-4 rounded-xl border border-border space-y-2">
-                  <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-500">
+                  <p className="text-xs font-bold uppercase tracking-widest text-zinc-500">
                     Settlement Checklist:
                   </p>
-                  <ol className="list-decimal pl-4 text-[11px] space-y-2 text-zinc-400 leading-relaxed">
+                  <ol className="list-decimal pl-4 text-xs space-y-2 text-zinc-400 leading-relaxed">
                     <li>Select your roommate name from the dropdown menu.</li>
                     <li>Pay the split total to the host's QR code or VPA.</li>
                     <li>Fetch the 12-digit UTR reference ID from your transaction receipt.</li>
@@ -833,8 +842,9 @@ function PoolDetail() {
 
         {/* List of items inside pool */}
         <div id="list-pool-items" className="space-y-4">
-          <h3 className="text-[10px] font-bold text-zinc-500 tracking-[0.25em] uppercase border-b border-border pb-2">
-            🛒 Roommate Carts
+          <h3 className="text-xs font-bold text-zinc-500 tracking-[0.25em] uppercase border-b border-border pb-2 flex items-center gap-1.5">
+            <ShoppingBag className="h-3.5 w-3.5" />
+            <span>Roommate Carts</span>
           </h3>
           {participants.length === 0 && (
             <p className="text-center py-8 text-xs text-zinc-500 font-semibold uppercase tracking-wider">
@@ -850,7 +860,8 @@ function PoolDetail() {
               <Card key={who} className="p-4 bg-surface border border-border space-y-3">
                 <div className="flex justify-between items-center border-b border-border/80 pb-2">
                   <span className="font-bold text-xs text-foreground capitalize flex items-center gap-1.5">
-                    👤 {who}
+                    <User className="h-3.5 w-3.5 text-zinc-500" />
+                    <span>{who}</span>
                   </span>
                   <span className="font-black text-xs text-foreground tnum">
                     {rupees(whoTotal)}
@@ -872,7 +883,7 @@ function PoolDetail() {
                               href={formatExternalUrl(it.product_url)}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 mt-0.5 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider transition-all border border-border bg-white/5 text-muted-foreground hover:text-foreground"
+                              className="inline-flex items-center gap-1.5 mt-0.5 px-2 py-0.5 rounded text-xs font-black uppercase tracking-wider transition-all border border-border bg-white/5 text-muted-foreground hover:text-foreground"
                               title={`Open on ${theme.name}`}
                             >
                               <ExternalLink className="h-2.5 w-2.5 text-current" />
@@ -880,10 +891,10 @@ function PoolDetail() {
                             </a>
                           )}
 
-                          <p className="text-[9px] text-zinc-500 font-semibold flex items-center gap-1.5 mt-0.5 uppercase tracking-wider">
+                          <p className="text-xs text-zinc-500 font-semibold flex items-center gap-1.5 mt-0.5 uppercase tracking-wider">
                             {relativeTime(it.created_at)}
                             {it.is_purchased === false && (
-                              <Badge className="bg-destructive/10 text-destructive border-none text-[8px] py-0 px-1.5 hover:bg-destructive/10">Out of Stock</Badge>
+                              <Badge className="bg-destructive/10 text-destructive border-none text-[11px] py-0.5 px-2 hover:bg-destructive/10">Out of Stock</Badge>
                             )}
                           </p>
                         </div>
@@ -934,11 +945,11 @@ function PoolDetail() {
             e.preventDefault();
             addItem();
           }}
-          className="fixed inset-x-0 bottom-0 z-30 space-y-4 border-t border-border bg-[#111111]/90 backdrop-blur-md px-4 py-5 pb-12 shadow-2xl rounded-t-2xl animate-in slide-in-from-bottom"
+          className="fixed inset-x-0 bottom-0 z-30 space-y-4 border-t border-border bg-card/90 backdrop-blur-md px-4 py-5 pb-12 shadow-2xl rounded-t-2xl animate-in slide-in-from-bottom"
         >
           <div className="flex justify-between items-center pb-1">
-            <h4 className="text-[10px] font-bold text-foreground uppercase tracking-wider">⚡ Quick Add Item</h4>
-            <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider">Registration Free</span>
+            <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">Quick Add Item</h4>
+            <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Registration Free</span>
           </div>
           <div className="space-y-2.5">
             <div className="relative">
@@ -948,7 +959,7 @@ function PoolDetail() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Your Name (e.g. Kanik)"
-                className="bg-[#0A0A0A] text-xs h-10 pl-9"
+                className="bg-background text-xs h-10 pl-9"
               />
             </div>
             <div className="flex gap-2">
@@ -959,7 +970,7 @@ function PoolDetail() {
                   value={item}
                   onChange={(e) => setItem(e.target.value)}
                   placeholder="Item description (e.g. Bread)"
-                  className="bg-[#0A0A0A] text-xs h-10 pl-9"
+                  className="bg-background text-xs h-10 pl-9"
                 />
               </div>
               <div className="relative w-28">
@@ -970,18 +981,18 @@ function PoolDetail() {
                   value={price}
                   onChange={(e) => setPrice(e.target.value)}
                   placeholder="Price"
-                  className="bg-[#0A0A0A] text-xs h-10 pl-6 text-right pr-3 font-bold text-foreground"
+                  className="bg-background text-xs h-10 pl-6 text-right pr-3 font-bold text-foreground"
                 />
               </div>
             </div>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-zinc-500">🔗</span>
+              <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
               <Input
                 id="input-pool-link"
                 value={productUrl}
                 onChange={(e) => setProductUrl(e.target.value)}
                 placeholder="Product Link (Optional)"
-                className="bg-[#0A0A0A] text-xs h-10 pl-9"
+                className="bg-background text-xs h-10 pl-9"
               />
             </div>
             <Button
@@ -1042,7 +1053,7 @@ function PoolDetail() {
                 onChange={(e) => setHostUpi(e.target.value)}
                 placeholder="yourname@upi"
               />
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Roommates will pay this VPA. It automatically locks when order splits.
               </p>
             </div>
@@ -1079,7 +1090,7 @@ function PoolDetail() {
                 onChange={(e) => setUtrInput(e.target.value.replace(/\D/g, ""))}
                 placeholder="e.g. 612456789012"
               />
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Found in your payment app (GPay/PhonePe/Paytm) transaction details.
               </p>
             </div>

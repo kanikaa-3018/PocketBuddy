@@ -8,8 +8,16 @@
     <meta name="description" content="Passive runway tracker, meal watchdog, and cart pool for Indian college students." />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Geist+Mono:wght@100..900&family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" />
     <link rel="manifest" href="/manifest.webmanifest" />
+    <script>
+      (function() {
+        const savedTheme = localStorage.getItem("pb_theme");
+        const theme = savedTheme === "light" ? "light" : "dark";
+        document.documentElement.classList.remove("light", "dark");
+        document.documentElement.classList.add(theme);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
