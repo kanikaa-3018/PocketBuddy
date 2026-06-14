@@ -52,10 +52,10 @@ type Pool = any;
 type PoolItem = any;
 
 const CATEGORIES = [
-  { v: "food", l: "🍜 Food" },
-  { v: "stationery", l: "📎 Stationery" },
-  { v: "travel", l: "🛺 Travel" },
-  { v: "other", l: "📦 Other" },
+  { v: "food", l: "Food" },
+  { v: "stationery", l: "Stationery" },
+  { v: "travel", l: "Travel" },
+  { v: "other", l: "Other" },
 ] as const;
 
 function CountUp({ to, duration = 400 }: { to: number; duration?: number }) {
@@ -166,11 +166,11 @@ function Dashboard() {
 
   const runwayColor = calc
     ? calc.runwayDays >= 15
-      ? "var(--pb-green)"
+      ? "var(--success)"
       : calc.runwayDays >= 7
-        ? "var(--pb-amber)"
-        : "var(--pb-red)"
-    : "var(--pb-blue)";
+        ? "var(--warning)"
+        : "var(--destructive)"
+    : "var(--primary)";
 
   // Companion indicator
   const compStatus = useMemo(() => {
@@ -263,7 +263,7 @@ function Dashboard() {
     localStorage.setItem("pocketbuddy_last_checkin", String(Date.now()));
     setShowCheckIn(false);
     qc.invalidateQueries({ queryKey: ["txns"] });
-    toast.success("Great, keep fueling through exams 💪");
+    toast.success("Great, keep fueling through exams ");
   }
 
   async function handleCheckInSkipped() {
@@ -288,309 +288,369 @@ function Dashboard() {
         `${bestFood.venue_name} has ${bestFood.item_name} (${rupees(bestFood.price)}) — go grab something.`,
       );
     }
-  }
-
-  return (
+  }  return (
     <AppShell>
-      {/* Top bar */}
-      <div className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-[color:var(--surface)] px-4">
-        <h1 id="logo-dashboard" className="text-[14px] font-semibold tracking-[0.15em]">
-          POCKETBUDDY
+      <div className="pb-16 pt-8">
+      {/* Top bar (for mobile only now since topnav floats) */}
+      <div className="flex md:hidden items-center justify-between px-2 mb-6">
+        <h1 id="logo-dashboard" className="text-[12px] font-black tracking-[0.2em] text-foreground uppercase">
+          Dashboard
         </h1>
-        <button
-          onClick={() => nav({ to: "/companion" })}
-          title={
-            compStatus === "green"
-              ? "Companion syncing"
-              : compStatus === "amber"
-                ? "Companion idle"
-                : "No companion"
-          }
-          className="flex items-center gap-1.5"
-        >
-          <span
-            className={`h-1.5 w-1.5 rounded-full pulse-dot ${
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => nav({ to: "/companion" })}
+            title={
               compStatus === "green"
-                ? "bg-[color:var(--pb-green)]"
+                ? "Companion syncing"
                 : compStatus === "amber"
-                  ? "bg-[color:var(--pb-amber)]"
-                  : "bg-[color:var(--pb-red)]"
-            }`}
-          />
-        </button>
-        <Badge variant="outline" id="badge-wing" className="text-muted-foreground">
-          {profile?.wing_label ?? "—"}
-        </Badge>
+                  ? "Companion idle"
+                  : "No companion"
+            }
+            className="flex items-center justify-center w-8 h-8 rounded-full bg-surface border border-border"
+          >
+            <span
+              className={`h-1.5 w-1.5 rounded-full animate-pulse ${
+                compStatus === "green"
+                  ? "bg-success"
+                  : compStatus === "amber"
+                    ? "bg-warning"
+                    : "bg-destructive"
+              }`}
+            />
+          </button>
+          <Badge variant="outline" id="badge-wing" className="bg-white/5 border-border text-foreground font-bold text-[10px]">
+            {profile?.wing_label ?? "—"}
+          </Badge>
+        </div>
       </div>
 
-      <div className="space-y-4 px-4 py-4">
-        {/* Runway */}
-        <Card id="card-runway-status" className="bg-[color:var(--surface-raised)] p-4">
-          <p className="text-[11px] font-semibold tracking-[0.15em] text-muted-foreground">
-            RUNWAY STATUS
-          </p>
-          {!calc ? (
-            <Skeleton className="mt-2 h-8 w-48" />
-          ) : (
-            <>
-              <h2 className="mt-2 text-[28px] font-bold tnum" style={{ color: runwayColor }}>
-                <CountUp to={calc.runwayDays} /> DAYS REMAINING
-              </h2>
-              <p className="mt-1 text-[12px] text-muted-foreground">
-                until {rupees(calc.totalAllowance * 100)} resets on {shortDate(calc.cycleEnd)}
-              </p>
-              <div className="mt-4 flex flex-wrap gap-1.5">
-                <Pill>Balance: {rupees(calc.remaining * 100)}</Pill>
-                <Pill>Daily Limit: {rupees(calc.safeDailyLimit * 100)}</Pill>
-                <Pill>Today: {rupees(calc.spentToday * 100)}</Pill>
-              </div>
-              <Progress id="progress-runway" value={calc.pct} className="mt-3 h-2" />
-              <p className="mt-2 text-[10px] text-muted-foreground flex items-center gap-1">
-                {profile?.companion_paired ? (
-                  <>
-                    <span className="h-1 w-1 rounded-full bg-[color:var(--pb-green)]" />
-                    Auto-tracking via {profile.companion_device_name ?? "companion"}
-                  </>
-                ) : (
-                  <Link to="/companion" className="text-[color:var(--pb-amber)]">
-                    ⚠ Manual tracking only — connect companion
-                  </Link>
-                )}
-              </p>
-            </>
-          )}
-        </Card>
-
-        {/* Alert */}
-        {calc && (calc.runwayDays < 7 || calc.safeDailyLimit < 150) && (
-          <Card
-            id="card-runway-alert"
-            className="border-l-4 border-l-[color:var(--pb-amber)] bg-[color:var(--surface)] p-4"
-          >
-            <p className="text-[11px] font-semibold text-[color:var(--pb-amber)] flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-[color:var(--pb-amber)]" /> RUNWAY ALERT
-            </p>
-            <p className="mt-2 text-[13px] leading-relaxed">
-              Your daily budget is {rupees(calc.safeDailyLimit * 100)}. Skip ordering delivery
-              tonight.
-            </p>
-            {bestFood && (
-              <div className="mt-4 rounded-xl border border-[color:var(--pb-green)]/30 bg-[color:var(--pb-green)]/10 p-3">
-                <div className="flex items-center gap-1.5 text-[color:var(--pb-green)]">
-                  <div className="h-2 w-2 rounded-full bg-current pulse-dot" />
-                  <p className="text-[11px] font-bold tracking-wide">RAG SUGGESTION</p>
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
+        {/* Main Column (Runway & Pools) */}
+        <div className="md:col-span-7 lg:col-span-8 space-y-8 animate-[fadeIn_0.3s_ease-out]">
+          {/* Runway Hero Section */}
+          <div id="card-runway-status" className="bg-surface rounded-2xl border border-border relative overflow-hidden">
+            {/* Elegant Top Gold Gradient Line */}
+            <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-accent-bronze via-accent-amber to-accent-copper opacity-80" />
+            <div className="p-6 md:p-8">
+              <div className="flex items-center justify-between mb-6">
+                <p className="text-[10px] font-bold tracking-[0.2em] text-zinc-500 uppercase">
+                  Runway Status
+                </p>
+                <div className="hidden md:flex items-center gap-3">
+                  <Badge variant="outline" className="bg-white/5 border-border text-foreground font-bold text-[10px] px-2.5 py-0.5">
+                    {profile?.wing_label ?? "—"}
+                  </Badge>
+                  <button
+                    onClick={() => nav({ to: "/companion" })}
+                    title="Companion Status"
+                    className="flex items-center justify-center w-6 h-6 rounded-full bg-surface-raised border border-border hover:border-white/15 transition-all"
+                  >
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full animate-pulse ${
+                        compStatus === "green" ? "bg-success" : compStatus === "amber" ? "bg-warning" : "bg-destructive"
+                      }`}
+                    />
+                  </button>
                 </div>
-                <p className="mt-1.5 text-[13px]">
-                  Hit up <span className="font-semibold text-foreground">{bestFood.venue_name}</span> for{" "}
-                  <span className="font-semibold text-foreground">{bestFood.item_name}</span>. It's
-                  only <span className="font-semibold tnum">{rupees(bestFood.price)}</span>.
-                </p>
-                <p className="mt-1 text-[11px] text-[color:var(--pb-green)] opacity-80">
-                  Fits your {rupees(calc.safeDailyLimit)}/day safe limit perfectly.
-                </p>
               </div>
-            )}
-            <button
-              onClick={() => setShowFoodSheet(true)}
-              className="mt-2 text-[12px] text-[color:var(--pb-blue)]"
-            >
-              View all campus food options →
-            </button>
-          </Card>
-        )}
-
-        {/* Active pools */}
-        <section id="section-active-pools">
-          <div className="flex items-center justify-between">
-            <h3 className="text-[11px] font-semibold tracking-[0.15em] text-muted-foreground">
-              ACTIVE POOLS
-            </h3>
-            <Link
-              to="/pool"
-              id="btn-new-pool-dash"
-              className="text-[12px] text-[color:var(--pb-purple)]"
-            >
-              + New Pool
-            </Link>
-          </div>
-          <div className="mt-2 space-y-2">
-            {(pools ?? []).filter((p) => p.status === "open" && new Date(p.expires_at).getTime() > Date.now()).length === 0 && (
-              <p className="py-4 text-center text-[12px] text-muted-foreground">
-                No active pools in your wing.
-              </p>
-            )}
-            {(pools ?? [])
-              .filter((p) => p.status === "open" && new Date(p.expires_at).getTime() > Date.now())
-              .map((p) => {
-              const total = (p.items ?? []).reduce((s: number, i: any) => s + i.estimated_price, 0);
-              const minsLeft = Math.max(
-                0,
-                Math.round((new Date(p.expires_at).getTime() - Date.now()) / 60000),
-              );
-              const perPerson = (p.items ?? []).length
-                ? Math.round(
-                    p.delivery_fee / new Set((p.items ?? []).map((i: any) => i.added_by_name)).size,
-                  )
-                : 0;
-              return (
-                <Link key={p.id} to="/pool/$id" params={{ id: p.id }}>
-                  <Card className="p-3 reactbits-card z-10">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium capitalize">
-                          {p.platform.replace("_", " ")}
-                        </span>
-                        <Badge variant="outline" className="text-muted-foreground">
-                          {p.wing_label}
-                        </Badge>
-                      </div>
-                      <span
-                        className={`text-[12px] font-medium text-[color:var(--pb-purple)] tnum ${minsLeft < 5 ? "countdown-pulse" : ""}`}
-                      >
-                        {minsLeft}m left
-                      </span>
-                    </div>
-                    <p className="mt-1 text-[12px] text-muted-foreground">
-                      Host: {p.created_by_name || "—"} • Cart: {rupees(total)}/
-                      {rupees(p.min_cart_value)} min
-                    </p>
-                    <p className="mt-1 text-[12px] text-[color:var(--pb-green)]">
-                      {(p.items ?? []).length} items • Split delivery: {rupees(perPerson)}/person
-                    </p>
-                  </Card>
-                </Link>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* Collisions */}
-        {collisions.length > 0 && (
-          <section id="section-collisions">
-            <h3 className="text-[11px] font-semibold tracking-[0.15em] text-muted-foreground">
-              UPCOMING COLLISIONS
-            </h3>
-            <div className="mt-2 space-y-2">
-              {collisions.length > 1 && (
-                <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 text-xs text-red-600 dark:text-red-400 mb-2">
-                  <p className="font-bold uppercase tracking-wider text-[9px] text-red-500 flex items-center gap-1">
-                    <span>⚠️ Cumulative Budget Alert</span>
+              
+              {!calc ? (
+                <Skeleton className="mt-2 h-20 w-full max-w-xs bg-white/5" />
+              ) : (
+                <>
+                  <div className="flex items-baseline gap-2.5">
+                    <h2 className="text-[56px] md:text-[76px] font-black tracking-tighter text-foreground tnum leading-none" style={{ color: runwayColor }}>
+                      <CountUp to={calc.runwayDays} />
+                    </h2>
+                    <span className="text-[16px] md:text-[20px] font-bold tracking-widest text-zinc-500 uppercase">Days</span>
+                  </div>
+                  <p className="mt-3 text-xs md:text-sm text-zinc-400 font-semibold leading-relaxed">
+                    Remaining allowance until <span className="text-foreground font-bold">{rupees(calc.totalAllowance * 100)}</span> resets on <span className="text-foreground font-bold">{shortDate(calc.cycleEnd)}</span>
                   </p>
-                  <p className="mt-0.5 font-medium leading-relaxed">
-                    If all {collisions.length} subscriptions debit this week, your daily allowance survival threshold will drop to <strong className="text-foreground font-black text-sm">{rupees(cumulativeCollisionLimit * 100)}</strong>/day.
+                  
+                  <div className="mt-8 grid grid-cols-3 gap-3 md:gap-6 border-t border-border pt-6">
+                    <div className="flex flex-col gap-1">
+                      <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Balance</p>
+                      <p className="text-[18px] md:text-[22px] font-black text-foreground tnum">{rupees(calc.remaining * 100)}</p>
+                    </div>
+                    <div className="flex flex-col gap-1 border-l border-border pl-4 md:pl-6">
+                      <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Safe Limit</p>
+                      <p className="text-[18px] md:text-[22px] font-black text-foreground tnum">{rupees(calc.safeDailyLimit * 100)}</p>
+                    </div>
+                    <div className="flex flex-col gap-1 border-l border-border pl-4 md:pl-6">
+                      <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Today</p>
+                      <p className="text-[18px] md:text-[22px] font-black text-foreground tnum">{rupees(calc.spentToday * 100)}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-8">
+                    <Progress id="progress-runway" value={calc.pct} className="h-1 bg-surface-raised" />
+                    <div className="mt-3 text-[11px] text-muted-foreground flex items-center justify-between font-medium">
+                      {profile?.companion_paired ? (
+                        <span className="flex items-center gap-1.5 text-zinc-400">
+                          <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+                          Auto-tracking active via {profile.companion_device_name ?? "companion"}
+                        </span>
+                      ) : (
+                        <Link to="/companion" className="text-warning flex items-center gap-1.5 hover:underline">
+                          <span className="w-1.5 h-1.5 bg-warning rounded-full"/> Manual tracking mode
+                        </Link>
+                      )}
+                      <span className="font-bold text-foreground">{calc.pct}% Spent</span>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Active Pools */}
+          <section id="section-active-pools" className="space-y-4 pt-2">
+            <div className="flex items-center justify-between px-1">
+              <h3 className="text-[10px] font-bold tracking-[0.25em] text-zinc-500 uppercase">
+                Active Wing Pools
+              </h3>
+              <Link
+                to="/pool"
+                id="btn-new-pool-dash"
+                className="text-[10px] font-bold text-foreground bg-surface-raised border border-border hover:bg-surface-interactive transition-all px-3.5 py-1.5 rounded-full uppercase tracking-wider cursor-pointer"
+              >
+                + New Pool
+              </Link>
+            </div>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {(pools ?? []).filter((p) => p.status === "open" && new Date(p.expires_at).getTime() > Date.now()).length === 0 && (
+                <div className="col-span-full py-10 text-center border border-dashed border-border rounded-2xl bg-surface-raised/40">
+                  <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">No active pools in your wing.</p>
+                  <p className="text-[11px] text-zinc-500 mt-1">Start one now to split quick commerce delivery fees.</p>
+                </div>
+              )}
+              {(pools ?? [])
+                .filter((p) => p.status === "open" && new Date(p.expires_at).getTime() > Date.now())
+                .map((p) => {
+                const total = (p.items ?? []).reduce((s: number, i: any) => s + i.estimated_price, 0);
+                const minsLeft = Math.max(
+                  0,
+                  Math.round((new Date(p.expires_at).getTime() - Date.now()) / 60000),
+                );
+                const perPerson = (p.items ?? []).length
+                  ? Math.round(
+                      p.delivery_fee / new Set((p.items ?? []).map((i: any) => i.added_by_name)).size,
+                    )
+                  : 0;
+                return (
+                  <Link key={p.id} to="/pool/$id" params={{ id: p.id }} className="group">
+                    <Card className="bg-surface relative overflow-hidden border border-border p-5 transition-all duration-300 hover:border-white/15 hover:bg-surface-raised h-full flex flex-col justify-between hover:shadow-lg hover:shadow-black/40">
+                      <div>
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-black uppercase tracking-wider text-foreground">
+                              {p.platform.replace("_", " ")}
+                            </span>
+                            <Badge variant="outline" className="text-muted-foreground bg-white/5 border-border text-[9px] font-bold">
+                              {p.wing_label}
+                            </Badge>
+                          </div>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border border-border bg-background tnum ${minsLeft < 5 ? "text-destructive animate-pulse border-destructive/20 bg-destructive/5" : "text-foreground"}`}
+                          >
+                            {minsLeft}m left
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Host: <span className="font-semibold text-foreground capitalize">{p.created_by_name || "—"}</span>
+                        </p>
+                      </div>
+                      
+                      <div className="mt-6 pt-4 border-t border-border flex items-center justify-between">
+                        <div className="flex flex-col">
+                          <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider">Cart</span>
+                          <span className="text-xs font-black text-foreground">{rupees(total)} <span className="text-zinc-500 font-normal text-[10px]">/ {rupees(p.min_cart_value)} min</span></span>
+                        </div>
+                        <div className="flex flex-col text-right">
+                          <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider">Split Est.</span>
+                          <span className="text-xs font-black text-success">{rupees(perPerson)} <span className="text-zinc-500 font-normal text-[10px]">/ person</span></span>
+                        </div>
+                      </div>
+                    </Card>
+                  </Link>
+                );
+              })}
+            </div>
+          </section>
+        </div>
+
+        {/* Sidebar Column (Alerts, Collisions, Recent) */}
+        <div className="md:col-span-5 lg:col-span-4 space-y-6">
+          
+          {/* Alert Widget */}
+          {calc && (calc.runwayDays < 7 || calc.safeDailyLimit < 150) && (
+            <Card
+              id="card-runway-alert"
+              className="border-destructive/30 bg-destructive/5 p-5 relative overflow-hidden"
+            >
+              <div className="absolute top-0 left-0 w-[3px] h-full bg-destructive" />
+              <div className="flex items-center gap-2 mb-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-destructive animate-pulse" />
+                <p className="text-[10px] font-bold text-destructive tracking-widest uppercase">Runway Warning</p>
+              </div>
+              <p className="text-xs font-medium text-foreground leading-relaxed">
+                Daily limit is <span className="text-destructive font-bold">{rupees(calc.safeDailyLimit * 100)}</span>. Skip delivery orders tonight.
+              </p>
+              {bestFood && (
+                <div className="mt-4 rounded-lg border border-success/20 bg-success/5 p-3.5 space-y-1">
+                  <p className="text-[9px] font-bold tracking-widest text-success uppercase">Dine In Option</p>
+                  <p className="text-xs text-foreground leading-relaxed">
+                    <span className="font-bold text-foreground">{bestFood.venue_name}</span> has{" "}
+                    <span className="font-semibold text-foreground">{bestFood.item_name}</span> for{" "}
+                    <strong className="text-success">{rupees(bestFood.price)}</strong>.
                   </p>
                 </div>
               )}
-              {collisions.map((c) => (
-                <Card
-                  key={c.id}
-                  className={`p-3 reactbits-card z-10 ${c.critical ? "border-l-4 border-l-[color:var(--pb-red)]" : ""}`}
-                >
-                  <div className="flex items-center justify-between">
-                    <p className="text-[13px]">
-                      {c.service_name ?? c.name} • {shortDate(new Date(c.next_debit_date))}
-                      {c.detected_from === "auto_detected" && (
-                        <Badge className="ml-2 bg-[color:var(--pb-purple)]/20 text-[color:var(--pb-purple)] text-[10px]">
-                          Auto-detected
-                        </Badge>
-                      )}
-                    </p>
-                    <p className="text-[13px] font-semibold text-[color:var(--pb-red)] tnum">
-                      −{rupees(c.amount)}
-                    </p>
-                  </div>
-                  <p className="mt-1 text-[12px] text-muted-foreground">
-                    Daily food budget drops to {rupees(c.newLimit * 100)}
-                    {c.critical && (
-                      <span className="ml-2 text-[color:var(--pb-red)] font-medium">
-                        ⚠ CRITICAL
-                      </span>
-                    )}
-                  </p>
-                </Card>
-              ))}
-            </div>
-          </section>
-        )}
+              <button
+                onClick={() => setShowFoodSheet(true)}
+                className="mt-3 text-[11px] font-bold text-foreground hover:underline uppercase tracking-wider cursor-pointer"
+              >
+                All Campus Foods →
+              </button>
+            </Card>
+          )}
 
-        {/* Recent */}
-        <section id="section-recent">
-          <div className="flex items-center justify-between">
-            <h3 className="text-[11px] font-semibold tracking-[0.15em] text-muted-foreground">
-              RECENT
-            </h3>
-            <Link
-              to="/transactions"
-              id="link-see-all-txns"
-              className="text-[12px] text-[color:var(--pb-blue)]"
-            >
-              See all →
-            </Link>
-          </div>
-          <div className="mt-2 space-y-1.5">
-            {!txns ? (
-              <Skeleton className="h-32 w-full" />
-            ) : recent.length === 0 ? (
-              <p className="py-4 text-center text-[12px] text-muted-foreground">
-                No transactions yet.
-              </p>
-            ) : (
-              recent.map((t, i) => (
-                <div
-                  key={t.id}
-                  className="flex items-center justify-between rounded-xl reactbits-card p-3 mb-2 z-10"
-                  style={{ animation: `pb-stagger 300ms ${i * 50}ms backwards ease-out` }}
-                >
-                  <div className="flex-1 min-w-0">
-                    <p
-                      className={`text-[13px] truncate ${t.is_mapped ? "" : "italic text-[color:var(--pb-amber)]"}`}
-                    >
-                      {t.mapped_merchant_name ?? t.raw_merchant_string}
+          {/* Collisions */}
+          {collisions.length > 0 && (
+            <section id="section-collisions" className="space-y-3">
+              <h3 className="text-[10px] font-bold tracking-[0.25em] text-zinc-500 uppercase px-1">
+                Budget Collisions
+              </h3>
+              <div className="space-y-3">
+                {collisions.length > 1 && (
+                  <div className="bg-destructive/5 border border-destructive/20 rounded-xl p-4 text-[11px]">
+                    <p className="font-bold tracking-wider text-[9px] text-destructive uppercase mb-1">
+                      Cumulative Debit Impact
                     </p>
-                    <div className="mt-0.5 flex gap-1">
-                      {t.category && (
-                        <Badge
-                          variant="outline"
-                          className="text-[9px] py-0 px-1.5 text-muted-foreground"
-                        >
-                          {t.category}
-                        </Badge>
-                      )}
-                      {t.source !== "manual" && (
-                        <Badge className="text-[9px] py-0 px-1.5 bg-[color:var(--pb-purple)]/20 text-[color:var(--pb-purple)]">
-                          📲 {t.source.split("_")[1]}
-                        </Badge>
-                      )}
-                      {!t.is_mapped && (
-                        <button
-                          id={`btn-identify-${t.id}`}
-                          onClick={() => setIdentifying(t)}
-                          className="rounded bg-[color:var(--pb-amber)]/20 px-1.5 py-0 text-[9px] text-[color:var(--pb-amber)]"
-                        >
-                          Identify?
-                        </button>
-                      )}
+                    <p className="font-medium text-zinc-400 leading-relaxed">
+                      If all {collisions.length} debits hit this week, your safe limit drops to <strong className="text-foreground">{rupees(cumulativeCollisionLimit * 100)}</strong>/day.
+                    </p>
+                  </div>
+                )}
+                {collisions.map((c) => (
+                  <Card
+                    key={c.id}
+                    className={`bg-surface border-border p-4 relative overflow-hidden ${c.critical ? "border-l-2 border-l-destructive" : ""}`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <p className="text-xs font-bold text-foreground flex items-center">
+                        {c.service_name ?? c.name}
+                        {c.detected_from === "auto_detected" && (
+                          <Badge className="ml-2 bg-white/5 border border-border text-[9px] font-bold px-1.5 py-0">
+                            Auto
+                          </Badge>
+                        )}
+                      </p>
+                      <p className="text-xs font-bold text-destructive tnum">
+                        −{rupees(c.amount)}
+                      </p>
                     </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[13px] font-semibold tnum">{rupees(t.amount)}</p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {relativeTime(t.created_at)}
-                    </p>
-                  </div>
+                    <div className="flex items-center justify-between text-[11px]">
+                      <p className="text-zinc-500 font-semibold">{shortDate(new Date(c.next_debit_date))}</p>
+                      <p className="text-zinc-500">
+                        Limit: <span className="text-foreground font-bold">{rupees(c.newLimit * 100)}</span>
+                        {c.critical && (
+                          <span className="ml-1.5 text-destructive font-bold">⚠</span>
+                        )}
+                      </p>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Recent */}
+          <section id="section-recent" className="space-y-3">
+            <div className="flex items-center justify-between px-1">
+              <h3 className="text-[10px] font-bold tracking-[0.25em] text-zinc-500 uppercase">
+                Recent Ledger
+              </h3>
+              <Link
+                to="/transactions"
+                id="link-see-all-txns"
+                className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+              >
+                See all →
+              </Link>
+            </div>
+            <Card className="bg-surface border-border p-1 overflow-hidden">
+              {!txns ? (
+                <div className="p-4"><Skeleton className="h-32 w-full bg-white/5 border-none" /></div>
+              ) : recent.length === 0 ? (
+                <p className="py-8 text-center text-xs text-zinc-500 font-semibold uppercase tracking-wider">
+                  No transactions logged
+                </p>
+              ) : (
+                <div className="divide-y divide-border">
+                  {recent.map((t, i) => (
+                    <div
+                      key={t.id}
+                      className="flex items-center justify-between p-3.5 hover:bg-surface-raised transition-colors duration-150"
+                      style={{ animation: `pb-stagger 300ms ${i * 40}ms backwards ease-out` }}
+                    >
+                      <div className="flex-1 min-w-0 pr-4">
+                        <p
+                          className={`text-xs font-bold truncate ${t.is_mapped ? "text-foreground" : "text-zinc-400 italic"}`}
+                        >
+                          {t.mapped_merchant_name ?? t.raw_merchant_string}
+                        </p>
+                        <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                          {t.category && (
+                            <span className="text-[9px] font-black tracking-widest text-zinc-500 uppercase">
+                              {t.category}
+                            </span>
+                          )}
+                          {t.source !== "manual" && (
+                            <>
+                              <span className="text-[9px] text-zinc-600 font-bold">•</span>
+                              <span className="text-[9px] font-black text-zinc-500 uppercase tracking-wider">
+                                {t.source.split("_")[1]}
+                              </span>
+                            </>
+                          )}
+                          {!t.is_mapped && (
+                            <button
+                              id={`btn-identify-${t.id}`}
+                              onClick={() => setIdentifying(t)}
+                              className="ml-1 rounded-full px-2 py-0.5 text-[9px] font-bold bg-white/5 border border-border hover:bg-white/10 hover:border-white/15 transition-all cursor-pointer uppercase text-foreground"
+                            >
+                              Identify?
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-xs font-black text-foreground tnum">{rupees(t.amount)}</p>
+                        <p className="text-[10px] text-zinc-500 font-semibold mt-0.5">
+                          {relativeTime(t.created_at)}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))
-            )}
-          </div>
-          <Button
-            id="btn-add-transaction"
-            variant="outline"
-            className="mt-4 w-full reactbits-btn"
-            onClick={() => setAdding(true)}
-          >
-            Log Transaction
-          </Button>
-        </section>
+              )}
+              <div className="p-3">
+                <Button
+                  id="btn-add-transaction"
+                  variant="secondary"
+                  className="w-full text-[10px] uppercase tracking-wider font-bold h-9 bg-surface-raised hover:bg-surface-interactive border-border"
+                  onClick={() => setAdding(true)}
+                >
+                  Log Transaction
+                </Button>
+              </div>
+            </Card>
+          </section>
+
+        </div>
       </div>
 
       <style>{`@keyframes pb-stagger { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }`}</style>
@@ -643,12 +703,12 @@ function Dashboard() {
                     return (
                       <div
                         key={it.id}
-                        className="flex items-center justify-between rounded bg-[color:var(--surface)] p-2"
+                        className="flex items-center justify-between rounded bg-surface p-2"
                       >
                         <div>
                           <p className="text-sm">{it.item_name}</p>
                           <p
-                            className={`text-[11px] ${open ? "text-[color:var(--pb-green)]" : "text-muted-foreground"}`}
+                            className={`text-[11px] ${open ? "text-success" : "text-muted-foreground"}`}
                           >
                             {open ? "Open Now" : `Opens at ${fmtTime(it.available_from)}`}
                           </p>
@@ -680,24 +740,24 @@ function Dashboard() {
             <DialogTitle>Hey, it's been a while since your last meal.</DialogTitle>
           </DialogHeader>
           <p className="text-[13px] text-muted-foreground">It's exam season. Quick check:</p>
-          <p className="text-[12px] text-[color:var(--pb-amber)]">
+          <p className="text-[12px] text-warning">
             Last food transaction was {Math.round(foodGapHours)} hours ago
           </p>
           <div className="mt-3 space-y-2">
             <button
               id="btn-checkin-ate"
               onClick={handleCheckInAte}
-              className="w-full rounded-md border-l-4 border-l-[color:var(--pb-green)] bg-[color:var(--surface)] p-3 text-left text-[13px]"
+              className="w-full rounded-md border-l-4 border-l-success bg-surface p-3 text-left text-[13px]"
             >
-              ✓ I ate at mess / cooked / ordered in
+              I ate at mess / cooked / ordered in
             </button>
-            <div className="rounded-md border-l-4 border-l-[color:var(--pb-red)] bg-[color:var(--surface)] p-3">
+            <div className="rounded-md border-l-4 border-l-destructive bg-surface p-3">
               <button
                 id="btn-checkin-skipped"
                 onClick={() => setCheckInExpanded(true)}
                 className="w-full text-left text-[13px]"
               >
-                ✗ Skipped / couldn't eat
+                Skipped / couldn't eat
               </button>
               {checkInExpanded && (
                 <div className="mt-2 space-y-2">
@@ -710,7 +770,7 @@ function Dashboard() {
                   />
                   <Button
                     variant="outline"
-                    className="w-full border-[color:var(--pb-red)] text-[color:var(--pb-red)]"
+                    className="w-full border-destructive text-destructive"
                     onClick={handleCheckInSkipped}
                   >
                     Submit
@@ -721,13 +781,14 @@ function Dashboard() {
           </div>
         </DialogContent>
       </Dialog>
+      </div>
     </AppShell>
   );
 }
 
 function Pill({ children }: { children: React.ReactNode }) {
   return (
-    <span className="rounded-full bg-[color:var(--surface)] px-2.5 py-1 text-[11px] tnum">
+    <span className="rounded-full bg-surface px-2.5 py-1 text-[11px] tnum">
       {children}
     </span>
   );
@@ -765,7 +826,7 @@ function IdentifyForm({ txn, onClose }: { txn: Txn; onClose: () => void }) {
       <DialogHeader>
         <DialogTitle>What is this shop?</DialogTitle>
       </DialogHeader>
-      <code className="block rounded bg-[color:var(--surface-raised)] px-3 py-1.5 text-xs">
+      <code className="block rounded bg-surface-raised px-3 py-1.5 text-xs">
         {txn.raw_merchant_string}
       </code>
       <div>
@@ -783,7 +844,7 @@ function IdentifyForm({ txn, onClose }: { txn: Txn; onClose: () => void }) {
           <button
             key={c.v}
             onClick={() => setCat(c.v)}
-            className={`rounded-md border p-3 text-center text-sm ${cat === c.v ? "border-[color:var(--pb-blue)] bg-[color:var(--pb-blue)]/10" : "border-border bg-[color:var(--surface)]"}`}
+            className={`rounded-md border p-3 text-center text-sm ${cat === c.v ? "border-primary bg-primary/10" : "border-border bg-surface"}`}
           >
             {c.l}
           </button>
@@ -794,7 +855,7 @@ function IdentifyForm({ txn, onClose }: { txn: Txn; onClose: () => void }) {
           id="btn-save-merchant"
           disabled={busy}
           onClick={save}
-          className="w-full bg-[color:var(--pb-green)] text-white hover:bg-[color:var(--pb-green)]/90"
+          className="w-full bg-success text-white hover:bg-success/90"
         >
           Save for everyone on campus
         </Button>
@@ -837,7 +898,7 @@ function AddTxnForm({ onClose }: { onClose: () => void }) {
       <DialogHeader>
         <DialogTitle>Log a transaction</DialogTitle>
       </DialogHeader>
-      <div className="flex items-center rounded-md border border-input bg-[color:var(--surface)]">
+      <div className="flex items-center rounded-md border border-input bg-surface">
         <span className="px-3 text-sm text-muted-foreground">₹</span>
         <input
           id="input-txn-amount"
@@ -859,7 +920,7 @@ function AddTxnForm({ onClose }: { onClose: () => void }) {
           <button
             key={c.v}
             onClick={() => setCat(c.v)}
-            className={`rounded-md border p-3 text-center text-sm ${cat === c.v ? "border-[color:var(--pb-blue)] bg-[color:var(--pb-blue)]/10" : "border-border bg-[color:var(--surface)]"}`}
+            className={`rounded-md border p-3 text-center text-sm ${cat === c.v ? "border-primary bg-primary/10" : "border-border bg-surface"}`}
           >
             {c.l}
           </button>

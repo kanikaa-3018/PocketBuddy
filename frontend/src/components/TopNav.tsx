@@ -14,60 +14,81 @@ export function TopNav() {
   const { user } = useAuth();
 
   return (
-    <nav className="sticky top-0 z-50 w-full border-b border-white/10 bg-[color:var(--surface)]/80 backdrop-blur-md supports-[backdrop-filter]:bg-[color:var(--surface)]/60 shadow-sm transition-all">
-      <div className="flex h-16 items-center px-4 md:px-6 w-full max-w-5xl mx-auto">
-        <Link to="/dashboard" className="flex items-center gap-2 mr-6 transition-transform hover:scale-105">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[color:var(--pb-purple)] to-[color:var(--pb-blue)] flex items-center justify-center shadow-lg shadow-[color:var(--pb-purple)]/20">
-            <span className="text-white font-bold text-lg leading-none tracking-tighter">P</span>
-          </div>
-          <span className="font-bold text-lg tracking-tight hidden sm:block bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
-            PocketBuddy
-          </span>
-        </Link>
-        <div className="flex flex-1 items-center space-x-1 sm:space-x-2">
-          {tabs.map((t) => {
-            const active = pathname === t.to || pathname.startsWith(t.to + "/");
-            const Icon = t.icon;
-            return (
-              <Link
-                key={t.to}
-                to={t.to}
-                id={t.id}
-                className={`group flex items-center justify-center gap-2 rounded-full px-3 py-2 text-sm font-medium transition-all duration-300 ease-out hover:bg-white/5 active:scale-95 ${
-                  active
-                    ? "bg-[color:var(--pb-purple)]/10 text-[color:var(--pb-purple)] shadow-[0_0_15px_-3px_var(--pb-purple)]"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <Icon
-                  className={`h-4 w-4 transition-transform duration-300 ${
-                    active ? "scale-110" : "group-hover:scale-110"
+    <div className="sticky top-4 z-50 w-full px-4 md:px-8 pointer-events-none">
+      <nav className="flex h-14 items-center justify-between rounded-full border border-border bg-surface/75 px-4 backdrop-blur-xl shadow-[0_12px_40px_rgba(0,0,0,0.6)] pointer-events-auto">
+        <div className="flex items-center gap-6">
+          <Link to="/dashboard" className="flex items-center gap-2 transition-opacity hover:opacity-90">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-accent-bronze to-accent-amber flex items-center justify-center shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]">
+              <span className="text-[#0A0A0A] font-black text-sm leading-none tracking-tighter">P</span>
+            </div>
+            <span className="font-black text-sm tracking-tight hidden sm:block text-foreground uppercase">
+              PocketBuddy
+            </span>
+          </Link>
+          
+          <div className="hidden md:flex items-center space-x-1">
+            {tabs.map((t) => {
+              const active = pathname === t.to || pathname.startsWith(t.to + "/");
+              return (
+                <Link
+                  key={t.to}
+                  to={t.to}
+                  id={t.id}
+                  className={`relative flex items-center justify-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-wider transition-all duration-150 ${
+                    active
+                      ? "text-foreground bg-white/5 border border-border shadow-inner"
+                      : "text-muted-foreground hover:text-foreground hover:bg-white/5"
                   }`}
-                />
-                <span className="hidden sm:block">{t.label}</span>
-              </Link>
-            );
-          })}
+                >
+                  <span>{t.label}</span>
+                </Link>
+              );
+            })}
+          </div>
         </div>
         
-        {user && (
-          <div className="ml-auto flex items-center space-x-3">
-            <Link 
-              to="/dashboard" 
-              className="flex items-center justify-center h-8 px-3 rounded-full bg-[color:var(--pb-purple)] text-white text-xs font-semibold tracking-wide hover:bg-[color:var(--pb-purple)]/90 transition-colors shadow-md shadow-[color:var(--pb-purple)]/20 active:scale-95"
-            >
-              + Log Txn
-            </Link>
-            <Link to="/settings" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[color:var(--pb-blue)]/80 to-[color:var(--pb-purple)]/80 flex items-center justify-center border border-white/10 shadow-inner">
-                <span className="text-xs text-white font-medium">
-                  {user.email ? user.email.charAt(0).toUpperCase() : "U"}
-                </span>
-              </div>
-            </Link>
+        <div className="flex items-center gap-3">
+          {/* Mobile tabs */}
+          <div className="flex md:hidden items-center space-x-1 mr-2">
+            {tabs.map((t) => {
+              const active = pathname === t.to || pathname.startsWith(t.to + "/");
+              const Icon = t.icon;
+              return (
+                <Link
+                  key={t.to}
+                  to={t.to}
+                  id={t.id}
+                  className={`flex items-center justify-center p-2 rounded-full transition-all duration-150 ${
+                    active
+                      ? "text-foreground bg-white/5 border border-border"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                </Link>
+              );
+            })}
           </div>
-        )}
-      </div>
-    </nav>
+
+          {user && (
+            <>
+              <Link 
+                to="/dashboard" 
+                className="hidden sm:flex items-center justify-center h-8 px-4 rounded-full bg-foreground text-background text-xs font-black uppercase tracking-wider transition-all hover:scale-105 active:scale-95 shadow-md"
+              >
+                Log Txn
+              </Link>
+              <Link to="/settings" className="flex items-center gap-2 hover:opacity-90 transition-opacity">
+                <div className="w-8 h-8 rounded-full bg-surface-raised flex items-center justify-center border border-border shadow-inner">
+                  <span className="text-xs text-foreground font-bold">
+                    {user.email ? user.email.charAt(0).toUpperCase() : "U"}
+                  </span>
+                </div>
+              </Link>
+            </>
+          )}
+        </div>
+      </nav>
+    </div>
   );
 }

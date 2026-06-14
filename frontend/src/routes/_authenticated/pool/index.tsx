@@ -80,18 +80,18 @@ function PoolList() {
 
   return (
     <AppShell>
-      <div className="sticky top-0 z-30 flex h-14 items-center border-b border-border bg-[color:var(--surface)] px-4">
-        <h1 className="text-[14px] font-semibold tracking-[0.15em]">CART POOLS</h1>
+      <div className="sticky top-0 z-30 flex h-14 items-center border-b border-border bg-[#0A0A0A]/85 backdrop-blur-md">
+        <h1 className="text-[12px] font-black tracking-[0.25em] text-foreground uppercase">Cart Pools</h1>
       </div>
-      <div className="space-y-4 px-4 py-4">
+      <div className="space-y-6 py-6">
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetTrigger asChild>
             <button
               id="card-create-pool"
-              className="w-full rounded-lg border border-dashed border-[color:var(--pb-purple)]/50 bg-[color:var(--surface)] p-5 text-center transition-all hover:bg-[color:var(--surface-raised)] hover:border-[color:var(--pb-purple)] active:scale-95"
+              className="w-full rounded-xl border border-dashed border-accent-bronze/30 hover:border-accent-bronze/60 bg-surface/50 p-6 text-center transition-all duration-200 hover:bg-surface-raised active:scale-[0.98] cursor-pointer shadow-sm hover:shadow-lg hover:shadow-black/20"
             >
-              <p className="text-[14px] font-semibold text-[color:var(--pb-purple)]">
-                + Start a new cart pool
+              <p className="text-xs font-black uppercase tracking-widest text-accent-bronze hover:text-accent-amber transition-colors">
+                + Start a New Cart Pool
               </p>
             </button>
           </SheetTrigger>
@@ -109,13 +109,15 @@ function PoolList() {
           </SheetContent>
         </Sheet>
 
-        <section>
-          <h3 className="text-[11px] font-semibold tracking-[0.15em] text-muted-foreground">
-            ACTIVE POOLS
+        <section className="space-y-3">
+          <h3 className="text-[10px] font-bold tracking-[0.25em] text-zinc-500 uppercase px-1">
+            Active Pools
           </h3>
-          <div className="mt-2 space-y-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {active.length === 0 && (
-              <p className="py-4 text-center text-[12px] text-muted-foreground">No active pools.</p>
+              <div className="col-span-full py-10 text-center border border-dashed border-border rounded-xl bg-surface-raised/40">
+                <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">No active pools.</p>
+              </div>
             )}
             {active.map((p) => (
               <PoolCard key={p.id} pool={p} />
@@ -124,11 +126,12 @@ function PoolList() {
         </section>
 
         {past.length > 0 && (
-          <details>
-            <summary className="cursor-pointer text-[11px] font-semibold tracking-[0.15em] text-muted-foreground">
-              PAST POOLS ({past.length})
+          <details className="group pt-2">
+            <summary className="cursor-pointer text-[10px] font-bold tracking-[0.25em] text-zinc-500 uppercase list-none flex items-center gap-1 hover:text-foreground transition-colors select-none">
+              <span className="transition-transform group-open:rotate-90">▶</span>
+              Past Pools ({past.length})
             </summary>
-            <div className="mt-2 space-y-2 opacity-50">
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-4 opacity-65 group-open:animate-[fadeIn_0.2s_ease-out]">
               {past.map((p) => (
                 <PoolCard key={p.id} pool={p} />
               ))}
@@ -155,19 +158,25 @@ function PoolCard({ pool }: { pool: Pool }) {
   };
 
   const active = minsLeft > 0 && pool.status === "open";
+  
+  // Platform color mapping for left border highlight
+  const platformBorderColor = 
+    pool.platform === "zepto" 
+      ? "border-l-[#5E17EB]" 
+      : pool.platform === "blinkit" 
+        ? "border-l-[#F7EC13]" 
+        : pool.platform === "swiggy_instamart" 
+          ? "border-l-[#FC8019]" 
+          : "border-l-primary";
 
   return (
     <Link to="/pool/$id" params={{ id: pool.id }} className="block no-underline">
-      <Card className={`relative overflow-hidden p-4 border transition-all hover:scale-[1.01] active:scale-[0.99] shadow-sm hover:shadow-md ${
-        active
-          ? `bg-gradient-to-r ${theme.gradient} text-white border-transparent`
-          : "bg-[color:var(--surface)] text-foreground border-border"
-      }`}>
+      <Card className={`relative overflow-hidden p-5 border border-border border-l-4 ${platformBorderColor} bg-surface transition-all duration-200 hover:bg-surface-raised hover:border-r-white/10 hover:border-t-white/10 hover:border-b-white/10 hover:shadow-lg hover:shadow-black/50 active:scale-[0.99]`}>
         {active && (
-          <div className="absolute right-2 top-2">
-            <span className="inline-flex items-center gap-1 bg-white/20 backdrop-blur-md px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider text-white">
-              <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
-              Open & Join
+          <div className="absolute right-3 top-3">
+            <span className="inline-flex items-center gap-1.5 bg-white/5 border border-border px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider text-foreground">
+              <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+              Open
             </span>
           </div>
         )}
@@ -175,39 +184,39 @@ function PoolCard({ pool }: { pool: Pool }) {
         <div className="flex flex-col justify-between h-full">
           <div>
             <div className="flex items-center gap-2">
-              <span className={`text-lg font-black uppercase tracking-tight ${active ? "text-white" : "text-foreground"}`}>
+              <span className="text-sm font-black uppercase tracking-wider text-foreground">
                 {theme.name} Pool
               </span>
-              <Badge variant="outline" className={`text-[10px] font-bold ${active ? "border-white/40 text-white bg-white/10" : "border-border text-muted-foreground"}`}>
+              <Badge variant="outline" className="text-[9px] font-bold border-border bg-white/5 text-muted-foreground">
                 {pool.wing_label}
               </Badge>
             </div>
-            <p className={`text-xs mt-1 ${active ? "text-white/80" : "text-muted-foreground"}`}>
-              Host: <span className="font-bold capitalize">{pool.created_by_name || "—"}</span>
+            <p className="text-xs text-muted-foreground mt-1">
+              Host: <span className="font-semibold text-foreground capitalize">{pool.created_by_name || "—"}</span>
             </p>
           </div>
 
-          <div className="mt-4 flex justify-between items-end border-t pt-2.5 border-current/10">
+          <div className="mt-5 flex justify-between items-end border-t border-border pt-3">
             <div>
-              <p className={`text-[10px] uppercase tracking-wider ${active ? "text-white/70" : "text-muted-foreground/80"}`}>
+              <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider">
                 Min Cart Target
               </p>
-              <p className={`text-sm font-black tnum ${active ? "text-white" : "text-foreground"}`}>
+              <p className="text-sm font-black text-foreground tnum mt-0.5">
                 {rupees(pool.min_cart_value)}
               </p>
             </div>
             <div className="text-right">
               {active ? (
-                <span className="text-xs font-bold bg-black/25 px-2.5 py-1 rounded-full tnum">
+                <span className="text-[10px] font-bold bg-white/5 border border-border px-3 py-1 rounded-full text-foreground tnum">
                   ⚡ {minsLeft}m left
                 </span>
               ) : (
-                <Badge className={`font-bold capitalize ${
+                <Badge className={`text-[9px] font-bold uppercase tracking-wider ${
                   pool.status === "completed"
-                    ? "bg-green-600 text-white"
+                    ? "bg-green-600/15 border border-green-600/30 text-green-500"
                     : pool.status === "cancelled"
-                    ? "bg-red-600 text-white"
-                    : "bg-muted text-muted-foreground"
+                    ? "bg-red-600/15 border border-red-600/30 text-red-500"
+                    : "bg-surface-raised text-muted-foreground"
                 }`}>
                   {pool.status}
                 </Badge>
@@ -281,7 +290,7 @@ function CreatePoolForm({
             <button
               key={p.v}
               onClick={() => setPlatform(p.v)}
-              className={`rounded-md border p-3 text-center text-sm ${platform === p.v ? "border-[color:var(--pb-purple)] bg-[color:var(--pb-purple)]/10" : "border-border bg-[color:var(--surface)]"}`}
+              className={`rounded-md border p-3 text-center text-sm ${platform === p.v ? "border-primary bg-primary/10" : "border-border bg-surface"}`}
             >
               {p.l}
             </button>
@@ -289,7 +298,7 @@ function CreatePoolForm({
         </div>
         <div>
           <label className="text-[12px] text-muted-foreground">Min cart value</label>
-          <div className="mt-1 flex items-center rounded-md border border-input bg-[color:var(--surface)]">
+          <div className="mt-1 flex items-center rounded-md border border-input bg-surface">
             <span className="px-3 text-sm text-muted-foreground">₹</span>
             <input
               id="input-pool-min"
@@ -302,7 +311,7 @@ function CreatePoolForm({
         </div>
         <div>
           <label className="text-[12px] text-muted-foreground">Delivery fee</label>
-          <div className="mt-1 flex items-center rounded-md border border-input bg-[color:var(--surface)]">
+          <div className="mt-1 flex items-center rounded-md border border-input bg-surface">
             <span className="px-3 text-sm text-muted-foreground">₹</span>
             <input
               id="input-pool-fee"
@@ -331,7 +340,7 @@ function CreatePoolForm({
           id="btn-create-pool"
           onClick={create}
           disabled={busy}
-          className="w-full bg-[color:var(--pb-purple)] text-white hover:bg-[color:var(--pb-purple)]/90"
+          className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
         >
           Create & Share
         </Button>

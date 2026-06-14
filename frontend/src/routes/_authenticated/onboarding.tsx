@@ -174,47 +174,56 @@ function Onboarding() {
     setUpiApps((prev) => (prev.includes(app) ? prev.filter((a) => a !== app) : [...prev, app]));
   }
 
-  const Dot = ({ active, done }: { active?: boolean; done?: boolean }) => (
-    <span
-      className={`h-2 w-2 rounded-full ${done ? "bg-[color:var(--pb-green)]" : active ? "bg-[color:var(--pb-blue)]" : "border border-border"}`}
-    />
+  const StepBar = ({ currentStep }: { currentStep: number }) => (
+    <div className="flex gap-2 w-full max-w-[280px] mx-auto mb-10">
+      {[1, 2, 3].map((s) => (
+        <div key={s} className="flex-1 h-0.5 bg-border rounded-full overflow-hidden">
+          <div
+            className={`h-full bg-accent-bronze transition-all duration-300 ${
+              s <= currentStep ? "w-full" : "w-0"
+            }`}
+          />
+        </div>
+      ))}
+    </div>
   );
 
   return (
-    <div className="flex min-h-screen items-start justify-center bg-background px-4 py-8">
-      <div className="w-full max-w-[420px]">
-        <div className="mb-6 flex items-center justify-center gap-3">
-          <Dot done={step > 1} active={step === 1} />
-          <Dot done={step > 2} active={step === 2} />
-          <Dot active={step === 3} />
-        </div>
+    <div className="flex min-h-screen items-start justify-center bg-background px-4 py-12 relative overflow-hidden">
+      {/* Cinematic light overlay */}
+      <div className="absolute top-0 right-0 h-[350px] w-[350px] rounded-full bg-accent-bronze/5 blur-[100px] pointer-events-none" />
+      
+      <div className="w-full max-w-[400px] relative z-10">
+        <StepBar currentStep={step} />
 
         {step === 1 && (
-          <div id="onboarding-step-1" className="space-y-5">
-            <div>
-              <h2 className="text-[18px] font-semibold">Let's set up your financial guard</h2>
-              <p className="mt-1 text-[13px] text-muted-foreground">
-                This takes 60 seconds. No bank access needed.
+          <div id="onboarding-step-1" className="space-y-6">
+            <div className="mb-2">
+              <h2 className="text-[20px] font-black tracking-tight text-foreground uppercase">Campus Financial Guard</h2>
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                Set up your profile in 60 seconds. No bank logins needed.
               </p>
             </div>
+            
             <Field
               label="Monthly Allowance"
               helper="Total amount you receive each month from family"
             >
-              <div className="flex items-center rounded-md border border-input bg-[color:var(--surface)]">
-                <span className="px-3 text-sm text-muted-foreground">₹</span>
+              <div className="flex items-center rounded-md border border-border bg-surface-raised/40 hover:border-white/15 focus-within:ring-1 focus-within:ring-accent-bronze/40 focus-within:border-accent-bronze/40 transition-all">
+                <span className="px-3 text-xs text-muted-foreground font-bold border-r border-border">₹</span>
                 <input
                   id="input-ob-allowance"
                   type="number"
                   value={allowance}
                   onChange={(e) => setAllowance(e.target.value)}
-                  className="flex-1 bg-transparent py-2 pr-3 text-sm outline-none"
+                  className="flex-1 bg-transparent py-2.5 px-3 text-xs outline-none text-foreground"
                 />
               </div>
             </Field>
+
             <Field label="Allowance Arrives On" helper="Day your allowance hits your account">
               <Select value={cycleDay} onValueChange={setCycleDay}>
-                <SelectTrigger id="select-ob-cycle">
+                <SelectTrigger id="select-ob-cycle" className="h-10 text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -226,9 +235,10 @@ function Onboarding() {
                 </SelectContent>
               </Select>
             </Field>
+
             <Field label="College">
               <Select value={college} onValueChange={setCollege}>
-                <SelectTrigger id="select-ob-college">
+                <SelectTrigger id="select-ob-college" className="h-10 text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -240,52 +250,72 @@ function Onboarding() {
                 </SelectContent>
               </Select>
             </Field>
-            <Field label="Hostel Block">
-              <Input
-                id="input-ob-hostel"
-                value={hostel}
-                onChange={(e) => setHostel(e.target.value)}
+
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Hostel Block">
+                <Input
+                  id="input-ob-hostel"
+                  value={hostel}
+                  onChange={(e) => setHostel(e.target.value)}
+                  className="h-10"
+                />
+              </Field>
+              <Field label="Room Number">
+                <Input 
+                  id="input-ob-room" 
+                  value={room} 
+                  onChange={(e) => setRoom(e.target.value)} 
+                  className="h-10"
+                />
+              </Field>
+            </div>
+
+            <Field
+              label="Wing / Corridor"
+              helper="Used to group delivery fee pooling with neighbors"
+            >
+              <Input 
+                id="input-ob-wing" 
+                value={wing} 
+                onChange={(e) => setWing(e.target.value)} 
+                className="h-10"
               />
             </Field>
-            <Field
-              label="Wing / Floor"
-              helper="Your hostel corridor — for pooling orders with neighbors"
-            >
-              <Input id="input-ob-wing" value={wing} onChange={(e) => setWing(e.target.value)} />
-            </Field>
-            <Field label="Room Number">
-              <Input id="input-ob-room" value={room} onChange={(e) => setRoom(e.target.value)} />
-            </Field>
-            <Button id="btn-ob-next-1" className="w-full" onClick={saveStep1} disabled={busy}>
-              Next →
+
+            <Button id="btn-ob-next-1" className="w-full h-10 bg-foreground text-background font-black uppercase tracking-wider text-xs shadow-md mt-2" onClick={saveStep1} disabled={busy}>
+              Next Step →
             </Button>
           </div>
         )}
 
         {step === 2 && (
-          <div id="onboarding-step-2" className="space-y-5">
-            <div>
-              <h2 className="text-[18px] font-semibold">Your daily routine</h2>
-              <p className="mt-1 text-[13px] text-muted-foreground">
-                Helps us detect meal-skipping patterns.
+          <div id="onboarding-step-2" className="space-y-6">
+            <div className="mb-2">
+              <h2 className="text-[20px] font-black tracking-tight text-foreground uppercase">Your Daily Routine</h2>
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                Helps us spot study stress and meal-skipping patterns.
               </p>
             </div>
+
             <Field label="Enrolled in Hostel Mess?">
-              <div id="toggle-ob-mess" className="grid grid-cols-2 gap-2">
+              <div id="toggle-ob-mess" className="grid grid-cols-2 gap-3">
                 <button
                   onClick={() => setMess(true)}
-                  className={`rounded-md border bg-[color:var(--surface)] p-3 text-left text-sm ${mess ? "border-l-4 border-l-[color:var(--pb-green)]" : "border-border"}`}
+                  className={`rounded-md border p-3.5 text-left text-xs transition-all cursor-pointer ${mess ? "border-accent-bronze bg-accent-bronze/5 font-semibold text-foreground" : "border-border bg-surface-raised/40 text-muted-foreground hover:border-white/10"}`}
                 >
-                  Yes, mess enrolled
+                  <p className="font-bold">Yes</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Mess enrolled</p>
                 </button>
                 <button
                   onClick={() => setMess(false)}
-                  className={`rounded-md border bg-[color:var(--surface)] p-3 text-left text-sm ${!mess ? "border-l-4 border-l-[color:var(--pb-amber)]" : "border-border"}`}
+                  className={`rounded-md border p-3.5 text-left text-xs transition-all cursor-pointer ${!mess ? "border-accent-bronze bg-accent-bronze/5 font-semibold text-foreground" : "border-border bg-surface-raised/40 text-muted-foreground hover:border-white/10"}`}
                 >
-                  No, self-catering
+                  <p className="font-bold">No</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Self-catering</p>
                 </button>
               </div>
             </Field>
+
             {mess && (
               <Field label="Meals You Typically Eat">
                 <div id="pills-ob-meals" className="flex gap-2">
@@ -293,7 +323,7 @@ function Onboarding() {
                     <button
                       key={m}
                       onClick={() => setMeals({ ...meals, [m]: !meals[m] })}
-                      className={`rounded-full px-4 py-1.5 text-sm capitalize transition-colors ${meals[m] ? "bg-[color:var(--pb-blue)] text-white" : "bg-[color:var(--surface)] text-muted-foreground"}`}
+                      className={`flex-1 rounded-full py-2 text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer border ${meals[m] ? "bg-primary border-primary text-primary-foreground" : "bg-surface-raised border-border text-muted-foreground hover:text-foreground"}`}
                     >
                       {m === "breakfast" ? "🌅" : m === "lunch" ? "☀️" : "🌙"} {m}
                     </button>
@@ -301,26 +331,30 @@ function Onboarding() {
                 </div>
               </Field>
             )}
+
             <div>
-              <p className="text-[12px] text-muted-foreground">Upcoming exams (optional)</p>
-              <div className="mt-2 grid grid-cols-2 gap-2">
+              <label className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest pl-1">Upcoming Exams (Optional)</label>
+              <div className="mt-1.5 grid grid-cols-2 gap-3">
                 <Input
                   id="input-ob-exam-start"
                   type="date"
                   value={examStart}
                   onChange={(e) => setExamStart(e.target.value)}
+                  className="h-10 text-xs"
                 />
                 <Input
                   id="input-ob-exam-end"
                   type="date"
                   value={examEnd}
                   onChange={(e) => setExamEnd(e.target.value)}
+                  className="h-10 text-xs"
                 />
               </div>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                We'll watch for meal-skipping during this window
+              <p className="mt-1.5 text-[10px] text-zinc-500 pl-1 leading-normal">
+                We will monitor your schedule during this stressful period.
               </p>
             </div>
+
             <Field label="UPI Apps You Use">
               <div id="pills-ob-upi" className="flex flex-wrap gap-2">
                 {UPI_OPTIONS.map((app) => {
@@ -329,7 +363,7 @@ function Onboarding() {
                     <button
                       key={app}
                       onClick={() => toggleUpi(app)}
-                      className={`rounded-full px-3 py-1.5 text-xs ${on ? "bg-[color:var(--pb-purple)] text-white" : "bg-[color:var(--surface)] text-muted-foreground"}`}
+                      className={`rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer border ${on ? "bg-primary border-primary text-primary-foreground" : "bg-surface-raised border-border text-muted-foreground hover:text-foreground"}`}
                     >
                       {app}
                     </button>
@@ -337,84 +371,86 @@ function Onboarding() {
                 })}
               </div>
             </Field>
-            <div className="grid grid-cols-2 gap-4">
+
+            <div className="grid grid-cols-2 gap-4 items-center pt-2">
               <button
                 onClick={() => setStep(1)}
-                className="text-sm text-muted-foreground text-left py-2"
+                className="text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground text-left py-2 transition-colors cursor-pointer"
               >
                 ← Back
               </button>
-              <Button id="btn-ob-next-2" onClick={saveStep2} disabled={busy}>
-                Next →
+              <Button id="btn-ob-next-2" onClick={saveStep2} disabled={busy} className="h-10 bg-foreground text-background font-black uppercase tracking-wider text-xs shadow-md">
+                Next Step →
               </Button>
             </div>
           </div>
         )}
 
         {step === 3 && (
-          <div id="onboarding-step-3" className="space-y-5">
-            <div>
-              <h2 className="text-[18px] font-semibold">Last step: auto-track spending</h2>
-              <p className="mt-1 text-[13px] text-muted-foreground">
-                Use the Android connector to capture UPI notifications automatically. No bank login
-                or SMS inbox upload is required.
+          <div id="onboarding-step-3" className="space-y-6">
+            <div className="mb-2">
+              <h2 className="text-[20px] font-black tracking-tight text-foreground uppercase">Auto-Track Expense</h2>
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                Pair with the Android connector app to capture UPI transactions in real-time.
               </p>
             </div>
-            <div className="flex gap-2">
+
+            <div className="grid grid-cols-3 gap-2">
               {[
-                { e: "1", l: "Install connector" },
-                { e: "2", l: "Grant notification access" },
-                { e: "3", l: "Wait for real sync" },
+                { e: "01", l: "Get App" },
+                { e: "02", l: "Grant Access" },
+                { e: "03", l: "Instant Sync" },
               ].map((c) => (
                 <div
                   key={c.l}
-                  className="flex-1 rounded-lg bg-[color:var(--surface-raised)] p-3 text-center"
+                  className="rounded-lg bg-surface-raised border border-border p-3 text-center"
                 >
-                  <div className="mx-auto flex h-7 w-7 items-center justify-center rounded-full bg-[color:var(--pb-blue)] text-[12px] font-semibold text-white">
+                  <div className="mx-auto flex h-6 w-6 items-center justify-center rounded-full bg-accent-bronze/10 border border-accent-bronze/20 text-[10px] font-bold text-accent-bronze">
                     {c.e}
                   </div>
-                  <p className="mt-1 text-[11px] text-muted-foreground leading-tight">{c.l}</p>
+                  <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-none">{c.l}</p>
                 </div>
               ))}
             </div>
-            <div className="rounded-lg border border-[color:var(--pb-blue)] bg-[color:var(--surface-raised)] p-4">
-              <p className="text-[14px] font-semibold text-[color:var(--pb-blue)]">
-                Android connector setup
+
+            <div className="rounded-lg border border-border bg-surface-raised/40 p-4 space-y-1">
+              <p className="text-xs font-bold text-foreground uppercase tracking-wider">
+                Android Webhook Integration
               </p>
-              <p className="mt-1 text-[12px] text-muted-foreground">
-                Build and install the connector from the repository Android module. The next screen
-                shows the webhook URL, user ID, and token fields to paste into the Android setup
-                screen.
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Build and install the connector from the repository Android module. You will paste this webhook pairing profile on the setup screen.
               </p>
             </div>
-            <div className="text-center">
-              <p className="text-[12px] text-muted-foreground">Your pairing code:</p>
+
+            <div className="text-center bg-surface-raised border border-border rounded-xl p-5">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Your Pairing Code</p>
               <div
                 id="text-pairing-code"
-                className="mt-2 inline-block rounded-md bg-[color:var(--surface-raised)] px-5 py-3 text-[24px] font-bold tracking-[4px] text-[color:var(--pb-blue)] font-mono"
+                className="mt-2 inline-block rounded-md bg-[#0A0A0A] border border-border px-6 py-2.5 text-[22px] font-black tracking-[4px] text-accent-bronze font-mono shadow-inner"
               >
                 {pairingCode}
               </div>
-              <p className="mt-2 text-[11px] text-muted-foreground">
-                This code is saved to your profile for the backend pairing flow.
+              <p className="mt-2 text-[10px] text-zinc-500 leading-normal">
+                This code associates your device webhook with this account profile.
               </p>
             </div>
-            <div className="space-y-2">
+
+            <div className="space-y-3 pt-2">
               <Button
                 id="btn-ob-continue-companion"
                 onClick={() => finish(true)}
                 disabled={busy}
-                className="w-full bg-[color:var(--pb-green)] text-white hover:bg-[color:var(--pb-green)]/90"
+                className="w-full h-10 bg-foreground text-background font-black uppercase tracking-wider text-xs shadow-md"
               >
-                Continue To Companion Setup
+                Continue to Sync Setup
               </Button>
               <button
                 id="link-ob-skip"
                 onClick={() => finish(false)}
                 disabled={busy}
-                className="w-full text-center text-[13px] text-muted-foreground py-2"
+                className="w-full text-center text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground py-2 transition-colors cursor-pointer"
               >
-                Skip for now — I'll add expenses manually
+                Skip — I will log manually
               </button>
             </div>
           </div>
@@ -434,10 +470,10 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <div>
-      <label className="text-[13px] font-medium text-foreground">{label}</label>
-      <div className="mt-1.5">{children}</div>
-      {helper && <p className="mt-1 text-[11px] text-muted-foreground">{helper}</p>}
+    <div className="space-y-1.5">
+      <label className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest pl-1">{label}</label>
+      <div>{children}</div>
+      {helper && <p className="text-[10px] text-zinc-500 pl-1 leading-normal">{helper}</p>}
     </div>
   );
 }

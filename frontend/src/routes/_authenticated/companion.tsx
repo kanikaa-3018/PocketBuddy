@@ -127,7 +127,7 @@ function CompanionPage() {
 
   return (
     <AppShell>
-      <div className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-[color:var(--surface)] px-4">
+      <div className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-surface px-4">
         <button onClick={() => nav({ to: "/settings" })} className="text-muted-foreground">
           <ChevronLeft className="h-5 w-5" />
         </button>
@@ -141,11 +141,11 @@ function CompanionPage() {
           <>
             <Card
               id="card-companion-status"
-              className="border-l-4 border-l-[color:var(--pb-green)] bg-[color:var(--surface-raised)] p-4"
+              className="border-l-4 border-l-success bg-surface-raised p-4"
             >
               <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-[color:var(--pb-green)] pulse-dot" />
-                <p className="text-[14px] font-semibold text-[color:var(--pb-green)]">Connected</p>
+                <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
+                <p className="text-[14px] font-semibold text-success">Connected</p>
               </div>
               <p className="mt-1 text-[13px]">
                 {profile.companion_device_name ?? "PocketBuddy Android Connector"}
@@ -171,7 +171,7 @@ function CompanionPage() {
                 {syncLogs.map((l) => (
                   <div
                     key={l.id}
-                    className="flex items-start justify-between gap-3 rounded-md bg-[color:var(--surface)] p-2.5"
+                    className="flex items-start justify-between gap-3 rounded-md bg-surface p-2.5"
                   >
                     <div className="min-w-0 flex-1">
                       <p className="text-[13px]">{l.notification_source}</p>
@@ -203,7 +203,7 @@ function CompanionPage() {
               <Button
                 id="btn-unpair"
                 variant="outline"
-                className="w-full border-[color:var(--pb-red)] text-[color:var(--pb-red)]"
+                className="w-full border-destructive text-destructive"
                 onClick={unpair}
               >
                 Unpair Device
@@ -212,7 +212,7 @@ function CompanionPage() {
           </>
         ) : (
           <>
-            <Card className="bg-[color:var(--surface-raised)] p-4">
+            <Card className="bg-surface-raised p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-[14px] font-semibold">Android Connector</p>
@@ -228,12 +228,12 @@ function CompanionPage() {
 
             <div className="text-center">
               <p className="text-[12px] text-muted-foreground">Your pairing code:</p>
-              <div className="mt-2 inline-block rounded-md bg-[color:var(--surface-raised)] px-5 py-3 text-[24px] font-bold tracking-[4px] text-[color:var(--pb-blue)] font-mono">
+              <div className="mt-2 inline-block rounded-md bg-surface-raised px-5 py-3 text-[24px] font-bold tracking-[4px] text-primary font-mono">
                 {pairing}
               </div>
             </div>
 
-            <Card className="bg-[color:var(--surface-raised)] p-4">
+            <Card className="bg-surface-raised p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-[13px] font-semibold">Connector config</p>
@@ -246,7 +246,7 @@ function CompanionPage() {
                   Copy
                 </Button>
               </div>
-              <pre className="mt-3 overflow-x-auto rounded-md bg-[color:var(--surface)] p-3 text-left text-[11px] leading-5 text-muted-foreground">
+              <pre className="mt-3 overflow-x-auto rounded-md bg-surface p-3 text-left text-[11px] leading-5 text-muted-foreground">
                 {connectorConfig}
               </pre>
             </Card>
@@ -256,7 +256,7 @@ function CompanionPage() {
               Save Pairing Code
             </Button>
             <Button
-              className="w-full bg-[color:var(--pb-green)] text-white hover:bg-[color:var(--pb-green)]/90"
+              className="w-full bg-success text-white hover:bg-success/90"
               onClick={checkRealSync}
             >
               <RefreshCw />
@@ -272,19 +272,19 @@ function CompanionPage() {
 function StatusBadge({ status }: { status: string }) {
   if (status === "parsed")
     return (
-      <Badge className="bg-[color:var(--pb-green)]/20 text-[color:var(--pb-green)] text-[10px]">
+      <Badge className="bg-success/20 text-success text-[10px]">
         Tracked
       </Badge>
     );
   if (status === "pending")
     return (
-      <Badge className="bg-[color:var(--pb-amber)]/20 text-[color:var(--pb-amber)] text-[10px]">
+      <Badge className="bg-warning/20 text-warning text-[10px]">
         Processing
       </Badge>
     );
   if (status === "failed")
     return (
-      <Badge className="bg-[color:var(--pb-red)]/20 text-[color:var(--pb-red)] text-[10px]">
+      <Badge className="bg-destructive/20 text-destructive text-[10px]">
         Failed
       </Badge>
     );

@@ -112,99 +112,126 @@ function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="w-full max-w-[380px]">
-        <div className="text-center">
+    <div className="flex min-h-screen items-center justify-center bg-background px-4 relative overflow-hidden">
+      {/* Cinematic gold/bronze ambient light overlay */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-[450px] w-[450px] rounded-full bg-accent-bronze/5 blur-[120px] pointer-events-none" />
+
+      <div className="w-full max-w-[360px] relative z-10">
+        <div className="text-center mb-8">
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-tr from-accent-bronze to-accent-amber shadow-[0_0_24px_rgba(140,120,83,0.25)] mb-4">
+            <span className="text-[#0A0A0A] font-black text-xl leading-none tracking-tighter">P</span>
+          </div>
           <h1
             id="logo-login"
-            className="text-[20px] font-semibold tracking-[0.2em] text-foreground"
+            className="text-[22px] font-black tracking-[0.25em] text-foreground uppercase"
           >
             POCKETBUDDY
           </h1>
-          <p className="mt-1 text-[13px] text-muted-foreground">Campus Financial Guard</p>
+          <p className="mt-1.5 text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
+            Campus Financial Guard
+          </p>
         </div>
 
-        <div className="mt-6 flex justify-center gap-6 text-sm">
+        <div className="flex bg-surface-raised border border-border rounded-full p-1 max-w-[200px] mx-auto text-[10px] font-bold uppercase tracking-wider">
           <button
             id="tab-login-email"
             onClick={() => setTab("email")}
-            className={`pb-1 transition-colors ${tab === "email" ? "border-b-2 border-[color:var(--pb-blue)] text-foreground" : "text-muted-foreground"}`}
+            className={`flex-1 py-1.5 rounded-full transition-all duration-150 cursor-pointer ${tab === "email" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
           >
             Email
           </button>
           <button
             id="tab-login-phone"
             onClick={() => setTab("phone")}
-            className={`pb-1 transition-colors ${tab === "phone" ? "border-b-2 border-[color:var(--pb-blue)] text-foreground" : "text-muted-foreground"}`}
+            className={`flex-1 py-1.5 rounded-full transition-all duration-150 cursor-pointer ${tab === "phone" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
           >
             Phone
           </button>
         </div>
 
-        <div className="mt-4 space-y-2">
+        <div className="mt-8 space-y-4">
           {mode === "signup" && (
-            <Input
-              placeholder="full name"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              id="input-login-name"
-            />
+            <div className="space-y-1">
+              <label className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest pl-1">Full Name</label>
+              <Input
+                placeholder="Student Name"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                id="input-login-name"
+                className="h-10"
+              />
+            </div>
           )}
           {tab === "email" ? (
             <>
-              <Input
-                id="input-login-email"
-                type="email"
-                placeholder="institute email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="email"
-              />
-              <Input
-                id="input-login-password"
-                type="password"
-                placeholder="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete={mode === "signup" ? "new-password" : "current-password"}
-              />
+              <div className="space-y-1">
+                <label className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest pl-1">Email Address</label>
+                <Input
+                  id="input-login-email"
+                  type="email"
+                  placeholder="name@institute.edu"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
+                  className="h-10"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest pl-1">Password</label>
+                <Input
+                  id="input-login-password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                  className="h-10"
+                />
+              </div>
             </>
           ) : (
             <>
-              <div className="flex items-center rounded-md border border-input bg-[color:var(--surface)] focus-within:ring-1 focus-within:ring-ring">
-                <span className="px-3 text-sm text-muted-foreground">+91</span>
-                <input
-                  id="input-login-phone"
-                  type="tel"
-                  inputMode="numeric"
-                  placeholder="98765 43210"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="flex-1 bg-transparent py-2 pr-3 text-sm outline-none"
-                />
+              <div className="space-y-1">
+                <label className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest pl-1">Phone Number</label>
+                <div className="flex items-center rounded-md border border-border bg-surface-raised/40 focus-within:ring-1 focus-within:ring-accent-bronze/40 focus-within:border-accent-bronze/40 hover:border-white/15 transition-all">
+                  <span className="px-3 text-xs text-muted-foreground font-bold border-r border-border">+91</span>
+                  <input
+                    id="input-login-phone"
+                    type="tel"
+                    inputMode="numeric"
+                    placeholder="98765 43210"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="flex-1 bg-transparent py-2.5 px-3 text-xs outline-none placeholder:text-muted-foreground/50 text-foreground"
+                  />
+                </div>
               </div>
               {otpSent && (
-                <Input
-                  id="input-login-otp"
-                  inputMode="numeric"
-                  maxLength={6}
-                  placeholder="6-digit code"
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-                />
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest pl-1">One-Time Password</label>
+                  <Input
+                    id="input-login-otp"
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="6-digit code"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+                    className="h-10 font-mono tracking-[0.2em] text-center"
+                  />
+                </div>
               )}
             </>
           )}
         </div>
 
-        <div className="mt-4">
+        <div className="mt-6">
           {busy ? (
-            <Skeleton className="h-10 w-full rounded-md" />
+            <Skeleton className="h-10 w-full rounded-md bg-white/5" />
           ) : (
             <Button
               id={mode === "signup" ? "btn-create-account" : "btn-sign-in"}
               onClick={tab === "email" ? handleEmail : handlePhone}
-              className="w-full"
+              className="w-full h-10 bg-foreground text-background font-black uppercase tracking-wider text-xs shadow-md transition-all duration-150"
             >
               {tab === "phone" && !otpSent
                 ? "Send OTP"
@@ -217,13 +244,13 @@ function LoginPage() {
           )}
         </div>
 
-        <div className="mt-3 text-center">
+        <div className="mt-4 text-center">
           <button
             id="link-create-account"
             onClick={() => setMode(mode === "signup" ? "signin" : "signup")}
-            className="text-[13px] text-[color:var(--pb-blue)]"
+            className="text-[11px] font-bold tracking-wide text-accent-bronze hover:text-accent-amber transition-colors uppercase cursor-pointer"
           >
-            {mode === "signup" ? "Have an account? Sign in" : "Create account"}
+            {mode === "signup" ? "Have an account? Sign in" : "New student? Create account"}
           </button>
         </div>
       </div>

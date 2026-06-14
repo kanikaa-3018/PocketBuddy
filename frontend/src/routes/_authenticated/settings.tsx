@@ -5,11 +5,21 @@ import { useAuth } from "@/lib/auth-context";
 import { AppShell } from "@/components/AppShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Trash2 } from "lucide-react";
+import {
+  Trash2,
+  User,
+  Smartphone,
+  CreditCard,
+  Database,
+  LogOut,
+  Plus,
+  ChevronRight,
+  Wifi,
+  WifiOff,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -62,7 +72,6 @@ function SettingsPage() {
     queryFn: () => getSubscriptions(),
   });
 
-  // Profile form state
   const [allowance, setAllowance] = useState("");
   const [cycleDay, setCycleDay] = useState("1");
   const [hostel, setHostel] = useState("");
@@ -72,6 +81,8 @@ function SettingsPage() {
   const [examEnd, setExamEnd] = useState("");
   const [mess, setMess] = useState(false);
   const [upiId, setUpiId] = useState("");
+  const [addingSub, setAddingSub] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!profile) return;
@@ -86,10 +97,9 @@ function SettingsPage() {
     setUpiId(profile.upi_id ?? "");
   }, [profile]);
 
-  const [addingSub, setAddingSub] = useState(false);
-
   async function saveProfile() {
     if (!user) return;
+    setSaving(true);
     try {
       await updateProfile({
         data: {
@@ -108,6 +118,8 @@ function SettingsPage() {
       toast.success("Profile updated.");
     } catch (err: any) {
       toast.error(err.message || "Failed to update profile");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -161,11 +173,14 @@ function SettingsPage() {
     try {
       const txns = await getTransactions();
       const start = getCycleStart(profile.cycle_start_day);
-      const cycleTxns = (txns ?? []).filter((t: any) => new Date(t.created_at) >= start);
+      const cycleTxns = (txns ?? []).filter(
+        (t: any) => new Date(t.created_at) >= start
+      );
       const total = cycleTxns.reduce((s: any, t: any) => s + t.amount, 0) / 100;
       const byCat: Record<string, number> = {};
       cycleTxns.forEach((t: any) => {
-        byCat[t.category ?? "unmapped"] = (byCat[t.category ?? "unmapped"] ?? 0) + t.amount / 100;
+        byCat[t.category ?? "unmapped"] =
+          (byCat[t.category ?? "unmapped"] ?? 0) + t.amount / 100;
       });
       const lines = [
         "POCKETBUDDY SPENDING REPORT",
@@ -176,7 +191,7 @@ function SettingsPage() {
         `Monthly allowance: ₹${(profile.monthly_allowance / 100).toFixed(0)}`,
         "",
         "By category:",
-        ...Object.entries(byCat).map(([k, v]) => `  ${k}: ₹${v.toFixed(0)}`),
+        ...Object.entries(byCat).map(([k, v]) => `  ${k}: ₹${(v as number).toFixed(0)}`),
       ];
       downloadBlob(lines.join("\n"), "spending-report.txt", "text/plain");
       toast.success("Report downloaded.");
@@ -208,192 +223,656 @@ function SettingsPage() {
   if (!profile)
     return (
       <AppShell>
-        <div className="p-4">
-          <Skeleton className="h-screen w-full" />
+        <div className="p-6 space-y-6">
+          <Skeleton className="h-8 w-48 rounded" />
+          <Skeleton className="h-64 w-full rounded-xl" />
+          <Skeleton className="h-40 w-full rounded-xl" />
         </div>
       </AppShell>
     );
 
   return (
     <AppShell>
-      <div className="sticky top-0 z-30 flex h-14 items-center border-b border-border bg-[color:var(--surface)] px-4">
-        <h1 className="text-[14px] font-semibold tracking-[0.15em]">SETTINGS</h1>
+      {/* Page Header */}
+      <div
+        style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 30,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          height: "56px",
+          borderBottom: "1px solid rgba(255,255,255,0.06)",
+          background: "rgba(10,10,10,0.92)",
+          backdropFilter: "blur(20px)",
+          margin: "0 -32px",
+          padding: "0 32px",
+        }}
+      >
+        <h1
+          style={{
+            fontSize: "11px",
+            fontWeight: 600,
+            letterSpacing: "0.18em",
+            color: "rgba(255,255,255,0.5)",
+            fontFamily: "var(--font-mono)",
+          }}
+        >
+          SETTINGS
+        </h1>
+        <div
+          style={{
+            fontSize: "11px",
+            color: "rgba(255,255,255,0.25)",
+            fontFamily: "var(--font-mono)",
+          }}
+        >
+          {user?.email}
+        </div>
       </div>
-      <div className="space-y-6 px-4 py-4">
-        {/* Profile */}
-        <section id="section-settings-profile" className="space-y-2">
-          <h3 className="text-[11px] font-semibold tracking-[0.15em] text-muted-foreground">
-            CAMPUS PROFILE
-          </h3>
-          <FieldRow label="Allowance (₹)">
-            <Input type="number" value={allowance} onChange={(e) => setAllowance(e.target.value)} />
-          </FieldRow>
-          <FieldRow label="Cycle day">
-            <Select value={cycleDay} onValueChange={setCycleDay}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {[1, 5, 10, 15, 28].map((d) => (
-                  <SelectItem key={d} value={String(d)}>
-                    {d}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </FieldRow>
-          <FieldRow label="Hostel block">
-            <Input value={hostel} onChange={(e) => setHostel(e.target.value)} />
-          </FieldRow>
-          <FieldRow label="Wing">
-            <Input value={wing} onChange={(e) => setWing(e.target.value)} />
-          </FieldRow>
-          <FieldRow label="Room">
-            <Input value={room} onChange={(e) => setRoom(e.target.value)} />
-          </FieldRow>
-          <FieldRow label="Exam start">
-            <Input type="date" value={examStart} onChange={(e) => setExamStart(e.target.value)} />
-          </FieldRow>
-          <FieldRow label="Exam end">
-            <Input type="date" value={examEnd} onChange={(e) => setExamEnd(e.target.value)} />
-          </FieldRow>
-          <FieldRow label="UPI ID for Pools">
-            <Input id="input-settings-upi" placeholder="username@upi" value={upiId} onChange={(e) => setUpiId(e.target.value)} />
-          </FieldRow>
-          <div className="flex items-center justify-between">
-            <span className="text-[13px]">Mess enrolled</span>
+
+      <div
+        style={{
+          maxWidth: "640px",
+          margin: "0 auto",
+          padding: "32px 0 80px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "2px",
+        }}
+      >
+        {/* ── CAMPUS PROFILE ── */}
+        <SectionHeader icon={<User size={13} />} label="CAMPUS PROFILE" />
+        <div
+          style={{
+            background: "#111111",
+            border: "1px solid rgba(255,255,255,0.07)",
+            borderRadius: "14px",
+            overflow: "hidden",
+            marginBottom: "24px",
+          }}
+        >
+          {/* Two-column grid for compact fields */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: "0",
+            }}
+          >
+            <SettingsField label="Monthly Allowance (₹)" noBorderRight>
+              <Input
+                type="number"
+                value={allowance}
+                onChange={(e) => setAllowance(e.target.value)}
+                style={inputStyle}
+                placeholder="5000"
+              />
+            </SettingsField>
+            <SettingsField label="Billing Cycle Day">
+              <Select value={cycleDay} onValueChange={setCycleDay}>
+                <SelectTrigger style={inputStyle}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[1, 5, 10, 15, 28].map((d) => (
+                    <SelectItem key={d} value={String(d)}>
+                      {d}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </SettingsField>
+          </div>
+
+          <div
+            style={{
+              height: "1px",
+              background: "rgba(255,255,255,0.05)",
+            }}
+          />
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr 1fr",
+              gap: "0",
+            }}
+          >
+            <SettingsField label="Hostel Block" noBorderRight>
+              <Input
+                value={hostel}
+                onChange={(e) => setHostel(e.target.value)}
+                style={inputStyle}
+                placeholder="A"
+              />
+            </SettingsField>
+            <SettingsField label="Wing" noBorderRight>
+              <Input
+                value={wing}
+                onChange={(e) => setWing(e.target.value)}
+                style={inputStyle}
+                placeholder="North"
+              />
+            </SettingsField>
+            <SettingsField label="Room Number">
+              <Input
+                value={room}
+                onChange={(e) => setRoom(e.target.value)}
+                style={inputStyle}
+                placeholder="214"
+              />
+            </SettingsField>
+          </div>
+
+          <div
+            style={{
+              height: "1px",
+              background: "rgba(255,255,255,0.05)",
+            }}
+          />
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0" }}>
+            <SettingsField label="Exam Start" noBorderRight>
+              <Input
+                type="date"
+                value={examStart}
+                onChange={(e) => setExamStart(e.target.value)}
+                style={inputStyle}
+              />
+            </SettingsField>
+            <SettingsField label="Exam End">
+              <Input
+                type="date"
+                value={examEnd}
+                onChange={(e) => setExamEnd(e.target.value)}
+                style={inputStyle}
+              />
+            </SettingsField>
+          </div>
+
+          <div
+            style={{
+              height: "1px",
+              background: "rgba(255,255,255,0.05)",
+            }}
+          />
+
+          <SettingsField label="UPI ID for Pools">
+            <Input
+              id="input-settings-upi"
+              placeholder="username@upi"
+              value={upiId}
+              onChange={(e) => setUpiId(e.target.value)}
+              style={inputStyle}
+            />
+          </SettingsField>
+
+          <div
+            style={{
+              height: "1px",
+              background: "rgba(255,255,255,0.05)",
+            }}
+          />
+
+          {/* Mess toggle row */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "14px 18px",
+            }}
+          >
+            <div>
+              <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.85)", fontWeight: 500 }}>
+                Mess Enrolled
+              </p>
+              <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)", marginTop: "2px" }}>
+                Include mess fees in spending calculations
+              </p>
+            </div>
             <Switch checked={mess} onCheckedChange={setMess} />
           </div>
-          <Button id="btn-save-profile" onClick={saveProfile} className="w-full">
-            Save Changes
-          </Button>
-        </section>
 
-        {/* Companion */}
-        <section id="section-settings-companion" className="space-y-2">
-          <h3 className="text-[11px] font-semibold tracking-[0.15em] text-muted-foreground">
-            COMPANION DEVICE
-          </h3>
+          <div
+            style={{
+              height: "1px",
+              background: "rgba(255,255,255,0.05)",
+            }}
+          />
+
+          {/* Save button */}
+          <div style={{ padding: "14px 18px" }}>
+            <button
+              id="btn-save-profile"
+              onClick={saveProfile}
+              disabled={saving}
+              style={{
+                width: "100%",
+                padding: "11px 20px",
+                background: saving
+                  ? "rgba(140,120,83,0.3)"
+                  : "linear-gradient(135deg, #8C7853 0%, #C27D56 100%)",
+                border: "none",
+                borderRadius: "9px",
+                color: "#fff",
+                fontSize: "13px",
+                fontWeight: 600,
+                letterSpacing: "0.04em",
+                cursor: saving ? "not-allowed" : "pointer",
+                transition: "all 0.2s ease",
+                fontFamily: "var(--font-sans)",
+              }}
+              onMouseEnter={(e) => {
+                if (!saving)
+                  (e.target as HTMLButtonElement).style.opacity = "0.85";
+              }}
+              onMouseLeave={(e) => {
+                (e.target as HTMLButtonElement).style.opacity = "1";
+              }}
+            >
+              {saving ? "Saving…" : "Save Changes"}
+            </button>
+          </div>
+        </div>
+
+        {/* ── COMPANION DEVICE ── */}
+        <SectionHeader icon={<Smartphone size={13} />} label="COMPANION DEVICE" />
+        <div
+          style={{
+            background: "#111111",
+            border: "1px solid rgba(255,255,255,0.07)",
+            borderRadius: "14px",
+            overflow: "hidden",
+            marginBottom: "24px",
+          }}
+        >
           {profile.companion_paired ? (
-            <Card className="reactbits-card p-3">
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-[color:var(--pb-green)] pulse-dot" />
-                <p className="text-[13px] font-medium">{profile.companion_device_name}</p>
+            <div style={{ padding: "18px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+                <div
+                  style={{
+                    width: "8px",
+                    height: "8px",
+                    borderRadius: "50%",
+                    background: "#4ade80",
+                    boxShadow: "0 0 8px #4ade80",
+                    animation: "pulse 2s infinite",
+                  }}
+                />
+                <Wifi size={14} color="rgba(255,255,255,0.6)" />
+                <p style={{ fontSize: "14px", fontWeight: 600, color: "rgba(255,255,255,0.9)" }}>
+                  {profile.companion_device_name}
+                </p>
               </div>
-              <p className="text-[11px] text-muted-foreground">
+              <p
+                style={{
+                  fontSize: "11px",
+                  color: "rgba(255,255,255,0.35)",
+                  fontFamily: "var(--font-mono)",
+                  marginBottom: "14px",
+                }}
+              >
                 Last sync:{" "}
                 {profile.companion_last_sync ? shortDate(profile.companion_last_sync) : "—"}
               </p>
-              <div className="mt-2 flex gap-2">
-                <Link to="/companion" className="text-[12px] text-[color:var(--pb-blue)]">
-                  Manage Device →
+              <div style={{ display: "flex", gap: "10px" }}>
+                <Link
+                  to="/companion"
+                  style={{
+                    fontSize: "12px",
+                    color: "#C27D56",
+                    textDecoration: "none",
+                    fontWeight: 500,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "3px",
+                  }}
+                >
+                  Manage Device <ChevronRight size={12} />
                 </Link>
-                <Link to="/companion" className="text-[12px] text-[color:var(--pb-blue)]">
-                  View Sync Log →
+                <span style={{ color: "rgba(255,255,255,0.15)" }}>·</span>
+                <Link
+                  to="/companion"
+                  style={{
+                    fontSize: "12px",
+                    color: "rgba(255,255,255,0.4)",
+                    textDecoration: "none",
+                    fontWeight: 500,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "3px",
+                  }}
+                >
+                  View Sync Log <ChevronRight size={12} />
                 </Link>
               </div>
-            </Card>
+            </div>
           ) : (
-            <div className="space-y-2">
-              <p className="text-[13px] text-muted-foreground">No device connected.</p>
+            <div style={{ padding: "18px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
+                <WifiOff size={14} color="rgba(255,255,255,0.25)" />
+                <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.45)" }}>
+                  No device connected
+                </p>
+              </div>
+              <p
+                style={{
+                  fontSize: "11px",
+                  color: "rgba(255,255,255,0.25)",
+                  marginBottom: "14px",
+                }}
+              >
+                Pair a companion device to automatically log UPI transactions.
+              </p>
               <Link to="/companion">
-                <Button
-                  variant="outline"
-                  className="w-full border-[color:var(--pb-purple)] text-[color:var(--pb-purple)]"
+                <button
+                  style={{
+                    padding: "9px 16px",
+                    background: "transparent",
+                    border: "1px solid rgba(194,125,86,0.4)",
+                    borderRadius: "8px",
+                    color: "#C27D56",
+                    fontSize: "12px",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    letterSpacing: "0.03em",
+                    transition: "all 0.2s ease",
+                    fontFamily: "var(--font-sans)",
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.target as HTMLButtonElement).style.borderColor = "#C27D56";
+                    (e.target as HTMLButtonElement).style.background = "rgba(194,125,86,0.08)";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.target as HTMLButtonElement).style.borderColor = "rgba(194,125,86,0.4)";
+                    (e.target as HTMLButtonElement).style.background = "transparent";
+                  }}
                 >
                   Set Up Companion →
-                </Button>
+                </button>
               </Link>
             </div>
           )}
-        </section>
+        </div>
 
-        {/* Subscriptions */}
-        <section id="section-settings-subs" className="space-y-2">
-          <div className="flex items-center justify-between">
-            <h3 className="text-[11px] font-semibold tracking-[0.15em] text-muted-foreground">
-              TRACKED SUBSCRIPTIONS
-            </h3>
-            <button
-              id="btn-add-sub"
-              onClick={() => setAddingSub(true)}
-              className="text-[12px] text-[color:var(--pb-blue)]"
+        {/* ── TRACKED SUBSCRIPTIONS ── */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: "10px",
+          }}
+        >
+          <SectionHeader icon={<CreditCard size={13} />} label="TRACKED SUBSCRIPTIONS" noMargin />
+          <button
+            id="btn-add-sub"
+            onClick={() => setAddingSub(true)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "5px",
+              padding: "6px 12px",
+              background: "rgba(140,120,83,0.12)",
+              border: "1px solid rgba(140,120,83,0.3)",
+              borderRadius: "20px",
+              color: "#C27D56",
+              fontSize: "11px",
+              fontWeight: 600,
+              letterSpacing: "0.05em",
+              cursor: "pointer",
+              transition: "all 0.2s ease",
+              fontFamily: "var(--font-sans)",
+            }}
+            onMouseEnter={(e) => {
+              const btn = e.currentTarget;
+              btn.style.background = "rgba(140,120,83,0.22)";
+              btn.style.borderColor = "rgba(140,120,83,0.6)";
+            }}
+            onMouseLeave={(e) => {
+              const btn = e.currentTarget;
+              btn.style.background = "rgba(140,120,83,0.12)";
+              btn.style.borderColor = "rgba(140,120,83,0.3)";
+            }}
+          >
+            <Plus size={11} />
+            ADD
+          </button>
+        </div>
+        <div
+          style={{
+            background: "#111111",
+            border: "1px solid rgba(255,255,255,0.07)",
+            borderRadius: "14px",
+            overflow: "hidden",
+            marginBottom: "24px",
+          }}
+        >
+          {(subs ?? []).length === 0 ? (
+            <div
+              style={{
+                padding: "32px 18px",
+                textAlign: "center",
+                color: "rgba(255,255,255,0.25)",
+                fontSize: "13px",
+              }}
             >
-              + Add
-            </button>
-          </div>
-          <div className="space-y-1.5">
-            {(subs ?? []).length === 0 && (
-              <p className="text-[12px] text-muted-foreground py-2">No subscriptions tracked.</p>
-            )}
-            {(subs ?? []).map((s) => (
-              <Card key={s.id} className="reactbits-card p-3">
-                <div className="flex items-center justify-between">
+              No subscriptions tracked yet.
+            </div>
+          ) : (
+            (subs ?? []).map((s: Sub, i: number) => (
+              <div key={s.id}>
+                {i > 0 && (
+                  <div
+                    style={{ height: "1px", background: "rgba(255,255,255,0.05)", margin: "0 18px" }}
+                  />
+                )}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "14px 18px",
+                    transition: "background 0.15s ease",
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLDivElement).style.background =
+                      "rgba(255,255,255,0.02)";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLDivElement).style.background = "transparent";
+                  }}
+                >
                   <div>
-                    <p className="text-[13px]">
-                      {s.service_name ?? s.name}
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <p
+                        style={{
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "rgba(255,255,255,0.85)",
+                        }}
+                      >
+                        {s.service_name ?? s.name}
+                      </p>
                       {s.detected_from === "auto_detected" && (
-                        <Badge className="ml-2 bg-[color:var(--pb-purple)]/20 text-[color:var(--pb-purple)] text-[10px]">
-                          Auto
-                        </Badge>
+                        <span
+                          style={{
+                            fontSize: "9px",
+                            fontWeight: 700,
+                            letterSpacing: "0.08em",
+                            padding: "2px 6px",
+                            background: "rgba(140,120,83,0.15)",
+                            border: "1px solid rgba(140,120,83,0.3)",
+                            borderRadius: "20px",
+                            color: "#C27D56",
+                            fontFamily: "var(--font-mono)",
+                          }}
+                        >
+                          AUTO
+                        </span>
                       )}
-                    </p>
-                    <p className="text-[12px] text-muted-foreground tnum">
-                      {rupees(s.amount)} • next: {shortDate(new Date(s.next_debit_date))}
+                    </div>
+                    <p
+                      style={{
+                        fontSize: "12px",
+                        color: "rgba(255,255,255,0.35)",
+                        marginTop: "2px",
+                        fontFamily: "var(--font-mono)",
+                      }}
+                    >
+                      {rupees(s.amount)} · next {shortDate(new Date(s.next_debit_date))}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
                     <Switch
                       id={`switch-sub-${s.id}`}
                       checked={s.is_active}
                       onCheckedChange={(v) => toggleSub(s.id, v, s.service_name ?? s.name)}
                     />
-                    <button onClick={() => delSub(s.id)} className="text-muted-foreground">
-                      <Trash2 className="h-4 w-4" />
+                    <button
+                      onClick={() => delSub(s.id)}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        width: "28px",
+                        height: "28px",
+                        borderRadius: "6px",
+                        background: "transparent",
+                        border: "1px solid rgba(255,255,255,0.06)",
+                        color: "rgba(255,255,255,0.3)",
+                        cursor: "pointer",
+                        transition: "all 0.2s ease",
+                      }}
+                      onMouseEnter={(e) => {
+                        const btn = e.currentTarget;
+                        btn.style.background = "rgba(239,68,68,0.1)";
+                        btn.style.borderColor = "rgba(239,68,68,0.3)";
+                        btn.style.color = "#ef4444";
+                      }}
+                      onMouseLeave={(e) => {
+                        const btn = e.currentTarget;
+                        btn.style.background = "transparent";
+                        btn.style.borderColor = "rgba(255,255,255,0.06)";
+                        btn.style.color = "rgba(255,255,255,0.3)";
+                      }}
+                    >
+                      <Trash2 size={13} />
                     </button>
                   </div>
                 </div>
-              </Card>
-            ))}
-          </div>
-        </section>
+              </div>
+            ))
+          )}
+        </div>
 
-        {/* Data */}
-        <section id="section-settings-data" className="space-y-2">
-          <h3 className="text-[11px] font-semibold tracking-[0.15em] text-muted-foreground">
-            DATA & EXPORT
-          </h3>
-          <Button id="btn-export-csv" variant="outline" className="w-full" onClick={exportCsv}>
-            Export Transactions (CSV)
-          </Button>
-          <Button
+        {/* ── DATA & EXPORT ── */}
+        <SectionHeader icon={<Database size={13} />} label="DATA & EXPORT" />
+        <div
+          style={{
+            background: "#111111",
+            border: "1px solid rgba(255,255,255,0.07)",
+            borderRadius: "14px",
+            overflow: "hidden",
+            marginBottom: "24px",
+          }}
+        >
+          <DataActionRow
+            id="btn-export-csv"
+            label="Export Transactions"
+            description="Download all transactions as CSV"
+            onClick={exportCsv}
+          />
+          <div style={{ height: "1px", background: "rgba(255,255,255,0.05)", margin: "0 18px" }} />
+          <DataActionRow
             id="btn-export-report"
-            variant="outline"
-            className="w-full"
+            label="Export Spending Report"
+            description="Current cycle summary as text"
             onClick={exportReport}
-          >
-            Export Spending Report
-          </Button>
-          <Button
+          />
+          <div style={{ height: "1px", background: "rgba(255,255,255,0.05)", margin: "0 18px" }} />
+          <DataActionRow
             id="btn-reset-cycle"
-            variant="outline"
-            className="w-full border-[color:var(--pb-red)] text-[color:var(--pb-red)]"
+            label="Reset Current Cycle"
+            description="Permanently delete this cycle's transactions"
             onClick={resetCycle}
-          >
-            Reset Current Cycle
-          </Button>
-        </section>
+            danger
+          />
+        </div>
 
-        {/* Account */}
-        <section id="section-settings-account">
-          <Button id="btn-sign-out" variant="destructive" className="w-full" onClick={signOut}>
-            Sign Out
-          </Button>
-        </section>
+        {/* ── ACCOUNT ── */}
+        <SectionHeader icon={<LogOut size={13} />} label="ACCOUNT" />
+        <div
+          style={{
+            background: "#111111",
+            border: "1px solid rgba(255,255,255,0.07)",
+            borderRadius: "14px",
+            overflow: "hidden",
+          }}
+        >
+          <div style={{ padding: "16px 18px" }}>
+            <div style={{ marginBottom: "12px" }}>
+              <p
+                style={{
+                  fontSize: "11px",
+                  color: "rgba(255,255,255,0.3)",
+                  fontFamily: "var(--font-mono)",
+                  marginBottom: "2px",
+                }}
+              >
+                SIGNED IN AS
+              </p>
+              <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.7)", fontWeight: 400 }}>
+                {user?.email}
+              </p>
+            </div>
+            <button
+              id="btn-sign-out"
+              onClick={signOut}
+              style={{
+                width: "100%",
+                padding: "11px 20px",
+                background: "rgba(239,68,68,0.08)",
+                border: "1px solid rgba(239,68,68,0.25)",
+                borderRadius: "9px",
+                color: "#ef4444",
+                fontSize: "13px",
+                fontWeight: 600,
+                letterSpacing: "0.04em",
+                cursor: "pointer",
+                transition: "all 0.2s ease",
+                fontFamily: "var(--font-sans)",
+              }}
+              onMouseEnter={(e) => {
+                const btn = e.currentTarget;
+                btn.style.background = "rgba(239,68,68,0.15)";
+                btn.style.borderColor = "rgba(239,68,68,0.5)";
+              }}
+              onMouseLeave={(e) => {
+                const btn = e.currentTarget;
+                btn.style.background = "rgba(239,68,68,0.08)";
+                btn.style.borderColor = "rgba(239,68,68,0.25)";
+              }}
+            >
+              Sign Out
+            </button>
+          </div>
+        </div>
       </div>
 
+      {/* Add Subscription Dialog */}
       <Dialog open={addingSub} onOpenChange={setAddingSub}>
-        <DialogContent id="dialog-add-sub">
+        <DialogContent
+          id="dialog-add-sub"
+          style={{
+            background: "#111111",
+            border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: "16px",
+          }}
+        >
           <AddSubForm
             onClose={() => {
               setAddingSub(false);
@@ -406,14 +885,145 @@ function SettingsPage() {
   );
 }
 
-function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
+/* ── Sub-components ── */
+
+function SectionHeader({
+  icon,
+  label,
+  noMargin,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  noMargin?: boolean;
+}) {
   return (
-    <div>
-      <label className="text-[12px] text-muted-foreground">{label}</label>
-      <div className="mt-1">{children}</div>
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "7px",
+        marginBottom: noMargin ? "0" : "10px",
+      }}
+    >
+      <span style={{ color: "rgba(255,255,255,0.3)" }}>{icon}</span>
+      <span
+        style={{
+          fontSize: "10px",
+          fontWeight: 700,
+          letterSpacing: "0.18em",
+          color: "rgba(255,255,255,0.3)",
+          fontFamily: "var(--font-mono)",
+        }}
+      >
+        {label}
+      </span>
     </div>
   );
 }
+
+function SettingsField({
+  label,
+  children,
+  noBorderRight,
+}: {
+  label: string;
+  children: React.ReactNode;
+  noBorderRight?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        padding: "14px 18px",
+        borderRight: noBorderRight ? "1px solid rgba(255,255,255,0.05)" : "none",
+      }}
+    >
+      <label
+        style={{
+          fontSize: "10px",
+          fontWeight: 600,
+          letterSpacing: "0.1em",
+          color: "rgba(255,255,255,0.3)",
+          fontFamily: "var(--font-mono)",
+          display: "block",
+          marginBottom: "8px",
+        }}
+      >
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+function DataActionRow({
+  id,
+  label,
+  description,
+  onClick,
+  danger,
+}: {
+  id?: string;
+  label: string;
+  description: string;
+  onClick: () => void;
+  danger?: boolean;
+}) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button
+      id={id}
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        width: "100%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "14px 18px",
+        background: hovered
+          ? danger
+            ? "rgba(239,68,68,0.05)"
+            : "rgba(255,255,255,0.02)"
+          : "transparent",
+        border: "none",
+        cursor: "pointer",
+        transition: "background 0.15s ease",
+        textAlign: "left",
+        fontFamily: "var(--font-sans)",
+      }}
+    >
+      <div>
+        <p
+          style={{
+            fontSize: "13px",
+            fontWeight: 500,
+            color: danger ? "#ef4444" : "rgba(255,255,255,0.8)",
+          }}
+        >
+          {label}
+        </p>
+        <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)", marginTop: "2px" }}>
+          {description}
+        </p>
+      </div>
+      <ChevronRight size={14} color={danger ? "#ef4444" : "rgba(255,255,255,0.2)"} />
+    </button>
+  );
+}
+
+const inputStyle: React.CSSProperties = {
+  background: "rgba(255,255,255,0.04)",
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: "8px",
+  color: "rgba(255,255,255,0.85)",
+  fontSize: "13px",
+  padding: "8px 12px",
+  width: "100%",
+  outline: "none",
+  fontFamily: "var(--font-mono)",
+  transition: "border-color 0.2s ease",
+};
 
 function AddSubForm({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState("");
@@ -444,24 +1054,109 @@ function AddSubForm({ onClose }: { onClose: () => void }) {
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Add subscription</DialogTitle>
+        <DialogTitle
+          style={{
+            fontSize: "15px",
+            fontWeight: 600,
+            color: "rgba(255,255,255,0.9)",
+            letterSpacing: "0.02em",
+          }}
+        >
+          Track Subscription
+        </DialogTitle>
       </DialogHeader>
-      <Input
-        placeholder="Service name (Spotify)"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-      />
-      <Input
-        type="number"
-        placeholder="Amount ₹"
-        value={amt}
-        onChange={(e) => setAmt(e.target.value)}
-      />
-      <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-      <DialogFooter>
-        <Button onClick={save} className="w-full">
-          Add
-        </Button>
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginTop: "4px" }}>
+        <div>
+          <label
+            style={{
+              fontSize: "10px",
+              fontWeight: 700,
+              letterSpacing: "0.1em",
+              color: "rgba(255,255,255,0.3)",
+              fontFamily: "var(--font-mono)",
+              display: "block",
+              marginBottom: "6px",
+            }}
+          >
+            SERVICE NAME
+          </label>
+          <Input
+            placeholder="Spotify, Netflix…"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            style={inputStyle}
+          />
+        </div>
+        <div>
+          <label
+            style={{
+              fontSize: "10px",
+              fontWeight: 700,
+              letterSpacing: "0.1em",
+              color: "rgba(255,255,255,0.3)",
+              fontFamily: "var(--font-mono)",
+              display: "block",
+              marginBottom: "6px",
+            }}
+          >
+            AMOUNT (₹)
+          </label>
+          <Input
+            type="number"
+            placeholder="199"
+            value={amt}
+            onChange={(e) => setAmt(e.target.value)}
+            style={inputStyle}
+          />
+        </div>
+        <div>
+          <label
+            style={{
+              fontSize: "10px",
+              fontWeight: 700,
+              letterSpacing: "0.1em",
+              color: "rgba(255,255,255,0.3)",
+              fontFamily: "var(--font-mono)",
+              display: "block",
+              marginBottom: "6px",
+            }}
+          >
+            NEXT DEBIT DATE
+          </label>
+          <Input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            style={inputStyle}
+          />
+        </div>
+      </div>
+      <DialogFooter style={{ marginTop: "8px" }}>
+        <button
+          onClick={save}
+          style={{
+            width: "100%",
+            padding: "11px 20px",
+            background: "linear-gradient(135deg, #8C7853 0%, #C27D56 100%)",
+            border: "none",
+            borderRadius: "9px",
+            color: "#fff",
+            fontSize: "13px",
+            fontWeight: 600,
+            letterSpacing: "0.04em",
+            cursor: "pointer",
+            transition: "opacity 0.2s ease",
+            fontFamily: "var(--font-sans)",
+          }}
+          onMouseEnter={(e) => {
+            (e.target as HTMLButtonElement).style.opacity = "0.85";
+          }}
+          onMouseLeave={(e) => {
+            (e.target as HTMLButtonElement).style.opacity = "1";
+          }}
+        >
+          Track Subscription
+        </button>
       </DialogFooter>
     </>
   );

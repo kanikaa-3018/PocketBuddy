@@ -58,7 +58,6 @@ function TxnsPage() {
   const filtered = useMemo(() => {
     if (!txns) return [];
     let out = txns;
-    // range
     const now = new Date();
     if (range === "cycle" && profile?.cycle_start_day) {
       const start = getCycleStart(profile.cycle_start_day);
@@ -84,37 +83,37 @@ function TxnsPage() {
 
   return (
     <AppShell>
-      <div className="sticky top-0 z-30 border-b border-border bg-[color:var(--surface)]">
-        <div className="flex h-14 items-center px-4">
-          <h1 className="text-[14px] font-semibold tracking-[0.15em]">TRANSACTION HISTORY</h1>
+      <div className="sticky top-0 z-30 border-b border-border bg-[#0A0A0A]/85 backdrop-blur-md pb-4 pt-2">
+        <div className="flex h-14 items-center justify-between mb-2">
+          <h1 className="text-[12px] font-black tracking-[0.25em] text-foreground uppercase">Transaction History</h1>
         </div>
-        <div className="flex gap-1.5 overflow-x-auto px-4 pb-2">
+        <div className="flex gap-1.5 overflow-x-auto pb-3 no-scrollbar">
           {CAT_FILTERS.map((c) => (
             <button
               key={c.v}
               id={`filter-txn-${c.v}`}
               onClick={() => setCat(c.v)}
-              className={`whitespace-nowrap rounded-full px-3 py-1 text-[12px] ${cat === c.v ? "bg-[color:var(--pb-blue)] text-white" : "bg-[color:var(--surface-raised)] border border-border text-muted-foreground"}`}
+              className={`whitespace-nowrap rounded-full px-3.5 py-1 text-[10px] uppercase tracking-wider font-bold transition-all border cursor-pointer ${cat === c.v ? "bg-primary border-primary text-primary-foreground" : "bg-surface-raised border-border text-muted-foreground hover:text-foreground hover:bg-surface-interactive"}`}
             >
               {c.l}
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-2 px-4 pb-2">
-          <span className="text-[11px] text-muted-foreground">Source:</span>
+        <div className="flex items-center gap-2 pb-1">
+          <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest pl-1">Source:</span>
           {(["all", "companion", "manual"] as const).map((s) => (
             <button
               key={s}
               id={`filter-source-${s}`}
               onClick={() => setSrc(s)}
-              className={`rounded-full px-2.5 py-0.5 text-[11px] capitalize ${src === s ? "bg-[color:var(--pb-purple)] text-white" : "bg-[color:var(--surface-raised)] text-muted-foreground"}`}
+              className={`rounded-full px-3 py-1 text-[9px] font-bold uppercase tracking-wider transition-all border cursor-pointer ${src === s ? "bg-primary border-primary text-primary-foreground" : "bg-surface-raised border-border text-muted-foreground hover:text-foreground"}`}
             >
-              {s === "companion" ? "📲 Companion" : s === "manual" ? "✍️ Manual" : "All"}
+              {s === "companion" ? "Companion" : s === "manual" ? "✍️ Manual" : "All"}
             </button>
           ))}
           <div className="ml-auto">
             <Select value={range} onValueChange={(v) => setRange(v as Range)}>
-              <SelectTrigger id="select-txn-range" className="h-7 text-[11px]">
+              <SelectTrigger id="select-txn-range" className="h-7 text-[10px] font-bold uppercase tracking-wider bg-surface border-border">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -128,73 +127,79 @@ function TxnsPage() {
         </div>
       </div>
 
-      <div className="px-4 py-3 pb-24 space-y-1.5">
-        {isLoading && <Skeleton className="h-40 w-full" />}
+      <div className="py-6 pb-32 space-y-1.5">
+        {isLoading && <Skeleton className="h-40 w-full bg-white/5 border-none" />}
         {!isLoading && visible.length === 0 && (
-          <p className="py-10 text-center text-[13px] text-muted-foreground">
+          <p className="py-12 text-center text-xs text-zinc-500 font-semibold uppercase tracking-wider">
             No transactions found.
           </p>
         )}
-        {visible.map((t) => {
-          const isCompanion = t.source.startsWith("companion");
-          const notificationPreview = t.notification_preview;
-          return (
-            <div key={t.id} className="rounded-xl reactbits-card p-3">
-              <div className="flex items-start justify-between">
-                <div className="flex-1 min-w-0">
-                  <p
-                    className={`text-[13px] truncate ${t.is_mapped ? "" : "italic text-[color:var(--pb-amber)]"}`}
-                  >
-                    <span className="mr-1">{isCompanion ? "📲" : "✍️"}</span>
-                    {t.mapped_merchant_name ?? t.raw_merchant_string}
-                  </p>
-                  <div className="mt-0.5 flex flex-wrap gap-1">
-                    {t.category && (
-                      <Badge
-                        variant="outline"
-                        className="text-[9px] py-0 px-1.5 text-muted-foreground"
+
+        {!isLoading && visible.length > 0 && (
+          <div className="border border-border bg-surface rounded-2xl overflow-hidden divide-y divide-border">
+            {visible.map((t) => {
+              const isCompanion = t.source.startsWith("companion");
+              const notificationPreview = t.notification_preview;
+              return (
+                <div key={t.id} className="p-4 transition-colors hover:bg-surface-raised/60">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <p
+                        className={`text-xs font-bold truncate ${t.is_mapped ? "text-foreground" : "italic text-warning/90"}`}
                       >
-                        {t.category}
-                      </Badge>
-                    )}
-                    {isCompanion && notificationPreview && (
-                      <button
-                        onClick={() => setExpanded(expanded === t.id ? null : t.id)}
-                        className="text-[10px] text-[color:var(--pb-blue)]"
-                      >
-                        {expanded === t.id ? "Hide preview" : "Show preview"}
-                      </button>
-                    )}
+                        <span className="mr-2 text-sm">{isCompanion ? "📲" : "✍️"}</span>
+                        {t.mapped_merchant_name ?? t.raw_merchant_string}
+                      </p>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                        {t.category && (
+                          <Badge
+                            variant="outline"
+                            className="text-[9px] font-black tracking-widest text-zinc-500 uppercase py-0 px-2 bg-white/5 border-border"
+                          >
+                            {t.category}
+                          </Badge>
+                        )}
+                        {isCompanion && notificationPreview && (
+                          <button
+                            onClick={() => setExpanded(expanded === t.id ? null : t.id)}
+                            className="text-[9px] font-bold text-accent-bronze hover:text-accent-amber transition-colors uppercase tracking-wider cursor-pointer"
+                          >
+                            {expanded === t.id ? "Hide preview" : "Show preview"}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-xs font-black text-foreground tnum">{rupees(t.amount)}</p>
+                      <p className="text-[9px] text-zinc-500 font-semibold mt-0.5">{relativeTime(t.created_at)}</p>
+                      <p className="text-[8px] text-zinc-600 font-bold uppercase tracking-wide mt-0.5">{absoluteDate(t.created_at)}</p>
+                    </div>
                   </div>
+                  {expanded === t.id && notificationPreview && (
+                    <pre className="mt-3 rounded-lg bg-[#0A0A0A] border border-border p-3 text-[10px] font-mono text-muted-foreground whitespace-pre-wrap select-all shadow-inner">
+                      {notificationPreview}
+                    </pre>
+                  )}
                 </div>
-                <div className="text-right">
-                  <p className="text-[13px] font-semibold tnum">{rupees(t.amount)}</p>
-                  <p className="text-[11px] text-muted-foreground">{relativeTime(t.created_at)}</p>
-                  <p className="text-[10px] text-muted-foreground">{absoluteDate(t.created_at)}</p>
-                </div>
-              </div>
-              {expanded === t.id && notificationPreview && (
-                <pre className="mt-2 rounded bg-[color:var(--surface-raised)] p-2 text-[11px] font-mono whitespace-pre-wrap">
-                  {notificationPreview}
-                </pre>
-              )}
-            </div>
-          );
-        })}
+              );
+            })}
+          </div>
+        )}
+
         {filtered.length > visible.length && (
           <button
             onClick={() => setLimit((l) => l + 20)}
-            className="mt-2 w-full rounded-md reactbits-btn py-2 text-[13px]"
+            className="mt-4 w-full rounded-md py-2.5 text-[10px] font-bold uppercase tracking-wider bg-surface-raised border border-border text-foreground hover:bg-surface-interactive hover:border-white/15 transition-all cursor-pointer"
           >
             Load more
           </button>
         )}
       </div>
 
-      <div className="fixed inset-x-0 bottom-16 z-30 border-t border-border bg-[color:var(--surface-raised)] px-4 py-3">
-        <p className="text-[13px] font-semibold tnum">
-          Showing: {visible.length} transactions • Total: {rupees(total)}
-        </p>
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-surface/85 backdrop-blur-md px-5 py-2.5 rounded-full border border-border shadow-[0_12px_32px_rgba(0,0,0,0.5)] flex items-center justify-between gap-6 whitespace-nowrap text-[10px] font-bold uppercase tracking-wider text-muted-foreground animate-[fadeIn_0.3s_ease-out]">
+        <span>Showing: <strong className="text-foreground">{visible.length}</strong> txns</span>
+        <span className="w-[1px] h-3 bg-border" />
+        <span>Total: <strong className="text-foreground">{rupees(total)}</strong></span>
       </div>
     </AppShell>
   );
