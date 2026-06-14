@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends
 from app.core.database import get_db
 from app.core.security import get_current_user
 import datetime
-import random
 
 router = APIRouter()
 
@@ -212,15 +211,6 @@ async def get_wing_feed(user_id: str = Depends(get_current_user)):
 
     # Sort all events by recency
     events.sort(key=lambda e: e["mins_ago"])
-
-    # Fallback: generate illustrative events if nothing real exists
-    if not events:
-        events = [
-            {"type": "pool_created", "icon": "🛒", "text": f"New Zepto pool started in {wing or 'Wing 4B'}", "mins_ago": 3},
-            {"type": "merchant_mapped", "icon": "📍", "text": "'BH-2 Night Canteen' was identified and added to campus directory", "mins_ago": 12},
-            {"type": "checkin", "icon": "🍽️", "text": "A student checked in — ate at campus mess", "mins_ago": 28},
-            {"type": "pool_created", "icon": "🛒", "text": "Blinkit pool closed — delivery fee was split 4 ways", "mins_ago": 45},
-        ]
 
     return {"events": events[:8], "wing": wing}
 
