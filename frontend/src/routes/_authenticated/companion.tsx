@@ -64,7 +64,7 @@ function CompanionPage() {
   const companionWebhookUrl = getCompanionWebhookUrl();
   const connectorConfig = [
     `POCKETBUDDY_WEBHOOK_URL=${companionWebhookUrl}`,
-    "POCKETBUDDY_WEBHOOK_TOKEN=",
+    `POCKETBUDDY_WEBHOOK_TOKEN=${pairing || ""}`,
     `POCKETBUDDY_USER_ID=${user?.id ?? ""}`,
   ].join("\n");
 

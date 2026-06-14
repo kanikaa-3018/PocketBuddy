@@ -226,8 +226,16 @@ async def ingest_notification(
     if not profile:
         raise HTTPException(status_code=404, detail="User not found")
 
-    if profile.get("pairing_code") and req.pairing_code and profile["pairing_code"] != req.pairing_code:
-        raise HTTPException(status_code=403, detail="Invalid pairing code")
+    # Extract token from authorization header if present
+    provided_token = None
+    if authorization and authorization.startswith("Bearer "):
+        provided_token = authorization.split(" ", 1)[1].strip()
+
+    client_pairing_code = provided_token or req.pairing_code
+
+    if profile.get("pairing_code"):
+        if not client_pairing_code or profile["pairing_code"] != client_pairing_code:
+            raise HTTPException(status_code=403, detail="Invalid pairing code")
 
     raw_body = req.text or req.body or ""
     notification_preview = mask_notification_text(raw_body)
