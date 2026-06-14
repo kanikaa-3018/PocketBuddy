@@ -291,6 +291,30 @@ function StatusBadge({ status }: { status: string }) {
         Processing
       </Badge>
     );
+  if (status === "auto_verified")
+    return (
+      <Badge className="bg-success/20 text-success text-[10px]">
+        Pool verified
+      </Badge>
+    );
+  if (status === "received")
+    return (
+      <Badge className="bg-primary/15 text-primary text-[10px]">
+        Received
+      </Badge>
+    );
+  if (status === "incomplete")
+    return (
+      <Badge className="bg-warning/20 text-warning text-[10px]">
+        Needs review
+      </Badge>
+    );
+  if (status === "duplicate")
+    return (
+      <Badge variant="outline" className="text-[10px] text-muted-foreground">
+        Duplicate
+      </Badge>
+    );
   if (status === "failed")
     return (
       <Badge className="bg-destructive/20 text-destructive text-[10px]">
@@ -299,7 +323,7 @@ function StatusBadge({ status }: { status: string }) {
     );
   return (
     <Badge variant="outline" className="text-[10px] text-muted-foreground">
-      Duplicate
+      Ignored
     </Badge>
   );
 }
