@@ -11,7 +11,8 @@ import {
   X, 
   Plus,
   Sun,
-  Moon
+  Moon,
+  LogOut
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { BottomNav } from "./BottomNav";
@@ -33,93 +34,101 @@ const tabs = [
   { to: "/settings", label: "Settings", icon: Settings, id: "nav-settings" },
 ] as const;
 
-function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
-  const { collapsed } = useContext(SidebarCtx)!;
+function SidebarBody({ onNavigate, isMobile = false }: { onNavigate?: () => void; isMobile?: boolean }) {
+  const ctx = useContext(SidebarCtx)!;
+  const collapsed = isMobile ? false : ctx.collapsed;
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto no-scrollbar">
-      {/* Logo */}
-      <div className={`flex items-center gap-3 px-5 ${collapsed ? "pt-6 pb-2 justify-center px-3" : "pt-6 pb-2"}`}>
-        <div className="grid h-8 w-8 shrink-0 place-items-center rounded-sm rotate-45 bg-primary">
-          <div className="h-3 w-3 -rotate-45 rounded-full bg-background" />
-        </div>
-        {!collapsed && (
-          <div className="min-w-0">
-            <h1 className="font-display text-[16px] font-bold leading-none tracking-tight text-foreground truncate">
-              POCKETBUDDY
-            </h1>
-            <span className="mt-1 block text-[10px] font-medium tracking-[0.18em] uppercase text-muted-foreground/70">
-              Campus Financial Guard
-            </span>
+    <div className="flex h-full flex-col">
+      {/* Scrollable upper content */}
+      <div className="flex-1 overflow-y-auto no-scrollbar">
+        {/* Logo */}
+        <div className={`flex items-center gap-3 px-5 ${collapsed ? "pt-6 pb-2 justify-center px-3" : "pt-6 pb-2"}`}>
+          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-sm rotate-45 bg-primary">
+            <div className="h-3 w-3 -rotate-45 rounded-full bg-background" />
           </div>
+          {!collapsed && (
+            <div className="min-w-0">
+              <h1 className="font-display text-[16px] font-bold leading-none tracking-tight text-foreground truncate">
+                POCKETBUDDY
+              </h1>
+              <span className="mt-1 block text-[10px] font-medium tracking-[0.18em] uppercase text-muted-foreground/70">
+                Campus Financial Guard
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Collapse Toggle */}
+        {!isMobile && (
+          <div className="px-3 pb-4 border-b border-border/50 mb-4">
+            <CollapseToggle onNavigate={onNavigate} />
+          </div>
+        )}
+
+        {/* Action Button: Log Txn */}
+        {user && (
+          <div className="mb-4 px-3 mt-4">
+            {!collapsed ? (
+              <Link 
+                to="/dashboard?log=true" 
+                onClick={onNavigate}
+                className="flex items-center justify-center gap-2 h-10 w-full rounded-lg bg-foreground text-background text-xs font-bold uppercase tracking-wider transition-all hover:scale-[1.02] active:scale-[0.98] shadow-md cursor-pointer"
+              >
+                <Plus className="h-4 w-4 stroke-[3]" />
+                <span>Log Transaction</span>
+              </Link>
+            ) : (
+              <Link 
+                to="/dashboard?log=true" 
+                onClick={onNavigate}
+                title="Log Transaction"
+                className="flex items-center justify-center h-10 w-10 mx-auto rounded-lg bg-foreground text-background transition-all hover:scale-105 active:scale-95 shadow-md cursor-pointer"
+              >
+                <Plus className="h-5 w-5 stroke-[3]" />
+              </Link>
+            )}
+          </div>
+        )}
+
+        {/* Nav */}
+        {!isMobile && (
+          <nav className="flex-1 px-3">
+            <ul className="space-y-0.5">
+              {tabs.map((t) => {
+                const active = pathname === t.to || pathname.startsWith(t.to + "/");
+                const Icon = t.icon;
+                return (
+                  <li key={t.to}>
+                    <Link
+                      to={t.to}
+                      id={t.id}
+                      onClick={onNavigate}
+                      title={collapsed ? t.label : undefined}
+                      className={`group relative flex items-center gap-3 rounded-md px-3 py-2.5 text-[14px] transition-colors ${
+                        active
+                          ? "bg-surface-raised text-foreground"
+                          : "text-muted-foreground hover:bg-surface-raised hover:text-foreground"
+                      } ${collapsed ? "justify-center px-2" : ""}`}
+                    >
+                      {active && (
+                        <span className="absolute left-0 top-1/2 h-5 -translate-y-1/2 w-[2px] rounded-r bg-primary" />
+                      )}
+                      <Icon className={`h-[18px] w-[18px] shrink-0 ${active ? "" : "opacity-60 group-hover:opacity-100"}`} />
+                      {!collapsed && <span className="truncate font-medium">{t.label}</span>}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
         )}
       </div>
 
-      {/* Collapse Toggle */}
-      <div className="px-3 pb-4 border-b border-border/50 mb-4">
-        <CollapseToggle onNavigate={onNavigate} />
-      </div>
-
-      {/* Action Button: Log Txn */}
-      {user && (
-        <div className="mb-4 px-3">
-          {!collapsed ? (
-            <Link 
-              to="/dashboard?log=true" 
-              onClick={onNavigate}
-              className="flex items-center justify-center gap-2 h-10 w-full rounded-lg bg-foreground text-background text-xs font-bold uppercase tracking-wider transition-all hover:scale-[1.02] active:scale-[0.98] shadow-md cursor-pointer"
-            >
-              <Plus className="h-4 w-4 stroke-[3]" />
-              <span>Log Transaction</span>
-            </Link>
-          ) : (
-            <Link 
-              to="/dashboard?log=true" 
-              onClick={onNavigate}
-              title="Log Transaction"
-              className="flex items-center justify-center h-10 w-10 mx-auto rounded-lg bg-foreground text-background transition-all hover:scale-105 active:scale-95 shadow-md cursor-pointer"
-            >
-              <Plus className="h-5 w-5 stroke-[3]" />
-            </Link>
-          )}
-        </div>
-      )}
-
-      {/* Nav */}
-      <nav className="flex-1 px-3">
-        <ul className="space-y-0.5">
-          {tabs.map((t) => {
-            const active = pathname === t.to || pathname.startsWith(t.to + "/");
-            const Icon = t.icon;
-            return (
-              <li key={t.to}>
-                <Link
-                  to={t.to}
-                  id={t.id}
-                  onClick={onNavigate}
-                  title={collapsed ? t.label : undefined}
-                  className={`group relative flex items-center gap-3 rounded-md px-3 py-2.5 text-[14px] transition-colors ${
-                    active
-                      ? "bg-surface-raised text-foreground"
-                      : "text-muted-foreground hover:bg-surface-raised hover:text-foreground"
-                  } ${collapsed ? "justify-center px-2" : ""}`}
-                >
-                  {active && (
-                    <span className="absolute left-0 top-1/2 h-5 -translate-y-1/2 w-[2px] rounded-r bg-primary" />
-                  )}
-                  <Icon className={`h-[18px] w-[18px] shrink-0 ${active ? "" : "opacity-60 group-hover:opacity-100"}`} />
-                  {!collapsed && <span className="truncate font-medium">{t.label}</span>}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
-
-      {/* Footer: User profile + Sync Active + collapse */}
-      <div className="border-t border-border p-3 space-y-3">
+      {/* Footer: User profile + Sync Active + Theme */}
+      <div className="border-t border-border p-3 space-y-3 bg-surface">
         {/* Sync active */}
         {!collapsed ? (
           <div className="rounded-lg border border-border bg-surface-raised/50 p-3">
@@ -141,17 +150,31 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
         {user && (
           <div className="border-t border-border pt-3">
             {!collapsed ? (
-              <Link to="/settings" onClick={onNavigate} className="flex items-center gap-3 hover:bg-surface-raised p-2 rounded-lg transition-all">
-                <div className="w-8 h-8 rounded-full bg-surface-raised flex items-center justify-center border border-border shadow-inner shrink-0">
-                  <span className="text-xs text-foreground font-bold font-display">
-                    {user.email ? user.email.charAt(0).toUpperCase() : "U"}
-                  </span>
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[12px] font-bold text-foreground truncate">{user.fullName || "User"}</p>
-                  <p className="text-[11px] text-muted-foreground truncate">{user.email || ""}</p>
-                </div>
-              </Link>
+              <div className="flex flex-col gap-1.5">
+                <Link to="/settings" onClick={onNavigate} className="flex items-center gap-3 hover:bg-surface-raised p-2 rounded-lg transition-all">
+                  <div className="w-8 h-8 rounded-full bg-surface-raised flex items-center justify-center border border-border shadow-inner shrink-0">
+                    <span className="text-xs text-foreground font-bold font-display">
+                      {user.email ? user.email.charAt(0).toUpperCase() : "U"}
+                    </span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[12px] font-bold text-foreground truncate">{user.fullName || "User"}</p>
+                    <p className="text-[11px] text-muted-foreground truncate">{user.email || ""}</p>
+                  </div>
+                </Link>
+                {isMobile && (
+                  <button
+                    onClick={() => {
+                      logout();
+                      if (onNavigate) onNavigate();
+                    }}
+                    className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-destructive hover:bg-destructive/10 transition-colors"
+                  >
+                    <LogOut className="h-4 w-4 shrink-0" />
+                    <span className="font-semibold uppercase tracking-wider text-[10px]">Sign Out</span>
+                  </button>
+                )}
+              </div>
             ) : (
               <Link to="/settings" onClick={onNavigate} title="Settings" className="flex justify-center py-2">
                 <div className="w-8 h-8 rounded-full bg-surface-raised flex items-center justify-center border border-border shadow-inner">
@@ -164,14 +187,17 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
           </div>
         )}
 
-        <ThemeToggle onNavigate={onNavigate} />
+        <ThemeToggle onNavigate={onNavigate} isMobile={isMobile} />
       </div>
     </div>
   );
 }
 
-function ThemeToggle({ onNavigate }: { onNavigate?: () => void }) {
-  const { theme, toggleTheme, collapsed } = useContext(SidebarCtx)!;
+function ThemeToggle({ onNavigate, isMobile = false }: { onNavigate?: () => void; isMobile?: boolean }) {
+  const ctx = useContext(SidebarCtx)!;
+  const collapsed = isMobile ? false : ctx.collapsed;
+  const theme = ctx.theme;
+  const toggleTheme = ctx.toggleTheme;
   const Icon = theme === "dark" ? Sun : Moon;
   return (
     <button
@@ -281,20 +307,21 @@ export function AppShell({
 
         {/* Mobile drawer */}
         {mobileOpen && (
-          <div className="fixed inset-0 z-50 md:hidden">
+          <div className="fixed inset-0 z-[60] md:hidden animate-[fadeIn_0.15s_ease-out]">
             <button
               aria-label="Close menu"
               onClick={() => setMobileOpen(false)}
-              className="absolute inset-0 bg-black/60"
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
             />
-            <div className="absolute left-0 top-0 h-full w-72 border-r border-border bg-surface pb-20">
+            <div className="absolute left-0 top-0 h-full w-72 border-r border-border bg-surface pb-6 shadow-2xl shadow-black/80 flex flex-col animate-[slideInLeft_0.2s_ease-out]">
               <button
                 onClick={() => setMobileOpen(false)}
-                className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-surface-raised"
+                className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full text-muted-foreground hover:bg-surface-raised hover:text-foreground transition-colors"
+                aria-label="Close menu"
               >
                 <X className="h-4 w-4" />
               </button>
-              <SidebarBody onNavigate={() => setMobileOpen(false)} />
+              <SidebarBody onNavigate={() => setMobileOpen(false)} isMobile={true} />
             </div>
           </div>
         )}
@@ -321,10 +348,10 @@ export function MobileMenuButton() {
     <button
       id="btn-mobile-menu"
       onClick={() => ctx.setMobileOpen(true)}
-      className="md:hidden grid h-9 w-9 place-items-center rounded-md border border-border bg-surface text-muted-foreground hover:text-foreground"
+      className="md:hidden grid h-10 w-10 place-items-center rounded-full text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
       aria-label="Open menu"
     >
-      <Menu className="h-4 w-4" />
+      <Menu className="h-[20px] w-[20px]" />
     </button>
   );
 }

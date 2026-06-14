@@ -702,28 +702,29 @@ function Dashboard() {
 
   return (
     <AppShell>
-      <div className="pb-16 pt-2">
-        {/* Top bar mobile */}
-        <div className="flex md:hidden items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <MobileMenuButton />
-            <h1 id="logo-dashboard" className="text-lg font-black tracking-wider text-foreground uppercase">
-              Dashboard
-            </h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => nav({ to: "/companion" })}
-              title={compStatus === "green" ? "Companion syncing" : compStatus === "amber" ? "Companion idle" : "No companion"}
-              className="flex items-center justify-center w-8 h-8 rounded-full bg-surface border border-border"
-            >
-              <span className={`h-1.5 w-1.5 rounded-full animate-pulse ${compStatus === "green" ? "bg-success" : compStatus === "amber" ? "bg-warning" : "bg-destructive"}`} />
-            </button>
-            <Badge variant="outline" id="badge-wing" className="bg-white/5 border-border text-foreground font-bold text-[10px]">
-              {profile?.wing_label ?? "—"}
-            </Badge>
-          </div>
+      {/* Page Header */}
+      <div className="sticky top-0 z-30 -mx-6 -mt-6 md:-mx-10 md:-mt-8 lg:-mx-12 lg:-mt-10 mb-6 flex h-14 items-center justify-between border-b border-border bg-background/85 backdrop-blur-md px-6 md:px-10 lg:px-12">
+        <div className="flex items-center gap-3">
+          <MobileMenuButton />
+          <h1 id="logo-dashboard" className="text-lg font-black tracking-wider text-foreground uppercase">
+            Dashboard
+          </h1>
         </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => nav({ to: "/companion" })}
+            title={compStatus === "green" ? "Companion syncing" : compStatus === "amber" ? "Companion idle" : "No companion"}
+            className="flex items-center justify-center w-8 h-8 rounded-full bg-surface border border-border transition-colors hover:bg-surface-raised"
+          >
+            <span className={`h-1.5 w-1.5 rounded-full animate-pulse ${compStatus === "green" ? "bg-success" : compStatus === "amber" ? "bg-warning" : "bg-destructive"}`} />
+          </button>
+          <Badge variant="outline" id="badge-wing" className="bg-white/5 border-border text-foreground font-bold text-[10px]">
+            {profile?.wing_label ?? "—"}
+          </Badge>
+        </div>
+      </div>
+
+      <div className="pb-16">
 
         {/* ── Smart Nudges row ──────────────────────────────────────────── */}
         {visibleNudges.length > 0 && (

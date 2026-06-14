@@ -259,4 +259,14 @@ html.dark { color-scheme: dark; }
       bottom: 0;
     }
   }
+
+  /* Animations for modern overlays & drawers */
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes slideInLeft {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(0); }
+  }
 }
