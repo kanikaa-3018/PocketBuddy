@@ -1,12 +1,17 @@
 import datetime
 import uuid
+import json
+import logging
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from app.core.database import get_db
 from app.core.security import get_current_user
+from app.core.config import settings
 
 router = APIRouter()
+logger = logging.getLogger("app.api.travel")
+
 
 # Default seeded routes for ABV-IIITM Gwalior
 DEFAULT_ROUTES = [
@@ -429,3 +434,134 @@ async def log_savings(req: SavingsLogReq, user_id: str = Depends(get_current_use
     })
     
     return {"status": "ok", "id": savings_id, "amount_saved": req.amount_saved}
+
+
+class AiCoachReq(BaseModel):
+    route_id: str
+    mode: str
+    user_situation: Optional[str] = ""
+    college: Optional[str] = None
+
+@router.post("/ai-coach")
+async def get_ai_negotiation_coach(req: AiCoachReq, user_id: str = Depends(get_current_user)):
+    db = get_db()
+    
+    # Fetch route info
+    route = await db.travel_routes.find_one({"_id": req.route_id})
+    
+    # Determine college name
+    college = req.college or (route.get("college") if route else None)
+    if not college:
+        profile = await db.profiles.find_one({"_id": user_id})
+        college = profile.get("college_name") if profile else "ABV-IIITM Gwalior"
+        
+    route_name = route.get("name", "Campus Route") if route else "Campus Route"
+    distance_km = route.get("distance_km", 10.0) if route else 10.0
+    
+    # Determine target fare ranges
+    min_fare, max_fare, median_fare = 150, 200, 175
+    if route:
+        for m in route.get("modes", []):
+            if req.mode.lower() in m["mode"].lower() or m["mode"].lower() in req.mode.lower():
+                min_fare = m.get("min_fare", min_fare)
+                max_fare = m.get("max_fare", max_fare)
+                median_fare = m.get("median_fare", median_fare)
+                break
+                
+    # Dialect and regional mapping based on college
+    col_lower = college.lower()
+    if "gwalior" in col_lower or "iiitm" in col_lower:
+        region = "Gwalior, Madhya Pradesh"
+        dialect = "Chambal-styled friendly but street-smart Hindi. Use terms like 'Bhaiya', 'chalo na' in a firm student voice."
+    elif "delhi" in col_lower:
+        region = "Delhi NCR"
+        dialect = "Delhi Hinglish/slang. Use terms like 'Bhai', 'yaar', refer to standard app booking screenshots, speak firmly."
+    elif "pilani" in col_lower or "bits" in col_lower:
+        region = "Pilani, Rajasthan"
+        dialect = "Pilani student Hinglish. Use terms like 'Bhaiya ji', be polite but highly assertive."
+    elif "bombay" in col_lower or "mumbai" in col_lower:
+        region = "Mumbai, Maharashtra"
+        dialect = "Bambaiya street Hinglish. Use terms like 'Dada', 'Boss', mention 'meter-se chalo'."
+    elif "bangalore" in col_lower or "iiitb" in col_lower:
+        region = "Bangalore, Karnataka"
+        dialect = "Bangalore Hinglish. Use terms like 'Anna', refer to dynamic app pricing, polite and rational."
+    elif "vellore" in col_lower or "vit" in col_lower:
+        region = "Vellore, Tamil Nadu"
+        dialect = "Vellore/Tamil Hinglish. Use terms like 'Anna', mention standard Katpadi junction fares."
+    else:
+        region = "India"
+        dialect = "Hinglish student negotiation slang."
+
+    # Build local rule-based fallback response
+    fallback_script = route.get("negotiation_helper", "Bhaiya, sahi price lagao. Chalo na.") if route else "Bhaiya, sahi price lagao."
+    if req.user_situation:
+        fallback_script += f" (Note: {req.user_situation})"
+        
+    fallback_response = {
+        "script": fallback_script,
+        "tactics": [
+            f"Compare Ola/Uber/Rapido rates on your phone screen before discussing flat rates.",
+            f"Walk 100 meters away from main exit gates to hire passing running autos rather than stationary ones.",
+            f"Refer to standard rates: Bhaiya, regular campus rate is between ₹{min_fare}-₹{max_fare}."
+        ],
+        "safety": route.get("safety_score_night", "Avoid shared/unknown routes late at night; prefer app-booked rides.") if route else "Always prefer pre-booked app rides late at night.",
+        "source": "local_fallback"
+    }
+
+    if not settings.BEDROCK_ENABLED:
+        return fallback_response
+
+    try:
+        import boto3
+        client = boto3.client(
+            service_name="bedrock-runtime",
+            region_name=settings.AWS_REGION
+        )
+        
+        prompt = f"""
+        You are an expert Indian auto/cab fare negotiator and transit helper. 
+        The student is at {college} in {region}.
+        They are travelling on the route: {route_name} ({distance_km} km) via {req.mode}.
+        Target fair range: Rs. {min_fare} to Rs. {max_fare} (median: Rs. {median_fare}).
+        Student's current situation/problems: {req.user_situation or 'None'}
+
+        Task:
+        Generate a JSON object containing three fields:
+        1. "script": A localized, high-impact, realistic negotiation script in local Indian student dialect (using {dialect}) to say to the driver. Keep it short, natural, and street-smart (e.g., 'Bhaiya, app par Rs. 150 dikha raha hai...'). Incorporate their situation (e.g. rain, luggage, night) if provided.
+        2. "tactics": Array of 3 bullet points of specific tactical advice for negotiating this route/mode/situation.
+        3. "safety": A 1-sentence quick safety advice for this specific situation.
+
+        Output ONLY valid JSON matching this schema, without markdown formatting or trailing text. Do not wrap in ```json.
+        """
+        
+        body = json.dumps({
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": 400,
+            "messages": [{"role": "user", "content": prompt}]
+        })
+        
+        response = client.invoke_model(
+            body=body,
+            modelId=settings.BEDROCK_MODEL_ID,
+            accept="application/json",
+            contentType="application/json"
+        )
+        
+        res_body = json.loads(response.get("body").read())
+        text = res_body.get("content")[0].get("text").strip()
+        
+        # Clean text if wrapped in markdown
+        if text.startswith("```json"):
+            text = text[7:]
+        if text.endswith("```"):
+            text = text[:-3]
+        text = text.strip()
+        
+        result = json.loads(text)
+        result["source"] = "bedrock"
+        return result
+        
+    except Exception as exc:
+        logger.warning("Bedrock AI coach failed: %s", exc)
+        return {**fallback_response, "bedrock_error": str(exc)}
+

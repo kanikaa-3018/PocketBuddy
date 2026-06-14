@@ -212,5 +212,13 @@ export async function createTravelRoute({ data }: { data: { name: string; descri
   });
 }
 
+export async function getAiTravelCoach({ data }: { data: { route_id: string; mode: string; user_situation?: string; college?: string } }) {
+  return apiRequest("/api/travel/ai-coach", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+
 
 

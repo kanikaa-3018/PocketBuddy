@@ -48,7 +48,8 @@ import {
   getTravelSavings, 
   logTravelSavings,
   createTravelRoute,
-  getProfile
+  getProfile,
+  getAiTravelCoach
 } from "@/lib/api/db.functions";
 
 export const Route = createFileRoute("/_authenticated/travel")({
@@ -91,8 +92,16 @@ function TravelPage() {
   // Form State for new route creation
   const [newRouteName, setNewRouteName] = useState<string>("");
   const [newRouteDesc, setNewRouteDesc] = useState<string>("");
-  const [newRouteDistance, setNewRouteDistance] = useState<string>("");
   const [newRouteLandmark, setNewRouteLandmark] = useState<string>("Main Gate");
+
+  // AI Coach state
+  const [userSituation, setUserSituation] = useState<string>("");
+  const [aiCoachResult, setAiCoachResult] = useState<{
+    script: string;
+    tactics: string[];
+    safety: string;
+    source: string;
+  } | null>(null);
 
   // Queries
   const { data: profile } = useQuery({
@@ -304,6 +313,29 @@ function TravelPage() {
         description: newRouteDesc.trim(),
         distance_km: distanceVal,
         campus_landmark: newRouteLandmark.trim(),
+        college: activeCollege
+      }
+    });
+  };
+
+  const aiCoachMutation = useMutation({
+    mutationFn: getAiTravelCoach,
+    onSuccess: (data) => {
+      setAiCoachResult(data);
+      toast.success("AI negotiation advice loaded!");
+    },
+    onError: () => {
+      toast.error("Failed to get AI negotiation coach details.");
+    }
+  });
+
+  const handleAiCoachCall = () => {
+    if (!selectedRoute) return;
+    aiCoachMutation.mutate({
+      data: {
+        route_id: selectedRoute.id,
+        mode: selectedMode,
+        user_situation: userSituation.trim(),
         college: activeCollege
       }
     });
@@ -635,7 +667,6 @@ function TravelPage() {
                   </p>
                 </div>
               </Card>
-
             </div>
 
             {/* Right Column: Negotiation Helper & Community reports */}
@@ -643,14 +674,21 @@ function TravelPage() {
               
               {/* Negotiation Helper & Scripts */}
               <Card className="bg-surface border-border p-5 md:p-6 space-y-4">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="h-5 w-5 text-primary" />
-                  <h2 className="text-sm font-black tracking-widest text-zinc-400 uppercase font-mono">Negotiation Helper</h2>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="h-5 w-5 text-primary" />
+                    <h2 className="text-sm font-black tracking-widest text-zinc-400 uppercase font-mono">Negotiation Helper</h2>
+                  </div>
+                  {aiCoachResult && (
+                    <Badge className={`text-[8px] font-bold uppercase tracking-wider py-0.5 px-2 rounded-full ${aiCoachResult.source === "bedrock" ? "bg-primary/20 border-primary/30 text-primary border" : "bg-white/5 border border-border text-zinc-400"}`}>
+                      {aiCoachResult.source === "bedrock" ? "Bedrock AI Active" : "Local Engine"}
+                    </Badge>
+                  )}
                 </div>
                 <p className="text-xs text-zinc-500">Show this student rate script or quote it directly to local drivers.</p>
 
                 <div className="bg-background border border-border rounded-xl p-3.5 relative overflow-hidden group">
-                  <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest block mb-2">Hindi Script</span>
+                  <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest block mb-2">Seeded Campus Script</span>
                   <p className="text-xs text-zinc-300 font-semibold leading-relaxed pr-8">
                     "{selectedRoute.negotiation_helper}"
                   </p>
@@ -660,6 +698,68 @@ function TravelPage() {
                   >
                     {copiedScript ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
                   </button>
+                </div>
+
+                <div className="border-t border-border/50 pt-4 space-y-4">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-black uppercase tracking-wider text-primary">AI Negotiation Coach</label>
+                      <span className="text-[9px] text-zinc-500 font-medium">Customizes script based on your situation</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <Input
+                        id="input-ai-situation"
+                        placeholder="e.g. Raining, heavy bags, driver is rude..."
+                        value={userSituation}
+                        onChange={(e) => setUserSituation(e.target.value)}
+                        className="bg-surface-raised border-border text-xs h-9 flex-1"
+                      />
+                      <Button
+                        id="btn-ask-ai-coach"
+                        onClick={handleAiCoachCall}
+                        disabled={aiCoachMutation.isPending}
+                        className="bg-primary text-primary-foreground text-[10px] font-black uppercase tracking-wider h-9 px-4 shrink-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {aiCoachMutation.isPending ? "Asking..." : "Ask AI"}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {aiCoachResult && (
+                    <div className="space-y-3 p-3.5 bg-background/50 border border-primary/20 rounded-xl animate-[fadeIn_0.25s_ease-out]">
+                      <div className="relative bg-surface p-3 border border-border rounded-lg">
+                        <span className="text-[8px] text-primary font-bold uppercase tracking-widest block mb-1.5">AI Dialect-tailored Script</span>
+                        <p className="text-xs text-zinc-200 font-bold leading-relaxed pr-8">
+                          "{aiCoachResult.script}"
+                        </p>
+                        <button 
+                          onClick={() => copyScriptToClipboard(aiCoachResult.script)}
+                          className="absolute top-2.5 right-2.5 text-zinc-500 hover:text-foreground transition-colors p-1 bg-surface-raised border border-border rounded-md hover:scale-105 active:scale-95 cursor-pointer"
+                        >
+                          <Copy className="h-3 w-3" />
+                        </button>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <span className="text-[8px] text-zinc-500 font-bold uppercase tracking-widest block">AI Tactical Tips</span>
+                        <ul className="space-y-1 text-[11px] text-zinc-400 font-medium">
+                          {aiCoachResult.tactics.map((tip, idx) => (
+                            <li key={idx} className="flex gap-1.5 items-start">
+                              <span className="text-primary mt-0.5">•</span>
+                              <span>{tip}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {aiCoachResult.safety && (
+                        <div className="p-2.5 bg-destructive/5 border border-destructive/15 rounded-lg text-[10px] text-zinc-400 font-medium leading-relaxed">
+                          <span className="font-bold text-destructive uppercase tracking-wide mr-1.5">AI Safety Warning:</span>
+                          {aiCoachResult.safety}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </Card>
 
