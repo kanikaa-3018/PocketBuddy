@@ -264,6 +264,8 @@ async def create_custom_route(req: CustomRouteCreateReq, user_id: str = Depends(
         college = "ABV-IIITM Gwalior"
         
     d = req.distance_km
+    if d <= 0 or d > 250:
+        raise HTTPException(status_code=400, detail="Distance must be positive and less than 250 km")
     # Auto-calculate fare estimates based on distance using ride app simulation
     modes = [
         {
@@ -326,6 +328,30 @@ async def get_reports(route_id: str = Query(...), user_id: str = Depends(get_cur
 @router.post("/reports")
 async def create_report(req: ReportSubmitReq, user_id: str = Depends(get_current_user)):
     db = get_db()
+    
+    # Fetch route to validate route and get baseline fare
+    route_doc = await db.travel_routes.find_one({"_id": req.route_id})
+    if not route_doc:
+        raise HTTPException(status_code=404, detail="Route not found")
+        
+    # Find base median fare for mode
+    base_median_fare = 150  # default fallback
+    modes = route_doc.get("modes", [])
+    if modes:
+        base_median_fare = modes[0].get("median_fare", 150)
+        for m in modes:
+            if req.mode.lower() in m["mode"].lower() or m["mode"].lower() in req.mode.lower():
+                base_median_fare = m.get("median_fare", base_median_fare)
+                break
+                
+    # Validate input amounts
+    if req.amount_paid <= 0 or req.amount_paid > base_median_fare * 3:
+        raise HTTPException(status_code=400, detail=f"Amount paid must be positive and not exceed 3x the baseline fare (₹{base_median_fare * 3})")
+    if req.final_amount <= 0 or req.final_amount > base_median_fare * 3:
+        raise HTTPException(status_code=400, detail=f"Final amount must be positive and not exceed 3x the baseline fare (₹{base_median_fare * 3})")
+    if req.driver_quote <= 0 or req.driver_quote > base_median_fare * 5:
+        raise HTTPException(status_code=400, detail=f"Driver quote must be positive and within reasonable limits (maximum ₹{base_median_fare * 5})")
+
     report_id = str(uuid.uuid4())
     
     # Insert report

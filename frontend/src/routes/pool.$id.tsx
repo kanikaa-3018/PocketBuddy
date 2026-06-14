@@ -129,6 +129,23 @@ function PoolDetail() {
   // UTR confirmation state
   const [confirmUtrOpen, setConfirmUtrOpen] = useState(false);
   const [utrInput, setUtrInput] = useState("");
+  const [checkoutNotes, setCheckoutNotes] = useState("");
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReasonOption, setCancelReasonOption] = useState("Minimum cart value not met");
+  const [cancelCustomReason, setCancelCustomReason] = useState("");
+
+  // Track toasting status to avoid spamming on 3-second polls
+  const [hasToastedStatus, setHasToastedStatus] = useState<string | null>(null);
+  useEffect(() => {
+    if (pool && hasToastedStatus !== pool.status) {
+      setHasToastedStatus(pool.status);
+      if (pool.status === "completed") {
+        toast.success("Order splits finalized! Settlement is open.");
+      } else if (pool.status === "cancelled") {
+        toast.error("This pool has been cancelled.");
+      }
+    }
+  }, [pool, hasToastedStatus]);
 
   // Pre-fill checkout inputs when modal opens
   useEffect(() => {
@@ -196,10 +213,14 @@ function PoolDetail() {
         .reduce((s, i) => s + i.estimated_price, 0);
 
       const payment = (pool.payments ?? []).find((pay: any) => pay.name === p);
+      const hName = (pool.created_by_name ?? "").trim().toLowerCase();
+      const pName = p.trim().toLowerCase();
+      const uName = (user?.fullName ?? "").trim().toLowerCase();
       const isHostUser = 
-        p.trim().toLowerCase() === (pool.created_by_name ?? "").trim().toLowerCase() ||
-        p.trim().toLowerCase() === "host" ||
-        (user && pool.host_id === user.id && p.trim().toLowerCase() === (user.fullName ?? "").trim().toLowerCase());
+        pName === "host" || 
+        pName === hName || 
+        (hName && pName && (hName.includes(pName) || pName.includes(hName))) ||
+        (user && pool.host_id === user.id && (pName === uName || (uName && pName && (uName.includes(pName) || pName.includes(uName)))));
 
       splitBreakdown[p] = {
         name: p,
@@ -221,10 +242,14 @@ function PoolDetail() {
         .filter((i) => i.is_purchased !== false)
         .reduce((s, i) => s + i.estimated_price, 0);
 
+      const hName = (pool.created_by_name ?? "").trim().toLowerCase();
+      const pName = p.trim().toLowerCase();
+      const uName = (user?.fullName ?? "").trim().toLowerCase();
       const isHostUser = 
-        p.trim().toLowerCase() === (pool.created_by_name ?? "").trim().toLowerCase() ||
-        p.trim().toLowerCase() === "host" ||
-        (user && pool.host_id === user.id && p.trim().toLowerCase() === (user.fullName ?? "").trim().toLowerCase());
+        pName === "host" || 
+        pName === hName || 
+        (hName && pName && (hName.includes(pName) || pName.includes(hName))) ||
+        (user && pool.host_id === user.id && (pName === uName || (uName && pName && (uName.includes(pName) || pName.includes(uName)))));
 
       splitBreakdown[p] = {
         name: p,
@@ -369,6 +394,7 @@ function PoolDetail() {
           upi_id: hostUpi.trim() || null,
           final_overhead: overheadValue,
           final_discount: discountValue,
+          checkout_notes: checkoutNotes.trim() || null,
         }
       });
 
@@ -383,17 +409,23 @@ function PoolDetail() {
     }
   }
 
-  async function cancelPool() {
-    if (!confirm("Are you sure you want to cancel this pool? This cannot be undone.")) return;
+  async function cancelPool(reason: string) {
+    setBusy(true);
     try {
       await updateCartPool({
         id,
-        data: { status: "cancelled" }
+        data: { 
+          status: "cancelled",
+          cancellation_reason: reason
+        }
       });
-      toast("Pool cancelled");
+      toast.success("Pool cancelled successfully.");
+      setCancelOpen(false);
       qc.invalidateQueries({ queryKey: ["pool", id] });
     } catch (err: any) {
       toast.error("Failed to cancel pool");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -548,6 +580,51 @@ function PoolDetail() {
       </div>
 
       <div className="space-y-4 px-4 py-4 pb-96">
+        {/* Status Callouts */}
+        {pool.status === "completed" && (
+          <div className="flex flex-col gap-3 p-4 bg-green-500/10 border border-green-500/20 text-green-400 rounded-xl text-xs">
+            <div className="flex gap-2.5 items-start">
+              <Check className="h-4.5 w-4.5 shrink-0 mt-0.5 text-green-500" />
+              <div>
+                <p className="font-bold uppercase tracking-wider text-green-500">Order Splits Finalized</p>
+                <p className="text-zinc-300 leading-relaxed mt-1">
+                  The host has checked out this cart pool. Roommates should check their splits below, pay the host via the VPA deep link or QR code, and submit the 12-digit UTR to confirm verification.
+                </p>
+              </div>
+            </div>
+            {pool.checkout_notes && (
+              <div className="bg-green-600/5 border border-green-500/10 rounded-lg p-3 text-xs">
+                <span className="font-bold text-green-500 uppercase tracking-widest text-[9px] block mb-1">Host Note / Message</span>
+                <p className="text-zinc-300 leading-relaxed font-semibold">
+                  "{pool.checkout_notes}"
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {pool.status === "cancelled" && (
+          <div className="flex flex-col gap-3 p-4 bg-destructive/10 border border-destructive/20 text-destructive rounded-xl text-xs">
+            <div className="flex gap-2.5 items-start">
+              <X className="h-4.5 w-4.5 shrink-0 mt-0.5 text-destructive" />
+              <div>
+                <p className="font-bold uppercase tracking-wider text-destructive">Cart Pool Cancelled</p>
+                <p className="text-zinc-300 leading-relaxed mt-1">
+                  This pool has been cancelled by the host. No further actions can be taken.
+                </p>
+              </div>
+            </div>
+            {pool.cancellation_reason && (
+              <div className="bg-destructive/5 border border-destructive/10 rounded-lg p-3 text-xs">
+                <span className="font-bold text-destructive uppercase tracking-widest text-[9px] block mb-1">Reason for Cancellation</span>
+                <p className="text-zinc-300 leading-relaxed font-semibold">
+                  "{pool.cancellation_reason}"
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Progress bar to target minimum */}
         {pool.status === "open" && (
           <Card className="p-5 bg-surface border border-border">
@@ -596,7 +673,7 @@ function PoolDetail() {
                   <Button
                     id="btn-host-cancel"
                     variant="outline"
-                    onClick={cancelPool}
+                    onClick={() => setCancelOpen(true)}
                     className="border-destructive/30 text-destructive hover:bg-destructive/5 h-10 uppercase text-xs tracking-wider font-semibold"
                   >
                     Cancel Pool
@@ -725,13 +802,13 @@ function PoolDetail() {
                     {pool.status === "completed" && (
                       <span className="text-xs font-black uppercase tracking-wider mt-0.5">
                         {details.paymentStatus === "verified" ? (
-                          <span className="text-green-500">Paid</span>
+                          <span className="text-green-500 font-bold">Paid</span>
                         ) : details.paymentStatus === "pending" ? (
-                          <span className="text-amber-500 animate-pulse">Pending</span>
+                          <span className="text-amber-500 font-bold animate-pulse">Pending</span>
                         ) : details.paymentStatus === "host" ? (
-                          <span className="text-primary">Host</span>
+                          <span className="text-green-500 font-bold">HOST (OWN SHARE)</span>
                         ) : (
-                          <span className="text-destructive">Unpaid</span>
+                          <span className="text-destructive font-bold">Unpaid</span>
                         )}
                       </span>
                     )}
@@ -1109,6 +1186,15 @@ function PoolDetail() {
                 Roommates will pay this VPA. It automatically locks when order splits.
               </p>
             </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground">Checkout Notes / Instructions (Optional)</label>
+              <textarea
+                value={checkoutNotes}
+                onChange={(e) => setCheckoutNotes(e.target.value)}
+                placeholder="e.g. Ordered Zepto, expected in 15 mins. Pay ASAP!"
+                className="w-full min-h-[60px] bg-background border border-border rounded-md py-1.5 px-3 text-xs outline-none focus:border-primary/40 resize-none text-foreground"
+              />
+            </div>
           </div>
 
           <DialogFooter className="mt-2">
@@ -1154,6 +1240,76 @@ function PoolDetail() {
             </Button>
             <Button onClick={submitUtrVerification} disabled={busy} className="bg-primary text-white hover:bg-primary/90">
               {busy ? "Submitting..." : "Submit Verification"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* Host Cancel Pool Dialog */}
+      <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
+        <DialogContent id="dialog-cancel-pool" className="max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Cancel Cart Pool</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground">
+            Please state why you are cancelling this pool. This reason will be shown to all roommates.
+          </p>
+
+          <div className="space-y-4 py-2 text-xs">
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest pl-0.5">Select Reason</label>
+              <div className="flex flex-col gap-2">
+                {[
+                  "Minimum cart value not met",
+                  "Store is out of stock of key items",
+                  "Changed mind / ordered separately",
+                  "Other Reason (Type below)"
+                ].map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => {
+                      setCancelReasonOption(r);
+                    }}
+                    className={`text-left py-2.5 px-3 rounded-lg border text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                      cancelReasonOption === r
+                        ? "bg-destructive/10 border-destructive text-destructive"
+                        : "bg-surface border-border text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {cancelReasonOption === "Other Reason (Type below)" && (
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest pl-0.5">Custom Reason</label>
+                <textarea
+                  value={cancelCustomReason}
+                  onChange={(e) => setCancelCustomReason(e.target.value)}
+                  placeholder="Type cancellation details..."
+                  className="w-full min-h-[60px] bg-background border border-border rounded-md py-2 px-3 text-xs outline-none focus:border-destructive/40 resize-none text-foreground"
+                />
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="mt-2">
+            <Button variant="outline" onClick={() => setCancelOpen(false)} disabled={busy}>
+              Close
+            </Button>
+            <Button
+              onClick={() => {
+                const finalReason = cancelReasonOption === "Other Reason (Type below)"
+                  ? cancelCustomReason.trim()
+                  : cancelReasonOption;
+                cancelPool(finalReason || "Host cancelled pool");
+              }}
+              disabled={busy || (cancelReasonOption === "Other Reason (Type below)" && !cancelCustomReason.trim())}
+              className="bg-destructive text-white hover:bg-destructive/90 font-bold uppercase text-xs tracking-wider"
+            >
+              {busy ? "Cancelling..." : "Confirm Cancellation"}
             </Button>
           </DialogFooter>
         </DialogContent>
