@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { Sparkles, User, ShoppingBag, Link as LinkIcon, ChevronRight, Sun, Moon } from "lucide-react";
+import { Sparkles, User, ShoppingBag, Link as LinkIcon, ChevronRight, Sun, Moon, Menu, X } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   ssr: false,
@@ -224,6 +224,7 @@ function LandingPage() {
   const [statsInView, setStatsInView] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [theme, setTheme] = useState<"light" | "dark">("dark");
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("pb_theme") as "light" | "dark" | null;
@@ -295,32 +296,56 @@ function LandingPage() {
       <ParticleCanvas />
 
       {/* ── NAV ──────────────────────────────────────────────────────────── */}
-      <nav className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center justify-between w-[calc(100%-24px)] sm:w-[calc(100%-48px)] max-w-[1100px] px-3.5 sm:px-6 h-14 backdrop-blur-xl border border-border rounded-full transition-all duration-300 shadow-md" style={{ background: scrollY > 40 ? "color-mix(in srgb, var(--background) 90%, transparent)" : "color-mix(in srgb, var(--background) 40%, transparent)" }}>
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-pb-amber flex items-center justify-center shadow-md shadow-primary/20 shrink-0">
-            <span className="font-black text-sm text-[#0A0A0A]">P</span>
+      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-24px)] sm:w-[calc(100%-48px)] max-w-[1100px]">
+        <nav className="flex items-center justify-between w-full px-3.5 sm:px-6 h-14 backdrop-blur-xl border border-border rounded-full transition-all duration-300 shadow-md" style={{ background: scrollY > 40 ? "color-mix(in srgb, var(--background) 90%, transparent)" : "color-mix(in srgb, var(--background) 40%, transparent)" }}>
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-pb-amber flex items-center justify-center shadow-md shadow-primary/20 shrink-0">
+              <span className="font-black text-sm text-[#0A0A0A]">P</span>
+            </div>
+            <span className="font-extrabold text-sm tracking-tight text-foreground hidden min-[400px]:inline">PocketBuddy</span>
           </div>
-          <span className="font-extrabold text-sm tracking-tight text-foreground hidden min-[400px]:inline">PocketBuddy</span>
-        </div>
-        <div className="flex items-center gap-2 sm:gap-6">
-          <div className="hidden md:flex items-center gap-6">
-            <a href="#why-us" className="text-xs font-bold text-muted-foreground hover:text-foreground transition-colors text-decoration-none">Why Us</a>
-            <a href="#features" className="text-xs font-bold text-muted-foreground hover:text-foreground transition-colors text-decoration-none">Features</a>
-            <a href="#how-it-works" className="text-xs font-bold text-muted-foreground hover:text-foreground transition-colors text-decoration-none">How It Works</a>
+          <div className="flex items-center gap-2 sm:gap-6">
+            <div className="hidden md:flex items-center gap-6">
+              <a href="#why-us" className="text-xs font-bold text-muted-foreground hover:text-foreground transition-colors text-decoration-none">Why Us</a>
+              <a href="#features" className="text-xs font-bold text-muted-foreground hover:text-foreground transition-colors text-decoration-none">Features</a>
+              <a href="#how-it-works" className="text-xs font-bold text-muted-foreground hover:text-foreground transition-colors text-decoration-none">How It Works</a>
+            </div>
+            <div className="flex items-center gap-1 sm:gap-2">
+              <button
+                onClick={toggleTheme}
+                className="p-2 rounded-full text-muted-foreground hover:text-foreground hover:bg-surface-raised/50 transition-colors mr-0.5 cursor-pointer flex items-center justify-center shrink-0 border border-transparent active:scale-95"
+                title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
+              >
+                {theme === "dark" ? <Sun className="h-4 w-4 text-[#ff6b00]" /> : <Moon className="h-4 w-4 text-[#ff6b00]" />}
+              </button>
+              <Link to="/login" className="hidden sm:inline-block px-2.5 sm:px-3.5 py-1.5 rounded-full text-xs font-bold text-muted-foreground hover:text-foreground transition-colors text-decoration-none whitespace-nowrap">Sign In</Link>
+              <Link to="/login" className="px-3 sm:px-4 py-1.5 rounded-full text-xs font-extrabold text-[#0A0A0A] bg-gradient-to-br from-primary to-[#D9A05B] hover:scale-[1.03] active:scale-[0.97] transition-all shadow-md shadow-primary/10 text-decoration-none whitespace-nowrap">Get Started</Link>
+              
+              {/* Mobile menu toggle */}
+              <button
+                onClick={() => setMenuOpen(!menuOpen)}
+                className="md:hidden p-2 rounded-full text-muted-foreground hover:text-foreground hover:bg-surface-raised/50 transition-colors cursor-pointer flex items-center justify-center shrink-0 border border-transparent active:scale-95"
+                title="Toggle Menu"
+              >
+                {menuOpen ? <X className="h-4 w-4 text-[#ff6b00]" /> : <Menu className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-1 sm:gap-2">
-            <button
-              onClick={toggleTheme}
-              className="p-2 rounded-full text-muted-foreground hover:text-foreground hover:bg-surface-raised/50 transition-colors mr-0.5 cursor-pointer flex items-center justify-center shrink-0 border border-transparent active:scale-95"
-              title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
-            >
-              {theme === "dark" ? <Sun className="h-4 w-4 text-[#ff6b00]" /> : <Moon className="h-4 w-4 text-[#ff6b00]" />}
-            </button>
-            <Link to="/login" className="px-2.5 sm:px-3.5 py-1.5 rounded-full text-xs font-bold text-muted-foreground hover:text-foreground transition-colors text-decoration-none whitespace-nowrap">Sign In</Link>
-            <Link to="/login" className="px-3 sm:px-4 py-1.5 rounded-full text-xs font-extrabold text-[#0A0A0A] bg-gradient-to-br from-primary to-[#D9A05B] hover:scale-[1.03] active:scale-[0.97] transition-all shadow-md shadow-primary/10 text-decoration-none whitespace-nowrap">Get Started</Link>
+        </nav>
+
+        {/* Mobile Dropdown Panel */}
+        {menuOpen && (
+          <div className="md:hidden mt-2 w-full p-4 bg-background/95 backdrop-blur-xl border border-border rounded-2xl shadow-xl shadow-black/30 flex flex-col gap-3.5 animate-[fadeIn_0.15s_ease-out] z-40">
+            <a href="#why-us" onClick={() => setMenuOpen(false)} className="text-xs font-bold text-muted-foreground hover:text-foreground transition-colors py-2 px-1 text-decoration-none">Why Us</a>
+            <a href="#features" onClick={() => setMenuOpen(false)} className="text-xs font-bold text-muted-foreground hover:text-foreground transition-colors py-2 px-1 text-decoration-none">Features</a>
+            <a href="#how-it-works" onClick={() => setMenuOpen(false)} className="text-xs font-bold text-muted-foreground hover:text-foreground transition-colors py-2 px-1 text-decoration-none">How It Works</a>
+            <div className="border-t border-border pt-3.5 flex items-center justify-between">
+              <Link to="/login" onClick={() => setMenuOpen(false)} className="text-xs font-bold text-muted-foreground hover:text-foreground transition-colors text-decoration-none">Sign In</Link>
+              <Link to="/login" onClick={() => setMenuOpen(false)} className="px-4 py-2 rounded-full text-xs font-extrabold text-[#0A0A0A] bg-gradient-to-br from-primary to-[#D9A05B] shadow-md shadow-primary/10 text-decoration-none">Get Started →</Link>
+            </div>
           </div>
-        </div>
-      </nav>
+        )}
+      </div>
 
       {/* ── HERO ─────────────────────────────────────────────────────────── */}
       <section className="relative min-h-screen flex flex-col items-center justify-center px-4 sm:px-6 py-28 text-center overflow-hidden">
