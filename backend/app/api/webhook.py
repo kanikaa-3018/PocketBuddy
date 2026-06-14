@@ -274,18 +274,21 @@ async def ingest_notification(
 
     direction = (req.direction or "debit").lower()
     if direction != "debit":
-        await mark_sync_log(db, log_id, "failed")
+        amount_paise = int(round(req.amount * 100)) if req.amount is not None else parse_amount(raw_body)
+        merchant = normalize_merchant(req.merchant)
+        transaction_reference = req.transactionId or parse_transaction_id(raw_body)
+        await mark_sync_log(db, log_id, "received", amount_paise, merchant, transaction_reference)
         await update_profile_sync_state(db, user_id, req, now)
-        return {"status": "ignored", "reason": "non_debit_transaction"}
+        return {"status": "received", "reason": "non_expense_credit"}
 
     amount_paise = int(round(req.amount * 100)) if req.amount is not None else parse_amount(raw_body)
     merchant = normalize_merchant(req.merchant) or parse_merchant(raw_body)
     transaction_reference = req.transactionId or parse_transaction_id(raw_body)
 
     if not raw_body or not amount_paise or not merchant:
-        await mark_sync_log(db, log_id, "failed", amount_paise, merchant)
+        await mark_sync_log(db, log_id, "incomplete", amount_paise, merchant, transaction_reference)
         await update_profile_sync_state(db, user_id, req, now)
-        return {"status": "parse_failed"}
+        return {"status": "incomplete", "reason": "missing_amount_or_merchant"}
 
     duplicate_filter = None
     if transaction_reference:
