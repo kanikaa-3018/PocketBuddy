@@ -716,6 +716,7 @@ function EditTxnForm({ txn, categories, onClose }: { txn: any; categories: { v: 
             transaction_id: txn.id,
             corrected_merchant: name.trim(),
             corrected_category: finalCategory,
+            corrected_direction: direction,
           }
         });
         toast.success("Correction logged & transaction updated.");

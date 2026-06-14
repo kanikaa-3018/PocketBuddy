@@ -526,7 +526,7 @@ function Dashboard() {
     fd.append("venue_name", scanVenue.trim());
     fd.append("campus", profile?.college_name || "ABV-IIITM Gwalior");
     fd.append("image", scanFile);
-    
+
     scanMutation.mutate({ data: fd });
   };
 
@@ -1738,7 +1738,7 @@ function Dashboard() {
                             Votes: {it.verification_votes > 0 ? `+${it.verification_votes}` : it.verification_votes}
                           </p>
                         </div>
-                        
+
                         <div className="flex gap-1.5 shrink-0">
                           <button
                             onClick={() => handleVerifyVote(it.id, "up")}
@@ -2046,6 +2046,7 @@ function EditTxnForm({ txn, onClose }: { txn: Txn; onClose: () => void }) {
             transaction_id: txn.id,
             corrected_merchant: name.trim(),
             corrected_category: finalCategory,
+            corrected_direction: direction,
           }
         });
         toast.success("Correction logged & transaction updated.");

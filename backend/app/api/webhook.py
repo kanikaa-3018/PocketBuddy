@@ -403,6 +403,7 @@ class CorrectionReq(BaseModel):
     corrected_amount: Optional[int] = None     # in paise
     corrected_merchant: Optional[str] = None
     corrected_category: Optional[str] = None
+    corrected_direction: Optional[str] = None
 
 
 @router.post("/correction")
@@ -427,6 +428,12 @@ async def log_parser_correction(
     if not txn:
         raise HTTPException(status_code=404, detail="Transaction not found")
 
+    corrected_direction = None
+    if req.corrected_direction is not None:
+        corrected_direction = req.corrected_direction.lower().strip()
+        if corrected_direction not in ("debit", "credit"):
+            raise HTTPException(status_code=400, detail="Direction must be 'debit' or 'credit'")
+
     now = datetime.datetime.utcnow()
     correction_doc = {
         "_id": str(uuid.uuid4()),
@@ -435,9 +442,11 @@ async def log_parser_correction(
         "original_amount": txn.get("amount"),
         "original_merchant": txn.get("raw_merchant_string"),
         "original_category": txn.get("category"),
+        "original_direction": txn.get("direction"),
         "corrected_amount": req.corrected_amount,
         "corrected_merchant": req.corrected_merchant,
         "corrected_category": req.corrected_category,
+        "corrected_direction": corrected_direction,
         # Store masked notification preview only (privacy-safe, no raw SMS)
         "notification_preview": txn.get("notification_preview", ""),
         "source_app": txn.get("source_app"),
@@ -457,6 +466,8 @@ async def log_parser_correction(
         update_fields["is_mapped"] = True
     if req.corrected_category is not None:
         update_fields["category"] = req.corrected_category
+    if corrected_direction is not None:
+        update_fields["direction"] = corrected_direction
 
     await db.transactions.update_one(
         {"_id": req.transaction_id, "user_id": user_id},
@@ -507,4 +518,3 @@ async def get_parser_stats(
             "low": low,
         },
     }
-

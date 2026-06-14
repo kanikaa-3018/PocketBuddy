@@ -159,4 +159,3 @@ async def upload_to_s3(image_bytes: bytes, filename: str) -> str:
     except Exception as exc:
         logger.warning("S3 upload failed: %s", exc)
         return ""
-
