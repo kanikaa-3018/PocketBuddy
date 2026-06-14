@@ -31,6 +31,8 @@ class PoolUpdateReq(BaseModel):
     upi_id: Optional[str] = None
     final_overhead: Optional[int] = None
     final_discount: Optional[int] = None
+    cancellation_reason: Optional[str] = None
+    checkout_notes: Optional[str] = None
 
 class PaymentConfirmReq(BaseModel):
     roommate_name: str
@@ -273,7 +275,7 @@ async def update_pool(pool_id: str, req: PoolUpdateReq, user_id: str = Depends(g
         host_name = pool.get("created_by_name")
         host_items_total = 0
         for it in items:
-            if it.get("is_purchased", True) and it["added_by_name"] == host_name:
+            if it.get("is_purchased", True) and name_key(it["added_by_name"]) == name_key(host_name):
                 host_items_total += it["estimated_price"]
 
         final_overhead = updates.get("final_overhead", pool.get("final_overhead", 0))

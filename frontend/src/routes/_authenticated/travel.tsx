@@ -176,6 +176,13 @@ function TravelPage() {
     }
   }, [selectedRoute, selectedMode]);
 
+  // Synchronize reportMode with the selected route's first mode when report modal opens
+  useEffect(() => {
+    if (isReportOpen && selectedRoute && selectedRoute.modes && selectedRoute.modes.length > 0) {
+      setReportMode(selectedRoute.modes[0].mode);
+    }
+  }, [isReportOpen, selectedRoute]);
+
   // Overcharge calculation
   const overchargeAnalysis = useMemo(() => {
     if (!selectedRoute || !driverQuote) return null;
@@ -897,7 +904,13 @@ function TravelPage() {
                     key={m.mode}
                     type="button"
                     onClick={() => setReportMode(m.mode)}
-                    className={`flex-1 py-2 font-bold uppercase tracking-wider rounded-lg border transition-all cursor-pointer ${reportMode === m.mode ? "bg-primary/10 border-primary text-primary" : "bg-surface border-border text-muted-foreground hover:text-foreground"}`}
+                    className={`flex-1 py-2 font-bold uppercase tracking-wider rounded-lg border transition-all cursor-pointer ${
+                      reportMode === m.mode || 
+                      reportMode.toLowerCase().includes(m.mode.toLowerCase().split(" ")[0]) || 
+                      m.mode.toLowerCase().includes(reportMode.toLowerCase().split(" ")[0])
+                        ? "bg-primary/10 border-primary text-primary" 
+                        : "bg-surface border-border text-muted-foreground hover:text-foreground"
+                    }`}
                   >
                     {m.mode.split(" ")[0]}
                   </button>
@@ -906,7 +919,13 @@ function TravelPage() {
                     key={m}
                     type="button"
                     onClick={() => setReportMode(m)}
-                    className={`flex-1 py-2 font-bold uppercase tracking-wider rounded-lg border transition-all cursor-pointer ${reportMode === m ? "bg-primary/10 border-primary text-primary" : "bg-surface border-border text-muted-foreground hover:text-foreground"}`}
+                    className={`flex-1 py-2 font-bold uppercase tracking-wider rounded-lg border transition-all cursor-pointer ${
+                      reportMode === m || 
+                      reportMode.toLowerCase().includes(m.toLowerCase()) || 
+                      m.toLowerCase().includes(reportMode.toLowerCase())
+                        ? "bg-primary/10 border-primary text-primary" 
+                        : "bg-surface border-border text-muted-foreground hover:text-foreground"
+                    }`}
                   >
                     {m}
                   </button>

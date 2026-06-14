@@ -314,7 +314,7 @@ async def get_wellness_insights(user_id: str = Depends(get_current_user)):
 
     days_since_start = max(1, (now - cycle_start).days)
     avg_daily_spend_rs = total_spent_rs / days_since_start
-    days_left = max(0, (cycle_end - now).days)
+    days_left = max(1, (cycle_end - now).days)
 
     if avg_daily_spend_rs > 0:
         runway_days = int(remaining_rs / avg_daily_spend_rs)
@@ -324,7 +324,7 @@ async def get_wellness_insights(user_id: str = Depends(get_current_user)):
     runway_days = min(runway_days, days_left + 5)
     
     # safe_daily_limit_rs
-    safe_daily_limit_rs = remaining_rs / days_left if days_left > 0 else 0.0
+    safe_daily_limit_rs = remaining_rs / days_left
 
     # 4. Spending velocity
     spend_7_rs = sum(t.get("amount", 0) for t in txns if t.get("created_at") and t["created_at"] >= since_7) / 100.0

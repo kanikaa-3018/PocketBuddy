@@ -84,15 +84,16 @@ function StatsPage() {
   // Custom label for pie chart
   const renderLabel = ({ cx, cy, midAngle, outerRadius, name, pct }: any) => {
     const RADIAN = Math.PI / 180;
-    const radius = outerRadius + 28;
+    const radius = outerRadius + 16;
     const x = cx + radius * Math.cos(-midAngle * RADIAN);
     const y = cy + radius * Math.sin(-midAngle * RADIAN);
     if (pct < 3) return null;
+    const truncatedName = name.length > 10 ? name.slice(0, 10) + "…" : name;
     return (
       <text x={x} y={y} fill="var(--foreground)" textAnchor={x > cx ? "start" : "end"}
-        dominantBaseline="central" fontSize={11} fontWeight={700} fontFamily="'DM Sans', sans-serif">
-        {name.length > 12 ? name.slice(0, 12) + "…" : name}
-        <tspan dx={4} fill="var(--muted-foreground)" fontSize={10}>{pct}%</tspan>
+        dominantBaseline="central" fontSize={10} fontWeight={700} fontFamily="'DM Sans', sans-serif">
+        {truncatedName}
+        <tspan dx={2} fill="var(--muted-foreground)" fontSize={9}>{pct}%</tspan>
       </text>
     );
   };
@@ -275,7 +276,7 @@ function StatsPage() {
                     <div className="flex-shrink-0 mx-auto md:mx-0" style={{ width: 280, height: 280 }}>
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
-                          <Pie data={pieData} cx="50%" cy="50%" innerRadius={0} outerRadius={95}
+                          <Pie data={pieData} cx="50%" cy="50%" innerRadius={45} outerRadius={75}
                             paddingAngle={2} dataKey="value" label={renderLabel}
                             labelLine={{ stroke: "var(--border)", strokeWidth: 1 }}
                             animationBegin={0} animationDuration={800} animationEasing="ease-out">
