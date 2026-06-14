@@ -135,37 +135,35 @@ function SidebarBody({ onNavigate, isMobile = false }: { onNavigate?: () => void
         )}
 
         {/* Nav */}
-        {!isMobile && (
-          <nav className="flex-1 px-3">
-            <ul className="space-y-0.5">
-              {tabs.map((t) => {
-                const active = pathname === t.to || pathname.startsWith(t.to + "/");
-                const Icon = t.icon;
-                return (
-                  <li key={t.to}>
-                    <Link
-                      to={t.to}
-                      id={t.id}
-                      onClick={onNavigate}
-                      title={collapsed ? t.label : undefined}
-                      className={`group relative flex items-center gap-3 rounded-md px-3 py-2.5 text-[14px] transition-colors ${
-                        active
-                          ? "bg-surface-raised text-foreground"
-                          : "text-muted-foreground hover:bg-surface-raised hover:text-foreground"
-                      } ${collapsed ? "justify-center px-2" : ""}`}
-                    >
-                      {active && (
-                        <span className="absolute left-0 top-1/2 h-5 -translate-y-1/2 w-[2px] rounded-r bg-primary" />
-                      )}
-                      <Icon className={`h-[18px] w-[18px] shrink-0 ${active ? "" : "opacity-60 group-hover:opacity-100"}`} />
-                      {!collapsed && <span className="truncate font-medium">{t.label}</span>}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </nav>
-        )}
+        <nav className="flex-1 px-3">
+          <ul className="space-y-0.5">
+            {tabs.map((t) => {
+              const active = pathname === t.to || pathname.startsWith(t.to + "/");
+              const Icon = t.icon;
+              return (
+                <li key={t.to}>
+                  <Link
+                    to={t.to}
+                    id={isMobile ? `drawer-${t.id}` : t.id}
+                    onClick={onNavigate}
+                    title={collapsed ? t.label : undefined}
+                    className={`group relative flex items-center gap-3 rounded-md px-3 py-2.5 text-[14px] transition-colors ${
+                      active
+                        ? "bg-surface-raised text-foreground"
+                        : "text-muted-foreground hover:bg-surface-raised hover:text-foreground"
+                    } ${collapsed ? "justify-center px-2" : ""}`}
+                  >
+                    {active && (
+                      <span className="absolute left-0 top-1/2 h-5 -translate-y-1/2 w-[2px] rounded-r bg-primary" />
+                    )}
+                    <Icon className={`h-[18px] w-[18px] shrink-0 ${active ? "" : "opacity-60 group-hover:opacity-100"}`} />
+                    {!collapsed && <span className="truncate font-medium">{t.label}</span>}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
       </div>
 
       {/* Footer: User profile + Sync Active + Theme */}
