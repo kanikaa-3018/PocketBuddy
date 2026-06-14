@@ -119,12 +119,11 @@ function CompanionPage() {
       await updateProfile({
         data: {
           companion_paired: false,
-          companion_device_name: null,
-          companion_last_sync: null,
         },
       });
       qc.invalidateQueries({ queryKey: ["profile"] });
-      toast.success("Device unpaired.");
+      qc.invalidateQueries({ queryKey: ["sync-log", user.id] });
+      toast.success("Device unpaired. Recent sync history is kept.");
     } catch (err: any) {
       toast.error(err.message || "Failed to unpair device");
     }

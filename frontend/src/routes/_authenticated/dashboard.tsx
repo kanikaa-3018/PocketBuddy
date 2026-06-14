@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
 import { AppShell, MobileMenuButton } from "@/components/AppShell";
@@ -22,6 +22,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { toast } from "sonner";
 import {
   rupees,
@@ -279,10 +280,41 @@ function NudgeCard({
   );
 }
 
+function ResponsiveFoodPanel({
+  open,
+  onOpenChange,
+  isMobile,
+  children,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  isMobile: boolean;
+  children: ReactNode;
+}) {
+  if (isMobile) {
+    return (
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent side="bottom" className="max-h-[85vh] overflow-auto bg-background text-foreground border-t border-border">
+          {children}
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent id="dialog-campus-dining-hub" className="max-h-[85vh] max-w-4xl overflow-y-auto bg-background text-foreground border border-border">
+        {children}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function Dashboard() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const nav = useNavigate();
+  const isMobile = useIsMobile();
 
   const { data: profile } = useQuery({
     queryKey: ["profile", user?.id],
@@ -1598,8 +1630,7 @@ function Dashboard() {
         </Dialog>
 
         {/* Food options */}
-        <Sheet open={showFoodSheet} onOpenChange={setShowFoodSheet}>
-          <SheetContent side="bottom" className="max-h-[85vh] overflow-auto bg-background text-foreground border-t border-border">
+        <ResponsiveFoodPanel open={showFoodSheet} onOpenChange={setShowFoodSheet} isMobile={isMobile}>
             <SheetHeader>
               <SheetTitle className="text-sm font-black uppercase tracking-wider text-foreground">Campus Dining Hub</SheetTitle>
               <div className="flex border-b border-border mt-2">
@@ -1771,8 +1802,7 @@ function Dashboard() {
                 )}
               </div>
             )}
-          </SheetContent>
-        </Sheet>
+        </ResponsiveFoodPanel>
 
         {/* Check-in dialog */}
         <Dialog open={showCheckIn} onOpenChange={() => { /* not dismissible */ }}>

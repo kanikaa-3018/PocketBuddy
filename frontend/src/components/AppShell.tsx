@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { Link, useRouterState } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { 
   LayoutDashboard, 
   List, 
@@ -45,6 +45,8 @@ function SidebarBody({ onNavigate, isMobile = false }: { onNavigate?: () => void
   const ctx = useContext(SidebarCtx)!;
   const collapsed = isMobile ? false : ctx.collapsed;
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const navigate = useNavigate();
+  const qc = useQueryClient();
   const { user, logout } = useAuth();
   const { data: profile } = useQuery({
     queryKey: ["profile", user?.id],
@@ -57,6 +59,14 @@ function SidebarBody({ onNavigate, isMobile = false }: { onNavigate?: () => void
   const syncDescription = companionConnected
     ? "Last sync shown in Companion"
     : "Pair Android companion";
+
+  async function handleSignOut() {
+    await qc.cancelQueries();
+    qc.clear();
+    await logout();
+    if (onNavigate) onNavigate();
+    navigate({ to: "/login", replace: true });
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -222,27 +232,33 @@ function SidebarBody({ onNavigate, isMobile = false }: { onNavigate?: () => void
                     <p className="text-[11px] text-muted-foreground truncate">{user.email || ""}</p>
                   </div>
                 </Link>
-                {isMobile && (
-                  <button
-                    onClick={() => {
-                      logout();
-                      if (onNavigate) onNavigate();
-                    }}
-                    className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-destructive hover:bg-destructive/10 transition-colors"
-                  >
-                    <LogOut className="h-4 w-4 shrink-0" />
-                    <span className="font-semibold uppercase tracking-wider text-[10px]">Sign Out</span>
-                  </button>
-                )}
+                <button
+                  id={isMobile ? "drawer-btn-sign-out" : "btn-sign-out"}
+                  onClick={handleSignOut}
+                  className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-destructive hover:bg-destructive/10 transition-colors"
+                >
+                  <LogOut className="h-4 w-4 shrink-0" />
+                  <span className="font-semibold uppercase tracking-wider text-[10px]">Sign Out</span>
+                </button>
               </div>
             ) : (
-              <Link to="/settings" onClick={onNavigate} title="Settings" className="flex justify-center py-2">
-                <div className="w-8 h-8 rounded-full bg-surface-raised flex items-center justify-center border border-border shadow-inner">
-                  <span className="text-xs text-foreground font-bold font-display">
-                    {user.email ? user.email.charAt(0).toUpperCase() : "U"}
-                  </span>
-                </div>
-              </Link>
+              <div className="flex flex-col items-center gap-2 py-2">
+                <Link to="/settings" onClick={onNavigate} title="Settings" className="flex justify-center">
+                  <div className="w-8 h-8 rounded-full bg-surface-raised flex items-center justify-center border border-border shadow-inner">
+                    <span className="text-xs text-foreground font-bold font-display">
+                      {user.email ? user.email.charAt(0).toUpperCase() : "U"}
+                    </span>
+                  </div>
+                </Link>
+                <button
+                  id="btn-sign-out-collapsed"
+                  onClick={handleSignOut}
+                  title="Sign out"
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 transition-colors"
+                >
+                  <LogOut className="h-4 w-4" />
+                </button>
+              </div>
             )}
           </div>
         )}

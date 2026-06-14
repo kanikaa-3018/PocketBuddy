@@ -82,6 +82,55 @@ function formatExternalUrl(url: string | null | undefined): string {
   return `https://${trimmed}`;
 }
 
+function listActiveParticipants(itemsList: any[]) {
+  return Array.from(
+    new Set(
+      itemsList
+        .filter((i) => i.is_purchased !== false)
+        .map((i) => String(i.added_by_name ?? "").trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
+function namesMatch(a: string | null | undefined, b: string | null | undefined) {
+  const left = (a ?? "").trim().toLowerCase();
+  const right = (b ?? "").trim().toLowerCase();
+  return Boolean(left && right && (left === right || left.includes(right) || right.includes(left)));
+}
+
+function isHostParticipant(pool: Pool | null | undefined, participantName: string, user: any, currentName: string) {
+  if (!pool) return false;
+  const pName = participantName.trim().toLowerCase();
+  const hostName = (pool.created_by_name ?? "").trim().toLowerCase();
+  const userName = (user?.fullName ?? "").trim().toLowerCase();
+  const localName = currentName.trim().toLowerCase();
+
+  return (
+    pName === "host" ||
+    pName === hostName ||
+    namesMatch(hostName, pName) ||
+    (user && pool.host_id === user.id && (
+      pName === userName ||
+      namesMatch(userName, pName) ||
+      Boolean(localName && pName === localName)
+    ))
+  );
+}
+
+function isPoolFullySettled(pool: Pool | null | undefined, itemsList: any[], user: any, currentName: string) {
+  if (!pool || pool.status !== "completed") return false;
+
+  const activeParticipants = listActiveParticipants(itemsList);
+  if (activeParticipants.length === 0) return false;
+
+  return activeParticipants.every((participantName) => {
+    if (isHostParticipant(pool, participantName, user, currentName)) return true;
+    const payment = (pool.payments ?? []).find((pay: any) => pay.name === participantName);
+    return payment?.status === "verified";
+  });
+}
+
 function PoolDetail() {
   const { id } = Route.useParams();
   const { user } = useAuth();
@@ -185,6 +234,16 @@ function PoolDetail() {
     }
   }, [pool, user, hasPrefilledName, id, qc]);
 
+  const allItems = (items ?? []) as any[];
+  const isFullySettled = isPoolFullySettled(pool, allItems, user, name);
+
+  useEffect(() => {
+    if (isFullySettled && !hasShownSettled) {
+      setSettledPopupOpen(true);
+      setHasShownSettled(true);
+    }
+  }, [isFullySettled, hasShownSettled]);
+
   if (!pool)
     return (
       <AppShell>
@@ -212,7 +271,6 @@ function PoolDetail() {
   };
 
   // Group items by roommate
-  const allItems = (items ?? []) as any[];
   const itemsWithLinks = allItems.filter((i: any) => i.product_url && i.is_purchased !== false);
   const purchasedItems = allItems.filter((i: any) => i.is_purchased !== false);
   const cartTotal = purchasedItems.reduce((s: number, i: any) => s + i.estimated_price, 0);
@@ -241,18 +299,7 @@ function PoolDetail() {
         .reduce((s, i) => s + i.estimated_price, 0);
 
       const payment = (pool.payments ?? []).find((pay: any) => pay.name === p);
-      const hName = (pool.created_by_name ?? "").trim().toLowerCase();
-      const pName = p.trim().toLowerCase();
-      const uName = (user?.fullName ?? "").trim().toLowerCase();
-      const isHostUser = 
-        pName === "host" || 
-        pName === hName || 
-        (hName && pName && (hName.includes(pName) || pName.includes(hName))) ||
-        (user && pool.host_id === user.id && (
-          pName === uName || 
-          (uName && pName && (uName.includes(pName) || pName.includes(uName))) ||
-          (name && pName === name.trim().toLowerCase())
-        ));
+      const isHostUser = isHostParticipant(pool, p, user, name);
 
       splitBreakdown[p] = {
         name: p,
@@ -274,18 +321,7 @@ function PoolDetail() {
         .filter((i) => i.is_purchased !== false)
         .reduce((s, i) => s + i.estimated_price, 0);
 
-      const hName = (pool.created_by_name ?? "").trim().toLowerCase();
-      const pName = p.trim().toLowerCase();
-      const uName = (user?.fullName ?? "").trim().toLowerCase();
-      const isHostUser = 
-        pName === "host" || 
-        pName === hName || 
-        (hName && pName && (hName.includes(pName) || pName.includes(hName))) ||
-        (user && pool.host_id === user.id && (
-          pName === uName || 
-          (uName && pName && (uName.includes(pName) || pName.includes(uName))) ||
-          (name && pName === name.trim().toLowerCase())
-        ));
+      const isHostUser = isHostParticipant(pool, p, user, name);
 
       splitBreakdown[p] = {
         name: p,
@@ -298,21 +334,6 @@ function PoolDetail() {
       };
     });
   }
-
-  function listActiveParticipants(itemsList: any[]) {
-    return Array.from(new Set(itemsList.filter((i) => i.is_purchased !== false).map((i) => i.added_by_name)));
-  }
-
-  const isFullySettled = pool.status === "completed" && 
-    Object.keys(splitBreakdown).length > 0 && 
-    Object.values(splitBreakdown).every(d => d.paid);
-
-  useEffect(() => {
-    if (isFullySettled && !hasShownSettled) {
-      setSettledPopupOpen(true);
-      setHasShownSettled(true);
-    }
-  }, [isFullySettled, hasShownSettled]);
 
   // Actions
   async function addItem() {
