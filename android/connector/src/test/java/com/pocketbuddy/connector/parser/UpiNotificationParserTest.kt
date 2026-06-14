@@ -88,4 +88,14 @@ class UpiNotificationParserTest {
 
         assertNull(parsed)
     }
+
+    @Test
+    fun ignoresChatNotificationsThatQuotePaymentText() {
+        val parsed = parser.parse(
+            packageName = "com.whatsapp",
+            rawText = "Hackathons and internship: RECENT SYNC ACTIVITY sms_notification Sent Rs.2.00 from XXXXXX1234 to Kanika Singhal on 14/06/2026. UPI ref no. 123456789012.",
+        )
+
+        assertNull(parsed)
+    }
 }

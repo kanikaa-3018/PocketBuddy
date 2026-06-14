@@ -139,7 +139,6 @@ class UpiNotificationParser {
             "net.one97.paytm",
             "in.org.npci.upiapp",
             "in.amazon.mshop.android.shopping",
-            "com.whatsapp",
         )
 
         private val knownPaymentPackageFragments = listOf(
@@ -192,7 +191,6 @@ class UpiNotificationParser {
             "net.one97.paytm" to "Paytm",
             "in.org.npci.upiapp" to "BHIM",
             "in.amazon.mshop.android.shopping" to "Amazon Pay",
-            "com.whatsapp" to "WhatsApp",
             "com.google.android.apps.messaging" to "Google Messages",
             "com.android.mms" to "Messages",
             "com.android.messaging" to "Messages",
