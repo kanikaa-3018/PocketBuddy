@@ -55,6 +55,7 @@ function TxnsPage() {
   const [viewTab, setViewTab] = useState<ViewTab>("daily");
   const [editingTxn, setEditingTxn] = useState<any | null>(null);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
 
   const { data: profile } = useQuery({
     queryKey: ["profile", user?.id],
@@ -124,11 +125,32 @@ function TxnsPage() {
   // Filter daily groups if a specific day is selected (from calendar click)
   const filteredDailyGroups = useMemo(() => {
     if (!stats?.daily_groups) return [];
+    let groups = stats.daily_groups;
     if (selectedDay !== null) {
-      return stats.daily_groups.filter((g: any) => g.day === selectedDay);
+      groups = groups.filter((g: any) => g.day === selectedDay);
     }
-    return stats.daily_groups;
-  }, [stats?.daily_groups, selectedDay]);
+    if (selectedCategory !== "all") {
+      return groups
+        .map((g: any) => {
+          const txns = g.transactions.filter((t: any) => {
+            if (selectedCategory === "income") {
+              return t.is_income;
+            }
+            return (t.category || "other").toLowerCase() === selectedCategory.toLowerCase() && !t.is_income;
+          });
+          const income = txns.filter((t: any) => t.is_income).reduce((s: number, t: any) => s + t.amount, 0);
+          const expenses = txns.filter((t: any) => !t.is_income).reduce((s: number, t: any) => s + t.amount, 0);
+          return {
+            ...g,
+            income,
+            expenses,
+            transactions: txns,
+          };
+        })
+        .filter((g: any) => g.transactions.length > 0);
+    }
+    return groups;
+  }, [stats?.daily_groups, selectedDay, selectedCategory]);
 
   return (
     <AppShell>
@@ -193,6 +215,45 @@ function TxnsPage() {
             <p className="text-xs font-black tnum text-foreground">{rupees(Math.abs(stats?.summary?.net ?? 0))}</p>
           </div>
         </div>
+
+        {/* ── Category Filters ────────────────────────────────────────── */}
+        {!isLoading && viewTab === "daily" && (
+          <div className="-mx-4 px-4 overflow-x-auto scrollbar-none flex items-center gap-1.5 py-1">
+            <button
+              onClick={() => setSelectedCategory("all")}
+              className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap border transition-all cursor-pointer ${
+                selectedCategory === "all"
+                  ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                  : "bg-surface text-muted-foreground border-border hover:text-foreground hover:bg-surface-raised"
+              }`}
+            >
+              All
+            </button>
+            {categories.map((c) => (
+              <button
+                key={c.v}
+                onClick={() => setSelectedCategory(c.v)}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap border transition-all cursor-pointer ${
+                  selectedCategory === c.v
+                    ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                    : "bg-surface text-muted-foreground border-border hover:text-foreground hover:bg-surface-raised"
+                }`}
+              >
+                {c.l}
+              </button>
+            ))}
+            <button
+              onClick={() => setSelectedCategory("income")}
+              className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap border transition-all cursor-pointer ${
+                selectedCategory === "income"
+                  ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                  : "bg-surface text-muted-foreground border-border hover:text-foreground hover:bg-surface-raised"
+              }`}
+            >
+              Income
+            </button>
+          </div>
+        )}
 
         {isLoading ? (
           <div className="space-y-3">
