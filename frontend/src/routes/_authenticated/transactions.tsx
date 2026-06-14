@@ -34,17 +34,14 @@ const FALLBACK_CATEGORIES = [
   { v: "other", l: "Other" },
 ];
 
-const CATEGORY_ICONS: Record<string, string> = {
-  food: "🍜", stationery: "📝", travel: "🚌", transport: "🚌",
-  subscription: "📱", education: "📚", salary: "💰", other: "📦",
-};
-
-function getCatIcon(cat: string): string {
-  const lower = cat.toLowerCase();
-  for (const [key, icon] of Object.entries(CATEGORY_ICONS)) {
-    if (lower.includes(key)) return icon;
-  }
-  return "📦";
+function getCatBadgeStyles(cat?: string): string {
+  const c = (cat || "other").toLowerCase();
+  if (c.includes("food") || c.includes("mess")) return "bg-orange-500/10 text-orange-500 border border-orange-500/20";
+  if (c.includes("stationery") || c.includes("book") || c.includes("print")) return "bg-yellow-500/10 text-yellow-500 border border-yellow-500/20";
+  if (c.includes("travel") || c.includes("transport") || c.includes("bus")) return "bg-purple-500/10 text-purple-500 border border-purple-500/20";
+  if (c.includes("subscription") || c.includes("recharge")) return "bg-blue-500/10 text-blue-500 border border-blue-500/20";
+  if (c.includes("income") || c.includes("salary") || c.includes("allowance")) return "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20";
+  return "bg-zinc-500/10 text-zinc-400 border border-zinc-500/20";
 }
 
 type ViewTab = "daily" | "calendar" | "monthly" | "total";
@@ -328,9 +325,8 @@ function DailyView({
               return (
                 <div key={t.id} className="flex items-center gap-3 px-4 py-3 hover:bg-surface-raised/40 transition-colors">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className="text-sm">{getCatIcon(t.category || "other")}</span>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground capitalize">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${getCatBadgeStyles(t.category)}`}>
                         {t.category || "other"}
                       </span>
                     </div>
