@@ -1,24 +1,16 @@
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
-import uuid
 import datetime
 from app.core.database import get_db
 from app.core.security import get_current_user, map_doc, map_docs
+from app.services.subscriptions import (
+    detect_recurring_subscriptions,
+    parse_to_naive_utc,
+    upsert_subscription,
+)
 
 router = APIRouter()
-
-def to_naive_utc(dt: datetime.datetime) -> datetime.datetime:
-    if dt.tzinfo is not None:
-        return dt.astimezone(datetime.timezone.utc).replace(tzinfo=None)
-    return dt
-
-def parse_to_naive_utc(date_str: str) -> datetime.datetime:
-    clean_str = date_str.replace("Z", "+00:00")
-    if len(clean_str) == 10:
-        clean_str += "T00:00:00+00:00"
-    dt = datetime.datetime.fromisoformat(clean_str)
-    return to_naive_utc(dt)
 
 
 class SubReq(BaseModel):
@@ -33,75 +25,7 @@ class SubReq(BaseModel):
 @router.get("")
 async def get_subscriptions(user_id: str = Depends(get_current_user)):
     db = get_db()
-
-    # Auto-detect subscriptions dynamically from historical transaction streams
-    try:
-        txns_cursor = db.transactions.find({"user_id": user_id}).sort("created_at", -1)
-        txns = await txns_cursor.to_list(length=150)
-
-        # Group by clean merchant and amount to check for monthly recurrences
-        groups = {}
-        for t in txns:
-            m_name = t.get("mapped_merchant_name") or t.get("raw_merchant_string")
-            if not m_name:
-                continue
-            amt = t.get("amount")
-            if not amt or amt <= 0:
-                continue
-            key = (m_name.strip(), amt)
-            groups.setdefault(key, []).append(t)
-
-        for (m_name, amt), t_list in groups.items():
-            if len(t_list) >= 2:
-                # Sort by created_at ascending
-                t_list.sort(key=lambda x: x["created_at"])
-
-                # Check date differences between consecutive transactions
-                for i in range(len(t_list) - 1):
-                    d1 = t_list[i]["created_at"]
-                    d2 = t_list[i + 1]["created_at"]
-
-                    # Convert to datetime if string
-                    if isinstance(d1, str):
-                        d1 = datetime.datetime.fromisoformat(d1.replace("Z", "+00:00"))
-                    if isinstance(d2, str):
-                        d2 = datetime.datetime.fromisoformat(d2.replace("Z", "+00:00"))
-
-                    days_diff = (d2 - d1).days
-
-                    # Gap matching regular monthly auto-debit billing cycles (25-35 days)
-                    if 25 <= days_diff <= 35:
-                        service_name = m_name.strip()
-
-                        # Case-insensitive duplicate check across both name and service_name fields
-                        import re
-                        name_regex = re.compile(f"^{re.escape(service_name)}$", re.IGNORECASE)
-                        existing = await db.subscriptions.find_one({
-                            "user_id": user_id,
-                            "$or": [
-                                {"service_name": name_regex},
-                                {"name": name_regex}
-                            ]
-                        })
-
-                        if not existing:
-                            next_debit = d2 + datetime.timedelta(days=30)
-                            next_debit = to_naive_utc(next_debit)
-                            await db.subscriptions.insert_one({
-                                "_id": str(uuid.uuid4()),
-                                "user_id": user_id,
-                                "name": service_name,
-                                "service_name": service_name,
-                                "amount": amt,
-                                "billing_cycle": "monthly",
-                                "next_debit_date": next_debit,
-                                "is_active": True,
-                                "detected_from": "auto_detected",
-                                "created_at": datetime.datetime.utcnow()
-                            })
-                        break
-    except Exception:
-        pass  # Fail-silent to ensure user can always load manual subscriptions
+    await detect_recurring_subscriptions(db, user_id)
 
     cursor = db.subscriptions.find({"user_id": user_id}).sort("next_debit_date", 1)
     subs = await cursor.to_list(length=100)
@@ -110,26 +34,26 @@ async def get_subscriptions(user_id: str = Depends(get_current_user)):
 @router.post("")
 async def insert_subscription(req: SubReq, user_id: str = Depends(get_current_user)):
     db = get_db()
-    sub_id = str(uuid.uuid4())
     service_name = (req.service_name or req.name or "").strip()
     if not service_name:
         raise HTTPException(status_code=400, detail="Missing service_name")
 
-    new_sub = {
-        "_id": sub_id,
-        "user_id": user_id,
-        "name": service_name,
-        "service_name": service_name,
-        "amount": req.amount,
-        "billing_cycle": req.billing_cycle or "monthly",
-        "next_debit_date": parse_to_naive_utc(req.next_debit_date),
-        "is_active": True if req.is_active is None else req.is_active,
-        "detected_from": req.detected_from or "manual",
-        "created_at": datetime.datetime.utcnow()
-    }
+    subscription = await upsert_subscription(
+        db,
+        user_id=user_id,
+        service_name=service_name,
+        amount_paise=req.amount,
+        next_debit_date=parse_to_naive_utc(req.next_debit_date),
+        detected_from=req.detected_from or "manual",
+    )
+    if req.is_active is not None and subscription.get("is_active") != req.is_active:
+        await db.subscriptions.update_one(
+            {"_id": subscription["_id"], "user_id": user_id},
+            {"$set": {"is_active": req.is_active, "updated_at": datetime.datetime.utcnow()}},
+        )
+        subscription = await db.subscriptions.find_one({"_id": subscription["_id"], "user_id": user_id})
 
-    await db.subscriptions.insert_one(new_sub)
-    return map_doc(new_sub)
+    return map_doc(subscription)
 
 @router.post("/toggle-active")
 async def toggle_subscription(req: dict, user_id: str = Depends(get_current_user)):

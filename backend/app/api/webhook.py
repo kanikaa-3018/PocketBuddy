@@ -8,6 +8,10 @@ import uuid
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.services.subscriptions import (
+    subscription_name_for_merchant,
+    upsert_subscription_for_transaction,
+)
 
 router = APIRouter()
 
@@ -81,47 +85,6 @@ def normalize_merchant(merchant: Optional[str]) -> Optional[str]:
         return None
     normalized = re.sub(r"\s+", " ", merchant).strip(" .,-")
     return normalized[:120] if normalized else None
-
-
-def detect_subscription(merchant: Optional[str]) -> Optional[str]:
-    if not merchant:
-        return None
-
-    subscriptions_map = {
-        "spotify": "Spotify",
-        "netflix": "Netflix",
-        "youtube": "YouTube Premium",
-        "prime": "Amazon Prime",
-        "hotstar": "Disney+ Hotstar",
-        "zee5": "Zee5",
-        "sonyliv": "SonyLIV",
-        "jio": "JioFiber",
-        "airtel": "Airtel Thanks",
-        "vi ": "Vi Postpaid",
-        "xbox": "Xbox Game Pass",
-        "playstation": "PlayStation Plus",
-        "nintendo": "Nintendo Switch Online",
-        "steam": "Steam",
-        "adobe": "Adobe Creative Cloud",
-        "canva": "Canva Pro",
-        "chatgpt": "ChatGPT Plus",
-        "midjourney": "Midjourney",
-        "github": "GitHub Copilot",
-        "icloud": "Apple iCloud",
-        "googleone": "Google One",
-        "google one": "Google One",
-        "notion": "Notion",
-        "duolingo": "Duolingo Plus",
-        "swiggy": "Swiggy One",
-        "zomato": "Zomato Gold",
-        "zepto": "Zepto Pass",
-        "blinkit": "Blinkit Club"
-    }
-    low = merchant.lower()
-    for kw, display_name in subscriptions_map.items():
-        if kw in low:
-            return display_name
-    return None
 
 
 def mask_notification_text(text: str) -> str:
@@ -345,6 +308,9 @@ async def ingest_notification(
         return {"status": "duplicate", "transaction_id": existing_txn["_id"]}
 
     merchant_doc = await db.merchant_directory.find_one({"raw_string": merchant})
+    sub_name = subscription_name_for_merchant(merchant)
+    mapped_merchant_name = merchant_doc["display_name"] if merchant_doc else sub_name
+    category = merchant_doc["category"] if merchant_doc else ("subscription" if sub_name else None)
     source = "companion_sms" if "sms" in notification_source.lower() else "companion_notification"
     txn_id = str(uuid.uuid4())
     new_txn = {
@@ -354,9 +320,9 @@ async def ingest_notification(
         "currency": req.currency or "INR",
         "direction": direction,
         "raw_merchant_string": merchant,
-        "mapped_merchant_name": merchant_doc["display_name"] if merchant_doc else None,
-        "category": merchant_doc["category"] if merchant_doc else None,
-        "is_mapped": bool(merchant_doc),
+        "mapped_merchant_name": mapped_merchant_name,
+        "category": category,
+        "is_mapped": bool(merchant_doc or sub_name),
         "source": source,
         "notification_preview": notification_preview,
         "transaction_reference": transaction_reference,
@@ -372,29 +338,14 @@ async def ingest_notification(
     await mark_sync_log(db, log_id, "parsed", amount_paise, merchant, txn_id)
     await update_profile_sync_state(db, user_id, req, now)
 
-    sub_name = detect_subscription(merchant)
     if sub_name:
-        existing_sub = await db.subscriptions.find_one(
-            {
-                "user_id": user_id,
-                "$or": [{"service_name": sub_name}, {"name": sub_name}],
-            }
+        await upsert_subscription_for_transaction(
+            db,
+            user_id=user_id,
+            merchant=merchant,
+            amount_paise=amount_paise,
+            observed_at=now,
+            detected_from="auto_detected",
         )
-        if not existing_sub:
-            next_month = now + datetime.timedelta(days=30)
-            await db.subscriptions.insert_one(
-                {
-                    "_id": str(uuid.uuid4()),
-                    "user_id": user_id,
-                    "name": sub_name,
-                    "service_name": sub_name,
-                    "amount": amount_paise,
-                    "billing_cycle": "monthly",
-                    "next_debit_date": next_month,
-                    "is_active": True,
-                    "detected_from": "auto_detected",
-                    "created_at": now,
-                }
-            )
 
     return {"status": "ok", "transaction_id": txn_id}
