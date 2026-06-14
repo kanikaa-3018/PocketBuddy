@@ -39,13 +39,6 @@ const CYCLE_DAYS = [
   { v: 28, l: "Last day" },
 ];
 
-function randomPairingCode() {
-  const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-  let s = "PB-";
-  for (let i = 0; i < 4; i++) s += chars[Math.floor(Math.random() * chars.length)];
-  return s;
-}
-
 function Onboarding() {
   const { user } = useAuth();
   const nav = useNavigate();
@@ -78,9 +71,6 @@ function Onboarding() {
   const [upiApps, setUpiApps] = useState<string[]>([]);
   const [customUpiInput, setCustomUpiInput] = useState("");
   const [showCustomUpi, setShowCustomUpi] = useState(false);
-
-  // Step 3
-  const pairingCode = useMemo(() => randomPairingCode(), []);
 
   // Catalog queries
   const { data: catalogColleges } = useQuery({
@@ -223,7 +213,6 @@ function Onboarding() {
         data: {
           onboarding_completed: true,
           setup_completed: true,
-          pairing_code: pairingCode,
           companion_paired: false,
           companion_device_name: null,
           companion_last_sync: null,
@@ -555,15 +544,15 @@ function Onboarding() {
             <div className="mb-2">
               <h2 className="text-[20px] font-black tracking-tight text-foreground uppercase">Auto-Track Expense</h2>
               <p className="mt-1.5 text-xs text-muted-foreground">
-                Pair with the Android connector app to capture UPI transactions in real-time.
+                Set up the Android connector once. After that, PocketBuddy can sync supported UPI payment alerts automatically.
               </p>
             </div>
 
             <div className="grid grid-cols-3 gap-2">
               {[
-                { e: "01", l: "Get App" },
-                { e: "02", l: "Grant Access" },
-                { e: "03", l: "Instant Sync" },
+                { e: "01", l: "Install App" },
+                { e: "02", l: "Paste Config" },
+                { e: "03", l: "Allow Access" },
               ].map((c) => (
                 <div
                   key={c.l}
@@ -579,24 +568,43 @@ function Onboarding() {
 
             <div className="rounded-lg border border-border bg-surface-raised/40 p-4 space-y-1">
               <p className="text-xs font-bold text-foreground uppercase tracking-wider">
-                Android Webhook Integration
+                What you will do next
               </p>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Build and install the connector from the repository Android module. You will paste this webhook pairing profile on the setup screen.
+                The next page gives you one copy button. Open the Android app, tap paste, save, and allow notification access. You do not need to type any code manually.
               </p>
             </div>
 
-            <div className="text-center bg-surface-raised border border-border rounded-xl p-5">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Your Pairing Code</p>
-              <div
-                id="text-pairing-code"
-                className="mt-2 inline-block rounded-md bg-background border border-border px-6 py-2.5 text-[22px] font-black tracking-[4px] text-primary font-mono shadow-inner"
-              >
-                {pairingCode}
-              </div>
-              <p className="mt-2 text-[10px] text-zinc-500 leading-normal">
-                This code associates your device webhook with this account profile.
+            <div className="rounded-xl border border-border bg-surface-raised p-5">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                Simple setup steps
               </p>
+              <ol className="mt-3 space-y-3 text-[12px] leading-relaxed text-muted-foreground">
+                <li className="flex gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-black text-primary">
+                    1
+                  </span>
+                  <span>Install and open the PocketBuddy Connector app on your Android phone.</span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-black text-primary">
+                    2
+                  </span>
+                  <span>On the next web page, tap <b className="text-foreground">Copy Android config</b>.</span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-black text-primary">
+                    3
+                  </span>
+                  <span>In the Android app, tap <b className="text-foreground">Paste config</b>, then <b className="text-foreground">Save connector config</b>.</span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-black text-primary">
+                    4
+                  </span>
+                  <span>Tap <b className="text-foreground">Open notification access</b> and allow PocketBuddy Connector.</span>
+                </li>
+              </ol>
             </div>
 
             <div className="space-y-3 pt-2">

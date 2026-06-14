@@ -8,9 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronLeft, ChevronDown, Copy, RefreshCw, Save } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Copy, RefreshCw, Save } from "lucide-react";
 import { toast } from "sonner";
-import { relativeTime } from "@/lib/format";
+import { absoluteDate, relativeTime } from "@/lib/format";
 
 export const Route = createFileRoute("/_authenticated/companion")({
   ssr: false,
@@ -63,11 +63,18 @@ function CompanionPage() {
   const hasRealSync = Boolean(profile?.companion_last_sync || syncLogs.length > 0);
   const isConnected = Boolean(profile?.companion_paired || hasRealSync);
   const companionWebhookUrl = getCompanionWebhookUrl();
-  const connectorConfig = [
+  const pairingForDisplay = profile?.pairing_code || pairing;
+  const isPairingSaved = Boolean(profile?.pairing_code && profile.pairing_code === pairingForDisplay);
+
+  function makeConnectorConfig(pairingCode: string) {
+    return [
     `POCKETBUDDY_WEBHOOK_URL=${companionWebhookUrl}`,
-    `POCKETBUDDY_WEBHOOK_TOKEN=${pairing || ""}`,
+      `POCKETBUDDY_WEBHOOK_TOKEN=${pairingCode}`,
     `POCKETBUDDY_USER_ID=${user?.id ?? ""}`,
-  ].join("\n");
+    ].join("\n");
+  }
+
+  const connectorConfig = makeConnectorConfig(pairingForDisplay);
 
   useEffect(() => {
     if (profile?.pairing_code) setPairing(profile.pairing_code);
@@ -111,18 +118,26 @@ function CompanionPage() {
     }
   }
 
-  async function savePairingCode() {
-    if (!user) return;
+  async function savePairingCode(code = pairingForDisplay, showToast = true): Promise<string | null> {
+    if (!user) return null;
+    const nextCode = (code || randomPairingCode()).trim();
+    if (!nextCode) return null;
+
+    if (profile?.pairing_code === nextCode) return nextCode;
+
     try {
       await updateProfile({
         data: {
-          pairing_code: pairing,
+          pairing_code: nextCode,
         },
       });
+      setPairing(nextCode);
       qc.invalidateQueries({ queryKey: ["profile"] });
-      toast.success("Pairing code saved.");
+      if (showToast) toast.success("Pairing token saved.");
+      return nextCode;
     } catch (err: any) {
-      toast.error(err.message || "Failed to save pairing code");
+      toast.error(err.message || "Failed to save pairing token");
+      return null;
     }
   }
 
@@ -146,19 +161,23 @@ function CompanionPage() {
   }
 
   async function copyConnectorConfig() {
+    const savedPairing = await savePairingCode(pairingForDisplay, false);
+    if (!savedPairing) return;
+
+    const configToCopy = makeConnectorConfig(savedPairing);
     let copied = false;
     if (navigator.clipboard && navigator.clipboard.writeText) {
       try {
-        await navigator.clipboard.writeText(connectorConfig);
+        await navigator.clipboard.writeText(configToCopy);
         copied = true;
       } catch (err) {}
     }
     if (!copied) {
-      copied = await fallbackCopyText(connectorConfig);
+      copied = await fallbackCopyText(configToCopy);
     }
 
     if (copied) {
-      toast.success("Android config copied.");
+      toast.success("Pairing token saved and Android config copied.");
     } else {
       toast.error("Failed to copy config. Please copy manually.");
     }
@@ -198,6 +217,9 @@ function CompanionPage() {
               <p className="text-[12px] text-muted-foreground">
                 UPI apps: {profile.upi_apps_used?.length ? profile.upi_apps_used.join(", ") : "-"}
               </p>
+              <p className="mt-2 rounded-md bg-surface px-2.5 py-2 text-[12px] text-muted-foreground">
+                This phone is linked to your account. New supported payment alerts can sync automatically.
+              </p>
             </Card>
 
             <div>
@@ -213,31 +235,33 @@ function CompanionPage() {
                 {syncLogs.map((l) => {
                   const isOpen = expandedLogId === l.id;
                   return (
-                    <div key={l.id} className="rounded-md bg-surface">
+                    <div key={l.id} className="rounded-md bg-surface p-2.5">
                       <button
                         type="button"
+                        className="flex w-full items-start justify-between gap-3 text-left"
                         onClick={() => setExpandedLogId(isOpen ? null : l.id)}
-                        className="flex w-full items-start justify-between gap-3 p-2.5 text-left cursor-pointer"
-                        aria-expanded={isOpen}
                       >
                         <div className="min-w-0 flex-1">
-                          <p className="text-[13px]">{l.notification_source}</p>
-                          <p className="truncate text-[12px] text-muted-foreground">
+                          <div className="flex items-center gap-1.5">
+                            {isOpen ? (
+                              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            ) : (
+                              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            )}
+                            <p className="truncate text-[13px]">{l.notification_source || "notification"}</p>
+                          </div>
+                          <p className="mt-1 line-clamp-2 text-[12px] text-muted-foreground">
                             {l.notification_preview ?? "Structured event received"}
                           </p>
                         </div>
-                        <div className="flex items-start gap-2">
-                          <div className="text-right">
-                            <StatusBadge status={l.processing_status} />
-                            <p className="mt-1 text-[11px] text-muted-foreground">
-                              {relativeTime(l.created_at)}
-                            </p>
-                          </div>
-                          <ChevronDown
-                            className={`mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
-                          />
+                        <div className="shrink-0 text-right">
+                          <StatusBadge status={l.processing_status} />
+                          <p className="mt-1 text-[11px] text-muted-foreground">
+                            {relativeTime(l.created_at)}
+                          </p>
                         </div>
                       </button>
+
                       {isOpen && <SyncLogDetails log={l} />}
                     </div>
                   );
@@ -272,7 +296,7 @@ function CompanionPage() {
                 <div>
                   <p className="text-[14px] font-semibold">Android Connector</p>
                   <p className="mt-0.5 text-[12px] text-muted-foreground">
-                    Build and install from the repository Android module.
+                    Install the app once, copy the setup from here, then paste it in the phone app.
                   </p>
                 </div>
                 <Badge variant="outline" className="text-xs">
@@ -281,11 +305,14 @@ function CompanionPage() {
               </div>
             </Card>
 
-            <div className="text-center">
-              <p className="text-[12px] text-muted-foreground">Your pairing code:</p>
-              <div className="mt-2 inline-block rounded-md bg-surface-raised px-5 py-3 text-[24px] font-bold tracking-[4px] text-primary font-mono">
-                {pairing}
-              </div>
+            <div className="rounded-xl border border-border bg-surface-raised p-4 text-center">
+              <p className="text-[13px] font-semibold text-foreground">No manual code required</p>
+              <p className="mx-auto mt-1 max-w-sm text-[12px] leading-relaxed text-muted-foreground">
+                PocketBuddy creates a private setup key and includes it when you copy the Android config. You do not need to type or remember it.
+              </p>
+              <Badge variant={isPairingSaved ? "outline" : "secondary"} className="mt-2 text-[10px]">
+                {isPairingSaved ? "Setup key saved" : "Setup key will save before copy"}
+              </Badge>
             </div>
 
             <Card className="bg-surface-raised p-4">
@@ -293,22 +320,23 @@ function CompanionPage() {
                 <div>
                   <p className="text-[13px] font-semibold">Connector config</p>
                   <p className="mt-0.5 text-[12px] text-muted-foreground">
-                    Paste these values in the Android setup screen. On AWS this URL works without USB.
+                    Tap copy, open the Android app, tap Paste config, then save.
                   </p>
                 </div>
                 <Button variant="outline" size="sm" onClick={copyConnectorConfig}>
                   <Copy />
-                  Copy
+                  Copy Android config
                 </Button>
               </div>
-              <pre className="mt-3 overflow-x-auto rounded-md bg-surface p-3 text-left text-xs leading-5 text-muted-foreground">
-                {connectorConfig}
-              </pre>
+              <details className="mt-3 rounded-md bg-surface p-3 text-left text-xs text-muted-foreground">
+                <summary className="cursor-pointer font-semibold text-foreground">Show copied values</summary>
+                <pre className="mt-3 overflow-x-auto leading-5">{connectorConfig}</pre>
+              </details>
             </Card>
 
-            <Button variant="outline" className="w-full" onClick={savePairingCode}>
+            <Button variant="outline" className="w-full" onClick={() => savePairingCode()}>
               <Save />
-              Save Pairing Code
+              Save setup key
             </Button>
             <Button
               className="w-full bg-success text-white hover:bg-success/90"
@@ -325,46 +353,63 @@ function CompanionPage() {
 }
 
 function SyncLogDetails({ log }: { log: SyncLog }) {
-  const formatAmount = (v: any) =>
-    typeof v === "number" ? `₹${v.toLocaleString("en-IN")}` : null;
-
-  const rows: { label: string; value: string | null | undefined }[] = [
-    { label: "Status", value: log.processing_status },
-    { label: "Source", value: log.notification_source },
-    { label: "Parsed amount", value: formatAmount(log.parsed_amount) },
-    { label: "Parsed merchant", value: log.parsed_merchant },
-    { label: "Transaction ref", value: log.transaction_reference },
-    { label: "Device", value: log.device_name },
-    { label: "App package", value: log.source_app ?? log.package_name },
-    {
-      label: "Received",
-      value: log.created_at ? new Date(log.created_at).toLocaleString() : null,
-    },
-  ].filter((r) => r.value !== null && r.value !== undefined && r.value !== "");
+  const details = [
+    ["Status", humanStatus(log.processing_status)],
+    ["Received", log.created_at ? absoluteDate(log.created_at) : "-"],
+    ["Parsed amount", formatParsedAmount(log.parsed_amount)],
+    ["Parsed merchant", log.parsed_merchant || "-"],
+    ["Transaction reference", log.transaction_reference || log.transaction_id || "-"],
+    ["Device", log.device_name || log.source_app || log.package_name || "-"],
+    ["Package", log.package_name || "-"],
+  ];
 
   return (
-    <div className="border-t border-border px-2.5 py-3">
-      <dl className="grid grid-cols-1 gap-y-1.5 sm:grid-cols-2 sm:gap-x-4">
-        {rows.map((r) => (
-          <div key={r.label} className="flex items-baseline justify-between gap-3 sm:block">
-            <dt className="text-[10px] uppercase tracking-wider text-muted-foreground">{r.label}</dt>
-            <dd className="text-[12px] font-medium text-foreground break-words text-right sm:text-left">{r.value}</dd>
+    <div className="mt-3 rounded-md border border-border bg-background/70 p-3">
+      <div className="grid gap-2 sm:grid-cols-2">
+        {details.map(([label, value]) => (
+          <div key={label} className="min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              {label}
+            </p>
+            <p className="mt-0.5 break-words text-[12px] text-foreground">
+              {value}
+            </p>
           </div>
         ))}
-      </dl>
-      {log.notification_preview && (
-        <div className="mt-3">
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Notification preview</p>
-          <p className="mt-1 rounded-md bg-surface-raised p-2 text-[12px] leading-5 text-muted-foreground break-words">
-            {log.notification_preview}
-          </p>
-        </div>
-      )}
+      </div>
+
+      <div className="mt-3 border-t border-border pt-3">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          Masked notification preview
+        </p>
+        <p className="mt-1 whitespace-pre-wrap break-words text-[12px] leading-relaxed text-muted-foreground">
+          {log.notification_preview || "No notification preview stored."}
+        </p>
+      </div>
     </div>
   );
 }
 
-function StatusBadge({ status }: { status: string }) {  if (status === "parsed")
+function formatParsedAmount(value: unknown) {
+  if (value === null || value === undefined || value === "") return "-";
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return String(value);
+  return `₹${new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 }).format(amount)}`;
+}
+
+function humanStatus(status?: string) {
+  if (status === "parsed") return "Tracked";
+  if (status === "pending") return "Processing";
+  if (status === "auto_verified") return "Pool verified";
+  if (status === "received") return "Received credit";
+  if (status === "incomplete") return "Needs review";
+  if (status === "duplicate") return "Duplicate";
+  if (status === "failed") return "Failed";
+  return "Ignored";
+}
+
+function StatusBadge({ status }: { status?: string }) {
+  if (status === "parsed")
     return (
       <Badge className="bg-success/20 text-success text-xs">
         Tracked
