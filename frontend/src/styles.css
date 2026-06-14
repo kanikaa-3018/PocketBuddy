@@ -197,8 +197,8 @@ html.dark { color-scheme: dark; }
   ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
 
   ::selection {
-    background-color: rgba(255,107,0,0.2);
-    color: #f4f4f5;
+    background-color: var(--primary);
+    color: var(--primary-foreground);
   }
 
   /* Overrides for text contrast in light mode across the entire project */

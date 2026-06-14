@@ -41,7 +41,7 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <div className="flex h-full flex-col">
       {/* Logo */}
-      <div className={`flex items-center gap-3 px-5 ${collapsed ? "py-6 justify-center px-3" : "py-6"}`}>
+      <div className={`flex items-center gap-3 px-5 ${collapsed ? "pt-6 pb-2 justify-center px-3" : "pt-6 pb-2"}`}>
         <div className="grid h-8 w-8 shrink-0 place-items-center rounded-sm rotate-45 bg-primary">
           <div className="h-3 w-3 -rotate-45 rounded-full bg-background" />
         </div>
@@ -55,6 +55,11 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
             </span>
           </div>
         )}
+      </div>
+
+      {/* Collapse Toggle */}
+      <div className="px-3 pb-4 border-b border-border/50 mb-4">
+        <CollapseToggle />
       </div>
 
       {/* Action Button: Log Txn */}
@@ -160,7 +165,6 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
         )}
 
         <ThemeToggle />
-        <CollapseToggle />
       </div>
     </div>
   );

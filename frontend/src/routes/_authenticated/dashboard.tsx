@@ -1386,7 +1386,7 @@ function Dashboard() {
                               <button
                                 id={`btn-identify-${t.id}`}
                                 onClick={() => setIdentifying(t)}
-                                className="ml-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-white/5 border border-border hover:bg-white/10 hover:border-white/15 transition-all cursor-pointer uppercase text-foreground"
+                                className="ml-1 rounded-full px-3 py-1 text-[11px] font-bold bg-white/5 border border-border hover:bg-white/10 hover:border-white/15 transition-all cursor-pointer uppercase text-foreground"
                               >
                                 Identify?
                               </button>
@@ -1394,7 +1394,7 @@ function Dashboard() {
                             <button
                               id={`btn-edit-ledger-${t.id}`}
                               onClick={() => setEditingTxn(t)}
-                              className="ml-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-white/5 border border-border hover:bg-white/10 hover:border-white/15 transition-all cursor-pointer uppercase text-foreground"
+                              className="ml-1 rounded-full px-3 py-1 text-[11px] font-bold bg-white/5 border border-border hover:bg-white/10 hover:border-white/15 transition-all cursor-pointer uppercase text-foreground"
                             >
                               Edit
                             </button>

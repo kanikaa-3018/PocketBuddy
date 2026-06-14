@@ -179,7 +179,7 @@ function TxnsPage() {
                         )}
                         <button
                           onClick={() => setEditingTxn(t)}
-                          className="rounded-full px-2 py-0.5 text-[10px] font-bold bg-white/5 border border-border hover:bg-white/10 hover:border-white/15 transition-all cursor-pointer uppercase text-foreground"
+                          className="rounded-full px-4 py-1.5 text-xs font-bold bg-white/5 border border-border hover:bg-white/10 hover:border-white/15 transition-all cursor-pointer uppercase text-foreground"
                         >
                           Edit
                         </button>
@@ -220,10 +220,12 @@ function TxnsPage() {
         )}
       </div>
 
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-surface/85 backdrop-blur-md px-5 py-2.5 rounded-full border border-border shadow-[0_12px_32px_rgba(0,0,0,0.5)] flex items-center justify-between gap-6 whitespace-nowrap text-xs font-bold uppercase tracking-wider text-muted-foreground animate-[fadeIn_0.3s_ease-out]">
-        <span>Showing: <strong className="text-foreground">{visible.length}</strong> txns</span>
-        <span className="w-[1px] h-3 bg-border" />
-        <span>Total: <strong className="text-foreground">{rupees(total)}</strong></span>
+      <div className="sticky bottom-6 left-0 right-0 z-40 flex justify-center pointer-events-none w-full">
+        <div className="bg-surface/85 backdrop-blur-md px-5 py-2.5 rounded-full border border-border shadow-[0_12px_32px_rgba(0,0,0,0.5)] flex items-center justify-between gap-6 whitespace-nowrap text-xs font-bold uppercase tracking-wider text-muted-foreground animate-[fadeIn_0.3s_ease-out] w-fit pointer-events-auto">
+          <span>Showing: <strong className="text-foreground">{visible.length}</strong> txns</span>
+          <span className="w-[1px] h-3 bg-border" />
+          <span>Total: <strong className="text-foreground">{rupees(total)}</strong></span>
+        </div>
       </div>
 
       <Dialog open={!!editingTxn} onOpenChange={(o) => { if (!o) setEditingTxn(null); }}>
