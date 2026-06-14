@@ -218,7 +218,7 @@ function CompanionPage() {
                 UPI apps: {profile.upi_apps_used?.length ? profile.upi_apps_used.join(", ") : "-"}
               </p>
               <p className="mt-2 rounded-md bg-surface px-2.5 py-2 text-[12px] text-muted-foreground">
-                Pairing token is active. Android sends this token with each webhook; the backend rejects mismatched tokens.
+                This phone is linked to your account. New supported payment alerts can sync automatically.
               </p>
             </Card>
 
@@ -296,7 +296,7 @@ function CompanionPage() {
                 <div>
                   <p className="text-[14px] font-semibold">Android Connector</p>
                   <p className="mt-0.5 text-[12px] text-muted-foreground">
-                    Build and install from the repository Android module.
+                    Install the app once, copy the setup from here, then paste it in the phone app.
                   </p>
                 </div>
                 <Badge variant="outline" className="text-xs">
@@ -305,17 +305,13 @@ function CompanionPage() {
               </div>
             </Card>
 
-            <div className="text-center">
-              <p className="text-[12px] text-muted-foreground">Webhook pairing token:</p>
-              <div className="mt-2 inline-block rounded-md bg-surface-raised px-5 py-3 text-[24px] font-bold tracking-[4px] text-primary font-mono">
-                {pairingForDisplay}
-              </div>
-              <p className="mx-auto mt-2 max-w-sm text-[12px] leading-relaxed text-muted-foreground">
-                This is not display-only. It is saved to your profile and copied into
-                <span className="font-mono"> POCKETBUDDY_WEBHOOK_TOKEN</span>; backend ingest rejects any Android request with a different token.
+            <div className="rounded-xl border border-border bg-surface-raised p-4 text-center">
+              <p className="text-[13px] font-semibold text-foreground">No manual code required</p>
+              <p className="mx-auto mt-1 max-w-sm text-[12px] leading-relaxed text-muted-foreground">
+                PocketBuddy creates a private setup key and includes it when you copy the Android config. You do not need to type or remember it.
               </p>
               <Badge variant={isPairingSaved ? "outline" : "secondary"} className="mt-2 text-[10px]">
-                {isPairingSaved ? "Saved on backend" : "Will save before copy"}
+                {isPairingSaved ? "Setup key saved" : "Setup key will save before copy"}
               </Badge>
             </div>
 
@@ -324,22 +320,23 @@ function CompanionPage() {
                 <div>
                   <p className="text-[13px] font-semibold">Connector config</p>
                   <p className="mt-0.5 text-[12px] text-muted-foreground">
-                    Paste these values in the Android setup screen. On AWS this URL works without USB.
+                    Tap copy, open the Android app, tap Paste config, then save.
                   </p>
                 </div>
                 <Button variant="outline" size="sm" onClick={copyConnectorConfig}>
                   <Copy />
-                  Copy
+                  Copy Android config
                 </Button>
               </div>
-              <pre className="mt-3 overflow-x-auto rounded-md bg-surface p-3 text-left text-xs leading-5 text-muted-foreground">
-                {connectorConfig}
-              </pre>
+              <details className="mt-3 rounded-md bg-surface p-3 text-left text-xs text-muted-foreground">
+                <summary className="cursor-pointer font-semibold text-foreground">Show copied values</summary>
+                <pre className="mt-3 overflow-x-auto leading-5">{connectorConfig}</pre>
+              </details>
             </Card>
 
             <Button variant="outline" className="w-full" onClick={() => savePairingCode()}>
               <Save />
-              Save Pairing Token
+              Save setup key
             </Button>
             <Button
               className="w-full bg-success text-white hover:bg-success/90"
