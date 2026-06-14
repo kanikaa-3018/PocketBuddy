@@ -40,6 +40,7 @@ import {
   getDashboardInsights,
   getCampusIntel,
   getWingFeed,
+  getWellnessInsights,
 } from "@/lib/api/db.functions";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -273,6 +274,13 @@ function Dashboard() {
     queryFn: () => getDashboardInsights(),
   });
 
+  const { data: wellness, isLoading: wellnessLoading, isError: wellnessError } = useQuery({
+    queryKey: ["wellness-insights", user?.id],
+    enabled: !!user,
+    staleTime: 30_000,
+    queryFn: () => getWellnessInsights(),
+  });
+
   const { data: campusIntel } = useQuery({
     queryKey: ["campus-intel", user?.id],
     enabled: !!user,
@@ -324,22 +332,7 @@ function Dashboard() {
     };
   }, [profile, txns]);
 
-  // ── Burnout Risk Score (0–100) ────────────────────────────────────────
-  const burnoutScore = useMemo(() => {
-    let score = 0;
-    if (insights?.food?.gap_hours) {
-      const gap = insights.food.gap_hours;
-      if (gap > 20) score += 40;
-      else if (gap > 12) score += 25;
-      else if (gap > 8) score += 10;
-    }
-    if (insights?.exam?.in_exam_period) score += 20;
-    if ((insights?.velocity?.pct_change ?? 0) > 30) score += 15;
-    if ((insights?.late_night?.txn_count ?? 0) > 5) score += 15;
-    if ((insights?.food?.delivery_count_30d ?? 0) > (insights?.food?.mess_count_30d ?? 0)) score += 10;
-    if (calc && calc.runwayDays < 7) score += 20;
-    return Math.min(100, score);
-  }, [insights, calc]);
+  // Burnout score is now calculated on the backend via /api/insights/wellness
 
   // ── Survive-Until runway timestamp ─────────────────────────────────────
   const surviveUntilMs = useMemo(() => {
@@ -461,6 +454,16 @@ function Dashboard() {
     if (lastCk && Date.now() - parseInt(lastCk, 10) < 16 * 3600000) return;
     setShowCheckIn(true);
   }, [profile, txns]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("log") === "true") {
+      setAdding(true);
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, "", newUrl);
+    }
+  }, []);
+
 
   const foodGapHours = useMemo(() => {
     const lastFood = (txns ?? []).find((t) => t.category === "food");
@@ -595,6 +598,62 @@ function Dashboard() {
     }
   }
 
+  async function handleWellnessAction(action: "ate" | "break" | "spending") {
+    if (!user || !wellness) return;
+    const foodGapSig = wellness.signals?.find((s: any) => s.key === "food_gap")?.value || "0";
+    const foodGapHoursNum = parseFloat(foodGapSig);
+
+    let response = "";
+    let stress_note = "";
+    let toastMsg = "";
+
+    if (action === "ate") {
+      response = "wellness_ate";
+      stress_note = "User tapped wellness check-in: I ate";
+      toastMsg = "Great, logged! Keep fueling through the week 💪";
+      
+      try {
+        await insertTransaction({
+          data: {
+            amount: 0,
+            raw_merchant_string: "Self-reported: Ate at mess",
+            mapped_merchant_name: "Self-reported",
+            category: "food",
+            source: "manual",
+          },
+        });
+      } catch (err) {
+        // transaction insert optional failure handling
+      }
+    } else if (action === "break") {
+      response = "wellness_need_break";
+      stress_note = "User tapped wellness check-in: I need a break";
+      toastMsg = "Take a breather. A 15-minute break does wonders ☕";
+    } else {
+      response = "wellness_plan_spending";
+      stress_note = "User tapped wellness check-in: I'll plan spending";
+      toastMsg = "Smart! Planning your spends keeps your runway safe 📊";
+    }
+
+    try {
+      await insertCheckinLog({
+        data: {
+          response,
+          stress_note,
+          suggestion_given: "wellness_index",
+          food_gap_hours: foodGapHoursNum,
+        },
+      });
+      toast.success(toastMsg);
+      qc.invalidateQueries({ queryKey: ["wellness-insights"] });
+      qc.invalidateQueries({ queryKey: ["insights"] });
+      qc.invalidateQueries({ queryKey: ["txns"] });
+      qc.invalidateQueries({ queryKey: ["wing-feed"] });
+    } catch (err) {
+      toast.error("Failed to submit check-in");
+    }
+  }
+
   return (
     <AppShell>
       <div className="pb-16 pt-8">
@@ -629,6 +688,133 @@ function Dashboard() {
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
           {/* ── Main Column ─────────────────────────────────────────────── */}
           <div className="md:col-span-7 lg:col-span-8 space-y-6 animate-[fadeIn_0.3s_ease-out]">
+
+            {/* Student Wellness Index Card */}
+            <div id="card-wellness-index" className="bg-surface rounded-2xl border border-border relative overflow-hidden transition-all duration-300 hover:border-white/10">
+              <div className="absolute top-0 left-0 w-full h-[2px]" style={{
+                background: wellness?.status === "steady" 
+                  ? "linear-gradient(to right, #10b981, #34d399)" 
+                  : wellness?.status === "watch" 
+                    ? "linear-gradient(to right, #f59e0b, #fbbf24)" 
+                    : "linear-gradient(to right, #ef4444, #f87171)"
+              }} />
+              
+              <div className="p-5 md:p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-[10px] font-bold tracking-[0.2em] text-zinc-500 uppercase flex items-center gap-1.5">
+                    <span>🧠 Student Wellness Index</span>
+                    {wellness?.generated_by === "bedrock" && (
+                      <span className="text-[8px] font-black text-accent-bronze uppercase tracking-wider border border-accent-bronze/30 px-1.5 py-0.5 rounded-full">AI</span>
+                    )}
+                  </p>
+                  
+                  {wellness && (
+                    <Badge variant="outline" className="font-bold text-[10px] px-2 py-0.5" style={{
+                      borderColor: wellness.status === "steady" ? "rgba(16,185,129,0.3)" : wellness.status === "watch" ? "rgba(245,158,11,0.3)" : "rgba(239,68,68,0.3)",
+                      color: wellness.status === "steady" ? "#10b981" : wellness.status === "watch" ? "#f59e0b" : "#ef4444",
+                      background: wellness.status === "steady" ? "rgba(16,185,129,0.05)" : wellness.status === "watch" ? "rgba(245,158,11,0.05)" : "rgba(239,68,68,0.05)"
+                    }}>
+                      {wellness.status === "steady" ? "✓ STEADY" : wellness.status === "watch" ? "⚠ WATCH" : "⚡ STRESSED"}
+                    </Badge>
+                  )}
+                </div>
+
+                {wellnessLoading ? (
+                  <div className="space-y-3">
+                    <Skeleton className="h-6 w-1/4 bg-white/5" />
+                    <Skeleton className="h-4 w-3/4 bg-white/5" />
+                    <Skeleton className="h-12 w-full bg-white/5" />
+                  </div>
+                ) : wellnessError ? (
+                  <div className="rounded-xl border border-dashed border-destructive/20 bg-destructive/5 p-4">
+                    <p className="text-xs font-semibold text-destructive uppercase tracking-wider">Wellness metrics unavailable</p>
+                    <p className="text-[11px] text-zinc-500 mt-1">We couldn't load your wellness metrics. Please try again later.</p>
+                  </div>
+                ) : (txns ?? []).length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-border bg-surface-raised/40 p-4 text-center">
+                    <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">No Transaction History</p>
+                    <p className="text-[11px] text-zinc-500 mt-1">Add a few spends to build your wellness pattern.</p>
+                    <div className="mt-3">
+                      <Button
+                        variant="secondary"
+                        className="text-[9px] uppercase tracking-wider font-bold h-7 bg-surface-raised border-border"
+                        onClick={() => setAdding(true)}
+                      >
+                        Log Transaction
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-baseline gap-2 mb-2">
+                      <span className="text-3xl md:text-4xl font-black tracking-tighter text-foreground tnum leading-none" style={{
+                        color: wellness.status === "steady" ? "#10b981" : wellness.status === "watch" ? "#f59e0b" : "#ef4444"
+                      }}>
+                        {wellness.score}
+                      </span>
+                      <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-widest">/ 100 Wellness Score</span>
+                    </div>
+
+                    <p className="text-xs md:text-sm text-zinc-300 font-medium leading-relaxed mb-4">
+                      {wellness.message}
+                    </p>
+
+                    <div className="border-t border-border pt-4 mt-2 mb-4">
+                      <p className="text-[9px] font-bold tracking-widest text-zinc-500 uppercase mb-3">Contributing Signals</p>
+                      
+                      <div className="flex flex-wrap gap-2">
+                        {wellness.signals?.map((sig: any) => (
+                          <div key={sig.key} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border bg-surface-raised/40 text-[11px]" style={{
+                            borderColor: sig.severity === "stressed" 
+                              ? "rgba(239,68,68,0.25)" 
+                              : sig.severity === "watch" 
+                                ? "rgba(245,158,11,0.25)" 
+                                : "rgba(255,255,255,0.05)"
+                          }}>
+                            <span className="text-zinc-400 font-medium">{sig.label}:</span>
+                            <span className="font-bold text-foreground">{sig.value}</span>
+                            <span className="w-1.5 h-1.5 rounded-full" style={{
+                              background: sig.severity === "stressed" 
+                                ? "#ef4444" 
+                                : sig.severity === "watch" 
+                                  ? "#f59e0b" 
+                                  : "#10b981"
+                            }} title={sig.detail} />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="border-t border-border pt-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                      <span className="text-[9px] font-bold tracking-widest text-zinc-500 uppercase mb-1 sm:mb-0 sm:mr-2">Quick Check-in:</span>
+                      <div className="flex flex-wrap gap-2 flex-1">
+                        <button
+                          id="btn-wellness-ate"
+                          onClick={() => handleWellnessAction("ate")}
+                          className="flex-1 min-h-[44px] px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-wider text-success hover:text-success/90 bg-success/5 hover:bg-success/10 border border-success/20 hover:border-success/30 rounded-xl transition-all cursor-pointer"
+                        >
+                          I Ate 🍽️
+                        </button>
+                        <button
+                          id="btn-wellness-break"
+                          onClick={() => handleWellnessAction("break")}
+                          className="flex-1 min-h-[44px] px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-wider text-warning hover:text-warning/90 bg-warning/5 hover:bg-warning/10 border border-warning/20 hover:border-warning/30 rounded-xl transition-all cursor-pointer"
+                        >
+                          I Need a Break ☕
+                        </button>
+                        <button
+                          id="btn-wellness-spending"
+                          onClick={() => handleWellnessAction("spending")}
+                          className="flex-1 min-h-[44px] px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-wider text-foreground hover:text-foreground/90 bg-white/5 hover:bg-white/10 border border-border hover:border-white/15 rounded-xl transition-all cursor-pointer"
+                        >
+                          I'll Plan Spending 📊
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
 
             {/* Runway Hero */}
             <div id="card-runway-status" className="bg-surface rounded-2xl border border-border relative overflow-hidden">
@@ -872,39 +1058,24 @@ function Dashboard() {
           {/* ── Sidebar ─────────────────────────────────────────────────── */}
           <div className="md:col-span-5 lg:col-span-4 space-y-5">
 
-            {/* ── Burnout Risk + Survive Countdown ─────────────────── */}
+            {/* ── Survive Until Broke Card ─────────────────── */}
             <div className="bg-surface border border-border rounded-2xl p-5 relative overflow-hidden">
-              <div className="absolute inset-0 pointer-events-none" style={{ background: `radial-gradient(ellipse at top right, ${burnoutScore >= 70 ? "rgba(239,68,68,0.08)" : burnoutScore >= 40 ? "rgba(245,158,11,0.06)" : "rgba(74,222,128,0.05)"}, transparent 65%)` }} />
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-[9px] font-bold tracking-[0.2em] text-zinc-500 uppercase">Burnout Risk Index</p>
-                <span className={`text-[9px] font-black px-2 py-0.5 rounded-full border ${burnoutScore >= 70 ? "text-destructive border-destructive/30 bg-destructive/10" : burnoutScore >= 40 ? "text-warning border-warning/30 bg-warning/10" : "text-success border-success/30 bg-success/10"}`}>
-                  {burnoutScore >= 70 ? "⚠ HIGH" : burnoutScore >= 40 ? "△ MODERATE" : "✓ HEALTHY"}
+              <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at top right, rgba(140,120,83,0.05), transparent 65%)" }} />
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-[9px] font-bold tracking-[0.2em] text-zinc-500 uppercase">Survive Until Broke</p>
+                <span className="text-[9px] font-black px-2 py-0.5 rounded-full border text-accent-bronze border-accent-bronze/30 bg-accent-bronze/5">
+                  LIVE COUNTDOWN
                 </span>
               </div>
-              <div className="flex items-center gap-3">
-                <BurnoutGauge score={burnoutScore} />
-                <div className="flex-1 space-y-2.5">
-                  <div>
-                    <p className="text-[8px] text-zinc-600 uppercase tracking-wider font-bold mb-0.5">Survive Until Broke</p>
-                    {surviveUntilMs > 0 ? (
-                      <SurviveCountdown runwayMs={surviveUntilMs} />
-                    ) : (
-                      <p className="text-[13px] font-black text-zinc-400">—</p>
-                    )}
-                  </div>
-                  <div className="space-y-1.5">
-                    {[
-                      { label: "Food gap", val: insights?.food?.gap_hours ? `${Math.round(insights.food.gap_hours)}h` : "—", danger: (insights?.food?.gap_hours ?? 0) > 10 },
-                      { label: "Velocity", val: insights?.velocity?.pct_change ? `${insights.velocity.pct_change > 0 ? "+" : ""}${insights.velocity.pct_change}%` : "—", danger: (insights?.velocity?.pct_change ?? 0) > 30 },
-                      { label: "Exam period", val: insights?.exam?.in_exam_period ? `${insights.exam.days_left}d left` : "No", danger: !!insights?.exam?.in_exam_period },
-                    ].map(({ label, val, danger }) => (
-                      <div key={label} className="flex justify-between items-center">
-                        <span className="text-[9px] text-zinc-600">{label}</span>
-                        <span className={`text-[9px] font-bold ${danger ? "text-warning" : "text-zinc-400"}`}>{val}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+              <div className="space-y-3">
+                {surviveUntilMs > 0 ? (
+                  <SurviveCountdown runwayMs={surviveUntilMs} />
+                ) : (
+                  <p className="text-[13px] font-black text-zinc-400">—</p>
+                )}
+                <p className="text-[11px] text-zinc-400 leading-relaxed mt-2">
+                  Estimated exact date and time your allowance will run out based on your 7-day spending pace.
+                </p>
               </div>
             </div>
 

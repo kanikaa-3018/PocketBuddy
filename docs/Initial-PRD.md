@@ -1,18 +1,10 @@
-Because I do not have a direct tool extension to write files or create documents directly in your Google Drive, I cannot automatically generate a live file for you.
-
-However, below is the **complete, final, fully written text payload formatted exactly according to the structure and syntax of your original template (`hackon_with_amazon_1 (1).docx`)**. Every placeholder has been completely replaced with your precise full-stack architecture, explicit Android vs. Web boundaries, step-by-step onboarding, and mathematical equations.
-
-You can copy and paste the markdown text below directly into your Google Doc:
-
----
-
 # HackOn with Amazon (Season 6.0) — Solution Document
 
 **Team Name:** PocketBuddy Devs
 
 **Hackathon Theme:** AI for Campus, Community & Everyday Life (PocketBuddy Track)
 
-**Date:** June 13, 2026
+**Date:** June 14, 2026
 
 ### Team Members
 
@@ -61,23 +53,24 @@ Residential undergraduate and postgraduate university students (aged 18–24) re
 
 To ensure clear end-to-end functionality, the division of execution across platforms is strictly delineated as follows:
 
-* **The Android End (Headless Connector APK):** Operates as a silent background system daemon. It has zero buttons, layouts, or visual elements. It runs a native `NotificationListenerService` that catches incoming push alerts from GPay, PhonePe, and Paytm, strips the text string, and posts a clean JSON payload (`packageName`, `text`, `timestamp`) directly to the FastAPI server webhook.
-* **The Web End (Next.js Mobile-First App):** Operates as the user interface layer. It manages the multi-step onboarding flow, renders the primary dashboard tracking views, runs WebSocket channels for roommate group splits, and outputs hyper-local campus food alternatives.
+* **The Android End (Headless Connector APK):** Operates as a silent background system daemon written in Kotlin. It has zero buttons, layouts, or visual elements. It runs a native `NotificationListenerService` that catches incoming push alerts from UPI apps (like GPay, PhonePe, Paytm), strips the text string, and posts a clean JSON payload (`packageName`, `text`, `timestamp`) directly to the FastAPI server webhook.
+* **The Web End (Vite React 19 Mobile-First App):** Operates as the user interface layer. It manages the onboarding flow, renders the primary dashboard tracking views, runs cart pooler sessions, and displays hyper-local campus food alternatives and wellness nudges.
 
 #### Core Feature Specifications
 
-1. **Headless Ingestion & Crowdsourced Mapping:** Captures unformatted transactional push alerts silently on-device. If a merchant ID is unrecognized by the database, the Next.js web application surfaces a fast 1-tap classification prompt: *[Food], [Stationery], [Travel], [Other]*. Once the first student maps it, it updates globally across the campus registry, instantly categorizing transactions for all other users in the background.
+1. **Headless Ingestion & Crowdsourced Mapping:** Captures unformatted transactional push alerts silently on-device. If a merchant ID is unrecognized by the database, the React web application surfaces a fast 1-tap classification prompt: *[Food], [Stationery], [Travel], [Other]*. Once the first student maps it, it updates globally across the campus registry, instantly categorizing transactions for all other users in the background.
 2. **Geofenced Runway Guards (Hyper-Local RAG):** Maintains a persistent web dashboard metric tracking "Days Remaining Until Broke." When spending metrics contract below a safe daily threshold, Amazon Bedrock analyzes the remaining funds against a static campus food database to render explicit, low-cost food options nearby.
-3. **Exam-Week Kinetic Check-In (Passive Burnout Tracking):** Measures the consecutive hours elapsed between food-related transaction entries. If an uncharacteristic 16+ hour gap occurs during an active evaluation cycle, the web dashboard triggers an overlay check-in card, bypassing generic chatbot scripts to identify immediate food access bottlenecks and guide the user to the nearest open campus tapri.
+3. **Exam-Week Kinetic Check-In (Passive Burnout Tracking):** Measures the consecutive hours elapsed between food-related transaction entries. If an uncharacteristic 16+ hour gap occurs during an active evaluation cycle, the web dashboard triggers an overlay check-in card, prompting students to log their nutritional status and connecting them to low-cost dining recommendations.
 4. **The "Wing Cart-Pooler" (Quick-Commerce Fee Stripping):** Eliminates micro-financial leaks caused by delivery fees and small-cart penalties on applications like Blinkit or Zepto. A user opens a session, drops the generated web link into their hostel WhatsApp group, and allows roommates to append items onto a fast, registration-free mobile canvas web view that aggregates orders and calculates splits instantly.
 5. **Runway Collision Warnings (Subscription Leak Guard):** Automatically tracks transaction streams to identify recurring monthly auto-debit loops (such as Spotify or YouTube Premium) and generates proactive alert cards mapping exactly how renewal dates intersect with dipping survival thresholds.
+6. **Student Wellness Index:** Combines financial runway, meal gaps, late-night payment activity, exam window, and spending velocity to detect stress patterns. It produces a non-clinical routine nudge and optional Bedrock-generated personalized insight on the dashboard with 1-tap quick action check-ins ("I ate", "I need a break", "I'll plan spending").
 
-### Detailed 4-Step User Onboarding Sequence (Next.js Web Frontend)
+### Detailed 4-Step User Onboarding Sequence (Vite React 19 Web Frontend)
 
 The web application restricts user access to the main dashboard until a linear, deterministic setup sequence completes inside the `/onboarding` route view:
 
-* **Step 1: Financial Scope Allocation:** The user inputs their strict monthly stipend or allowance (e.g., ₹5,000). The engine maps the calendar spacing to set an initial mathematical daily safe spending ceiling (`safeDailySpendLimit`).
-* **Step 2: Campus Geofence Anchor:** The user selects their specific institution from a rigid structural drop-down list and provides plain-text string entries defining their physical `hostelWingCode` (e.g., "Wing 4B") and `roomIdentity`. This binds all subsequent database recommendations to their exact geographic location coordinates.
+* **Step 1: Financial Scope Allocation:** The user inputs their strict monthly stipend or allowance (e.g., ₹5,000). The engine maps the calendar spacing to set an initial mathematical daily safe spending ceiling.
+* **Step 2: Campus Geofence Anchor:** The user selects their specific institution from a drop-down list and provides plain-text string entries defining their physical `hostelWingCode` (e.g., "Wing 4B") and `roomIdentity`. This binds all subsequent database recommendations to their exact geographic location coordinates.
 * **Step 3: Academic Timeline Isolation:** The user selects the exact starting and ending dates of their upcoming end-semester evaluation waves on a calendar block. The backend sums the test duration, applies a baseline survival expenditure allocation (₹100/day), and immediately removes and locks that specific sum from the active allowance pool into an untouchable `lockedExamCushion` state.
 * **Step 4: Recurring Auto-Debit Declarations:** The user evaluates a checklist layout representing standard fixed monthly outgoings: `[Spotify - ₹149/mo]`, `[YouTube Premium - ₹129/mo]`, `[ChatGPT Plus - ₹1,999/mo]`, `[Netflix - ₹199/mo]`. Checked fields are logged directly into an auto-debit dictionary to drive predictive timeline calculations.
 
@@ -91,23 +84,25 @@ The web application restricts user access to the main dashboard until a linear, 
 [ Local Mobile Layer ]
   │── (UPI Payment Notification) ──> [ Android Core Notification Stack ]
   │                                                │
-  │                                                ▼ (Custom Headless Connector App)
+  │                                                ▼ (Custom Headless Kotlin Connector App)
   │                                    [ OkHttp3 Async POST Webhook ]
   ▼                                                │
-[ Public Network Layer ]                           │
-  │                                                ▼ (Exposed via secure ngrok Tunnel)
+  │                                                ▼ 
+[ Public Network Layer ]               [ Nginx Reverse Proxy (AWS EC2) ]
+  │                                                │
+  │                                                ▼
   │                                    [ FastAPI Backend Server (Python) ]
   │                                                │
   │                 ┌──────────────────────────────┴──────────────────────────────┐
   │                 ▼                                                             ▼
-  │     [ Amazon Bedrock API ]                                         [ Supabase / PostgreSQL ]
-  │     (Claude 3.5 Sonnet Engine)                                     (Transaction logs & Cart Pools)
+  │     [ Amazon Bedrock API ]                                           [ MongoDB Atlas DB ]
+  │     (Claude 3.5 Sonnet Engine - Optional)                           (Transaction logs & Cart Pools)
   │                 │                                                             ▲
   │                 ▼ (Normalized JSON Output)                                    │
   │                 └──────────────────────────────┬──────────────────────────────┘
   │                                                │
-  ▼                                                ▼ (Supabase Realtime WebSockets)
-[ Web Presentation Layer ] ───────────> [ Mobile-First Responsive Next.js UI Shell ]
+  ▼                                                ▼ (FastAPI HTTP Routes & Feeds)
+[ Web Presentation Layer ] ───────────> [ Mobile-First Responsive Vite React 19 UI Shell ]
                                                    │
                                                    ▼ (One-Tap Web Share Intent)
                                         [ WhatsApp Hostel Wing Group Chat ]
@@ -119,10 +114,10 @@ The web application restricts user access to the main dashboard until a linear, 
 | Layer | Technology | Why |
 | --- | --- | --- |
 | **Data Pipeline** | Native Android (Kotlin) | Implements a headless `NotificationListenerService` to capture background UPI app pushes securely on-device with zero UI render overhead. |
-| **Frontend** | Next.js (App Router), Tailwind CSS | Enforces a fast mobile-first web layout bounded inside high-contrast Neubrutalist style constraints (`rounded-none`, heavy hard borders) to simulate native app mechanics. |
-| **Backend** | FastAPI (Python) | Asynchronous execution framework optimized to manage real-time notification streams and coordinate webhook events without thread blocking. |
-| **Data / ML** | Amazon Bedrock, Supabase (PostgreSQL) | Bedrock handles low-latency Claude 3.5 Sonnet parsing. Supabase provides relational storage and handles instant split synchronization via WebSocket channels. |
-| **Infra** | ngrok Tunneling | Creates an instant public HTTPS tunnel for the background native transmitter to hit local server webhooks immediately during evaluation sandbox testing. |
+| **Frontend** | Vite React 19, Vanilla CSS | Enforces a fast mobile-first web layout with curated CSS custom properties, offering responsive design and smooth transitions simulating native apps. |
+| **Backend** | FastAPI (Python) + Motor | Asynchronous execution framework optimized to manage webhook notification streams and coordinate MongoDB queries without thread blocking. |
+| **Data / ML** | Amazon Bedrock (Optional), MongoDB Atlas | MongoDB Atlas stores transaction logs, user profiles, and active pools. Bedrock handles low-latency Claude 3-haiku models for non-clinical text generation. |
+| **Infra** | AWS EC2 & Nginx | Hosts the FastAPI backend application server and serving frontend static builds behind an Nginx reverse proxy. |
 
 ### Key Algorithms & Complexity
 
@@ -171,6 +166,6 @@ The framework of correlating high-frequency transactional velocity with baseline
 ### Value Impact
 
 * **Ecosystem Savings:** Operating at a scale of 100,000 active campus units, the collaborative pooling loop systematically eliminates an estimated ₹12,00,000 annually in redundant delivery fees and small-cart surcharge premiums.
-* **Wellness Safeguard Index:** Passive lifestyle tracking layers drastically minimize the frequency of skipped nutritional cycles during high-stress exam waves, lowering preventable, exhaustion-driven health issues across campus environments by up to 22%.
+* **Wellness Safeguard Index:** Passive lifestyle tracking layers drastically minimize the frequency of skipped nutritional cycles during high-stress exam waves, lowering preventable, exhaustion-driven dietary skipping across campus environments.
 
 ---

@@ -154,3 +154,8 @@ export async function getCampusIntel() {
 export async function getWingFeed() {
   return apiRequest("/api/insights/wing-feed");
 }
+
+export async function getWellnessInsights() {
+  return apiRequest("/api/insights/wellness");
+}
+

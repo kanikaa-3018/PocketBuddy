@@ -214,3 +214,342 @@ async def get_wing_feed(user_id: str = Depends(get_current_user)):
 
     return {"events": events[:8], "wing": wing}
 
+
+def get_cycle_start(cycle_start_day: int, now: datetime.datetime) -> datetime.datetime:
+    y = now.year
+    m = now.month
+    d = now.day
+    try:
+        candidate = datetime.datetime(y, m, cycle_start_day, 0, 0, 0)
+    except ValueError:
+        import calendar
+        _, max_days = calendar.monthrange(y, m)
+        candidate = datetime.datetime(y, m, min(cycle_start_day, max_days), 0, 0, 0)
+        
+    if d >= candidate.day:
+        return candidate
+        
+    prev_m = m - 1 if m > 1 else 12
+    prev_y = y if m > 1 else y - 1
+    try:
+        return datetime.datetime(prev_y, prev_m, cycle_start_day, 0, 0, 0)
+    except ValueError:
+        import calendar
+        _, max_days = calendar.monthrange(prev_y, prev_m)
+        return datetime.datetime(prev_y, prev_m, min(cycle_start_day, max_days), 0, 0, 0)
+
+
+def get_cycle_end(cycle_start: datetime.datetime) -> datetime.datetime:
+    return cycle_start + datetime.timedelta(days=30)
+
+
+@router.get("/wellness")
+async def get_wellness_insights(user_id: str = Depends(get_current_user)):
+    db = get_db()
+    now = datetime.datetime.utcnow()
+
+    # Fetch last 60 days of transactions
+    since = now - datetime.timedelta(days=60)
+    cursor = db.transactions.find({"user_id": user_id, "created_at": {"$gte": since}}).sort("created_at", -1)
+    txns = await cursor.to_list(length=2000)
+
+    # Fetch user profile
+    profile = await db.profiles.find_one({"_id": user_id})
+    if not profile:
+        profile = {}
+
+    # 1. Late-night activity (last 7 days, hours 23 to 4)
+    since_7 = now - datetime.timedelta(days=7)
+    late_txns_7d = [
+        t for t in txns
+        if t.get("created_at") and t["created_at"] >= since_7 and (
+            t["created_at"].hour >= 23 or t["created_at"].hour < 4
+        )
+    ]
+    late_night_txn_count_7d = len(late_txns_7d)
+
+    # 2. Food gap (hours since last food transaction)
+    food_txns = [t for t in txns if t.get("category") == "food"]
+    if food_txns:
+        # txns are sorted descending, so food_txns[0] is the latest
+        last_food = food_txns[0]
+        food_gap_hours = (now - last_food["created_at"]).total_seconds() / 3600
+    else:
+        food_gap_hours = 0.0
+
+    # 3. Financial runway
+    cycle_start_day = profile.get("cycle_start_day") or 1
+    monthly_allowance = profile.get("monthly_allowance") or 1000000  # in paise
+    total_allowance_rs = monthly_allowance / 100
+
+    cycle_start = get_cycle_start(cycle_start_day, now)
+    cycle_end = get_cycle_end(cycle_start)
+
+    cycle_txns = [t for t in txns if t.get("created_at") and t["created_at"] >= cycle_start]
+    total_spent_rs = sum(t.get("amount", 0) for t in cycle_txns) / 100
+    remaining_rs = max(0.0, total_allowance_rs - total_spent_rs)
+
+    days_since_start = max(1, (now - cycle_start).days)
+    avg_daily_spend_rs = total_spent_rs / days_since_start
+    days_left = max(0, (cycle_end - now).days)
+
+    if avg_daily_spend_rs > 0:
+        runway_days = int(remaining_rs / avg_daily_spend_rs)
+    else:
+        runway_days = days_left
+
+    runway_days = min(runway_days, days_left + 5)
+
+    # 4. Spending velocity
+    since_14 = now - datetime.timedelta(days=14)
+    spend_7 = sum(t.get("amount", 0) for t in txns if t.get("created_at", now) >= since_7)
+    spend_7_prior = sum(
+        t.get("amount", 0) for t in txns
+        if since_14 <= t.get("created_at", now) < since_7
+    )
+    velocity_pct = 0
+    if spend_7_prior > 0:
+        velocity_pct = round((spend_7 - spend_7_prior) / spend_7_prior * 100)
+
+    # 5. Exam window
+    in_exam_period = False
+    if profile:
+        exam_start = profile.get("exam_start_date")
+        exam_end = profile.get("exam_end_date")
+        if exam_start and exam_end:
+            try:
+                import datetime as dt
+                es = dt.datetime.fromisoformat(str(exam_start))
+                ee = dt.datetime.fromisoformat(str(exam_end) + "T23:59:59")
+                if es <= now <= ee:
+                    in_exam_period = True
+            except Exception:
+                pass
+
+    # 6. Subscription bleed
+    subs_cursor = db.subscriptions.find({"user_id": user_id, "is_active": {"$ne": False}})
+    subs = await subs_cursor.to_list(length=100)
+    monthly_sub_bleed_paise = sum(s.get("amount", 0) for s in subs)
+
+    # 7. Social signal from cart pools
+    user_doc = await db.users.find_one({"_id": user_id})
+    full_name = user_doc.get("full_name", "") if user_doc else ""
+    user_hosted_pools = await db.cart_pools.find({"host_id": user_id}).to_list(length=100)
+    participated_pool_ids = []
+    if full_name:
+        import re
+        name_regex = re.compile(f"^{re.escape(full_name)}$", re.IGNORECASE)
+        user_items = await db.cart_pool_items.find({"added_by_name": name_regex}).to_list(length=500)
+        participated_pool_ids = [item["pool_id"] for item in user_items]
+
+    all_pool_ids = list(set([p["_id"] for p in user_hosted_pools] + participated_pool_ids))
+    if all_pool_ids:
+        latest_pools = await db.cart_pools.find({"_id": {"$in": all_pool_ids}}).sort("created_at", -1).to_list(length=1)
+        if latest_pools:
+            last_pool_time = latest_pools[0].get("created_at")
+            days_since_last_pool = (now - last_pool_time).days
+        else:
+            days_since_last_pool = None
+    else:
+        days_since_last_pool = None
+
+    # Calculate Wellness Score
+    score = 100
+
+    # Late-night activity, proxy for routine disruption
+    if late_night_txn_count_7d >= 4:
+        score -= 18
+    elif late_night_txn_count_7d >= 2:
+        score -= 10
+
+    # Food gap, proxy for skipped meals
+    if food_gap_hours >= 14:
+        score -= 22
+    elif food_gap_hours >= 9:
+        score -= 12
+
+    # Financial runway
+    if runway_days < 4:
+        score -= 22
+    elif runway_days < 8:
+        score -= 12
+
+    # Spending velocity
+    if velocity_pct >= 40:
+        score -= 16
+    elif velocity_pct >= 20:
+        score -= 8
+
+    # Exam window
+    if in_exam_period:
+        score -= 12
+
+    # Subscription bleed
+    if monthly_sub_bleed_paise >= 50000:
+        score -= 8
+
+    # Social signal from cart pools
+    if days_since_last_pool is not None and days_since_last_pool > 10:
+        score -= 6
+
+    score = max(0, min(100, score))
+
+    # Determine status bucket
+    if score >= 80:
+        status = "steady"
+        label = "Your routine looks steady"
+        fallback_message = "Your routine looks steady this week. Keep meals regular and stay within today's safe spend target."
+    elif score >= 50:
+        status = "watch"
+        label = "A few patterns need attention"
+        fallback_message = "A few patterns need attention: your food timing, spending pace, or exam pressure is starting to stack up. Pick one small reset today: a proper meal, a low-spend window, or a short break."
+    else:
+        status = "stressed"
+        label = "Pattern suggests high stress"
+        fallback_message = "Your recent pattern suggests you may be stretched thin. You do not need to fix everything today; start with one meal and one planned spend decision, then check in again."
+
+    # Construct signals list
+    signals = []
+    
+    # Food gap signal
+    food_gap_severity = "ok"
+    if food_gap_hours >= 14:
+        food_gap_severity = "stressed"
+    elif food_gap_hours >= 9:
+        food_gap_severity = "watch"
+    signals.append({
+        "key": "food_gap",
+        "label": "Food gap",
+        "value": f"{food_gap_hours:.1f}h" if food_gap_hours > 0 else "—",
+        "severity": food_gap_severity,
+        "detail": "Long gap since last food transaction" if food_gap_severity != "ok" else "Regular meal timing"
+    })
+
+    # Runway signal
+    runway_severity = "ok"
+    if runway_days < 4:
+        runway_severity = "stressed"
+    elif runway_days < 8:
+        runway_severity = "watch"
+    signals.append({
+        "key": "runway",
+        "label": "Runway",
+        "value": f"{runway_days} days" if runway_days is not None else "—",
+        "severity": runway_severity,
+        "detail": "Allowance may not last the cycle" if runway_severity != "ok" else "Runway looks stable"
+    })
+
+    # Late night signal
+    late_night_severity = "ok"
+    if late_night_txn_count_7d >= 4:
+        late_night_severity = "stressed"
+    elif late_night_txn_count_7d >= 2:
+        late_night_severity = "watch"
+    signals.append({
+        "key": "late_night",
+        "label": "Late-night activity",
+        "value": f"{late_night_txn_count_7d} txns",
+        "severity": late_night_severity,
+        "detail": "Frequent late-night spending" if late_night_severity != "ok" else "Healthy nighttime routine"
+    })
+
+    # Velocity signal
+    velocity_severity = "ok"
+    if velocity_pct >= 40:
+        velocity_severity = "stressed"
+    elif velocity_pct >= 20:
+        velocity_severity = "watch"
+    signals.append({
+        "key": "velocity",
+        "label": "Spend velocity",
+        "value": f"{velocity_pct:+}%" if velocity_pct != 0 else "0%",
+        "severity": velocity_severity,
+        "detail": "Spending is accelerating rapidly" if velocity_severity == "stressed" else "Spending is slightly elevated" if velocity_severity == "watch" else "Spending velocity is stable"
+    })
+
+    # Exam signal
+    exam_severity = "watch" if in_exam_period else "ok"
+    signals.append({
+        "key": "exam",
+        "label": "Exam period",
+        "value": "Active" if in_exam_period else "No",
+        "severity": exam_severity,
+        "detail": "Active exam schedule" if in_exam_period else "No exams active"
+    })
+
+    # Sub bleed signal
+    sub_severity = "watch" if monthly_sub_bleed_paise >= 50000 else "ok"
+    signals.append({
+        "key": "subscription",
+        "label": "Subscription bleed",
+        "value": f"₹{monthly_sub_bleed_paise/100:.0f}/mo",
+        "severity": sub_severity,
+        "detail": "High subscription overhead" if monthly_sub_bleed_paise >= 50000 else "Subscription overhead is low"
+    })
+
+    # Social signal from cart pools
+    pool_severity = "watch" if (days_since_last_pool is not None and days_since_last_pool > 10) else "ok"
+    signals.append({
+        "key": "cart_pool",
+        "label": "Cart pools",
+        "value": f"{days_since_last_pool}d ago" if days_since_last_pool is not None else "None",
+        "severity": pool_severity,
+        "detail": "Low cart pool participation recently" if pool_severity == "watch" else "Active in cart pools"
+    })
+
+    # Optional Bedrock Call
+    from app.core.config import settings
+    message = fallback_message
+    generated_by = "fallback"
+
+    if settings.BEDROCK_ENABLED:
+        try:
+            import boto3
+            import json as _json
+            client = boto3.client(
+                service_name="bedrock-runtime",
+                region_name=settings.AWS_REGION,
+            )
+            prompt = f"""A college student's last 7 days show:
+- Late-night payment count: {late_night_txn_count_7d}
+- Hours since last food transaction: {food_gap_hours:.1f}
+- Financial runway days: {runway_days}
+- In exam period: {str(in_exam_period).lower()}
+- Spending velocity change: {velocity_pct} percent
+
+Write 2 short sentences. Be warm, direct, and non-clinical.
+Give one specific action for today.
+Do not mention diagnosis or medical advice."""
+
+            body = _json.dumps({
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": 150,
+                "messages": [{"role": "user", "content": prompt}],
+            })
+
+            response = client.invoke_model(
+                body=body,
+                modelId=settings.BEDROCK_MODEL_ID,
+                accept="application/json",
+                contentType="application/json",
+            )
+
+            res_body = _json.loads(response.get("body").read())
+            ai_text = res_body.get("content", [{}])[0].get("text", "").strip()
+            if ai_text:
+                message = ai_text
+                generated_by = "bedrock"
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning("Bedrock wellness message generation failed: %s", exc)
+
+    return {
+        "score": score,
+        "status": status,
+        "label": label,
+        "message": message,
+        "signals": signals,
+        "generated_by": generated_by
+    }
+
+
