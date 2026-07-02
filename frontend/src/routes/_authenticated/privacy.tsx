@@ -174,7 +174,6 @@ function PrivacyPage() {
           corrected_category: editCategory,
         },
       });
-      await confirmTransaction({ id: txn.id });
       qc.invalidateQueries({ queryKey: ["txns"] });
       setEditingTxnId(null);
       toast.success("Transaction confirmed and updated.");
