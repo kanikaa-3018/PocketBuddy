@@ -25,6 +25,8 @@ AI for Campus, Community & Everyday Life
 
 ## 1. Problem Statement & Relevance
 
+> Jury focus: innovativeness, theme alignment, and degree of disruption.
+
 ### The Problem
 
 Students living away from home rarely lose control of money through one big purchase. It usually happens through small, repeated decisions: a late-night snack, a shared delivery cart, a local travel quote, a subscription renewal, or a skipped meal during exams because the month is already tight.
@@ -35,6 +37,10 @@ The problem is that these signals are scattered. Payment alerts live on the phon
 
 The affected user is a residential student on a fixed allowance, stipend, scholarship, or family transfer. This is a large and repeatable problem across campuses because millions of students live independently for the first time with limited budgets and high daily decision pressure.
 
+The payment behavior has already moved to digital rails. In May 2026, UPI processed 23.2 billion transactions worth Rs 29.90 lakh crore. RBI-reported payments data also shows UPI carrying about 85.5% of India's payment transaction volume in the second half of CY2025. For student life, this means the spending trail already exists on the phone; the missing product layer is automated interpretation.
+
+The student base is also large enough for this to matter beyond one campus. India's higher-education enrolment reached about 4.46 crore students in 2022-23. Even if a small fraction of residential students face monthly allowance pressure, shared-cart friction, local travel overcharging, or meal-skipping during exams, the problem is still campus-scale and repeatable.
+
 The cost of inaction is practical:
 
 - students run out of safe daily spending before allowance reset;
@@ -44,7 +50,7 @@ The cost of inaction is practical:
 - students may delay meals during exam weeks to compensate for overspending;
 - subscriptions and low-value recurring payments quietly reduce runway.
 
-Traditional expense trackers ask students to behave like accountants. That assumption fails on campus, where the problem is not just record keeping. The real need is timely decision support.
+Traditional expense trackers ask students to behave like accountants. That assumption fails on campus. A busy student will not manually log every tea, bus ride, canteen meal, and shared delivery. The real need is a system that watches permitted payment signals, understands the campus context, and turns them into timely decisions.
 
 ### Theme Alignment
 
@@ -60,7 +66,7 @@ The AI is not presented as a generic chatbot. It is attached to concrete campus 
 
 ### What Makes This Novel
 
-PocketBuddy's insight is that student money management should start from passive payment signals and campus context, not from manual data entry.
+PocketBuddy's novelty is the automation-first loop. The product does not start with a blank expense form. It starts from the student's actual payment notifications, then layers campus context over them: hostel, mess routine, shared pools, local fare ranges, subscription habits, and exam timing.
 
 The core loop is:
 
@@ -73,7 +79,11 @@ Payment signal
 
 Existing products usually solve one slice: budgeting, food ordering, rides, subscriptions, or wellness. PocketBuddy connects them at the point where the student actually makes decisions. This makes the product disruptive because it turns scattered student-life signals into a campus-aware guardrail.
 
+The practical difference is time. A student does not waste precious time maintaining a ledger. PocketBuddy turns everyday signals into actions: reduce today's spend, join a pool, eat before the food gap becomes too long, negotiate a fair ride, or verify a roommate repayment.
+
 ## 2. Customer & Solution
+
+> Jury focus: clarity of presentation and quality of implementation as a working prototype.
 
 ### Target Customer
 
@@ -93,41 +103,44 @@ PocketBuddy is a campus financial guard. It connects a student's Android phone, 
 Key features:
 
 1. **Passive Android Payment Sync**
-   The Android companion captures supported payment/SMS notifications, parses amount, merchant, direction, and transaction reference, then syncs them to PocketBuddy. The backend masks sensitive text and deduplicates duplicate payment-app/SMS alerts.
+   The student pairs the phone once. After that, supported UPI/SMS alerts flow into PocketBuddy without manual logging. The system parses amount, merchant, direction, and transaction reference, masks sensitive text, and deduplicates duplicate app/SMS alerts.
 
 2. **Runway Dashboard**
-   The dashboard answers the question students actually care about: "Can I last until reset?" It shows allowance, spend, safe daily limit, recent activity, category trends, and exportable history.
+   The dashboard answers the question students actually care about: "Can I last until reset?" It shows remaining allowance, safe daily limit, recent synced payments, category trends, and exportable history.
 
 3. **Food & Wellness Guardrail**
-   PocketBuddy links spending and routine. If no food transaction appears for a long stretch during exam context, it can ask whether the student ate in mess, cooked, ordered, or skipped. Bedrock/Nova Lite powers contextual campus messages where enabled.
+   PocketBuddy links spending and routine. If no food transaction appears for a long stretch, especially during exam context, it can ask whether the student ate in mess, cooked, ordered, or skipped. Bedrock/Nova Lite powers contextual campus nudges where enabled.
 
 4. **Wing Cart Pooler**
-   Students can create shared cart pools for a room or wing, add items, track progress, share the pool, and verify repayments. Incoming credit notifications can also auto-verify pending UTR-based repayments.
+   Students create shared cart pools for a room or wing, add items, track progress, share the pool, and verify repayments. Incoming credit notifications can auto-verify pending UTR-based repayments when the host receives money.
 
 5. **Travel Fare Guard**
-   Students can compare a driver quote with expected local fare ranges and receive a practical negotiation script. This is designed for first-year students, visitors, and students entering unfamiliar campus cities.
+   Students compare a driver quote with expected local fare ranges and receive a practical negotiation script. This protects first-year students, visitors, and anyone entering an unfamiliar campus city.
+
+6. **Campus Intelligence Layer**
+   Defaults exist for demo readiness, but the platform is not limited to one campus. Food menus, travel routes, categories, cart platforms, and payment providers are designed as configurable data, not hardcoded product boundaries.
 
 ### User Workflow
 
 Paste this into Eraser's diagram-as-code editor for the PRD user-flow visual:
 
 ```eraser
-direction: right
+direction: down
 
-Student [icon: user]
-Onboarding [icon: clipboard, color: blue]
-Companion Setup [icon: smartphone, color: blue]
-Passive Sync [icon: bell, color: orange]
-PocketBuddy Web [icon: monitor, color: green]
+Student [icon: user, color: blue]
+Student Context [icon: clipboard, color: blue]
+Phone Pairing [icon: smartphone, color: blue]
+Payment Signal [icon: bell, color: orange]
+Normalization [icon: filter, color: orange]
+Decision Surface [icon: monitor, color: green]
 Student Action [icon: check-circle, color: green]
 
-Student > Onboarding: allowance, reset date, college, hostel, mess, exams
-Onboarding > Companion Setup: download APK and paste connector config
-Companion Setup > Passive Sync: grant notification access
-Passive Sync > PocketBuddy Web: payment alerts become transactions
-PocketBuddy Web > Student Action: runway, pools, food, travel, wellness
-
-Student Action > Student: spend less, join pool, choose meal, negotiate fare
+Student > Student Context: allowance, reset date, campus, hostel, meals, exams
+Student Context > Phone Pairing: download APK and paste connector config
+Phone Pairing > Payment Signal: notification access captures supported UPI/SMS alerts
+Payment Signal > Normalization: parse amount, merchant, direction, UTR, source
+Normalization > Decision Surface: dashboard, history, pools, travel, food, wellness
+Decision Surface > Student Action: spend less, join pool, choose meal, negotiate fare
 ```
 
 ### Working Prototype
@@ -137,6 +150,17 @@ Live deployment: https://d3g6cg7q9hn7hi.cloudfront.net/
 Android APK: https://d3g6cg7q9hn7hi.cloudfront.net/downloads/PocketBuddy-Connector-v0.1.0.apk
 
 Repository: https://github.com/nishantharkut/PocketBuddy
+
+### Working Prototype Evidence
+
+| Capability | Current status | How it appears in demo |
+| --- | --- | --- |
+| Web app, onboarding, dashboard, history, stats, pools, travel | Live in production behind CloudFront. | Main desktop walkthrough. |
+| Android companion sync | Live for supported Android notification/SMS alerts after notification access is granted. | Phone-to-web payment sync proof. |
+| Bedrock/Nova Lite guidance | Enabled for contextual text such as travel negotiation and campus nudges. | Travel coach and campus intelligence. |
+| Wing cart repayment verification | Working with manual UTR flow and incoming-credit matching where the host receives a repayment notification. | Completed pool and repayment state. |
+| Serverless ingest lane | Built and verified with API Gateway, Lambda, SQS, and DynamoDB as the scalable mobile-ingest path. | Architecture/scaling proof for high-volume Android events. |
+| Photo menu OCR scanner | Backend pathway exists for turning menu photos into campus food catalog entries. Curated campus catalogs remain the default reliable data path. | Optional accelerator for campus food intelligence. |
 
 Screenshots to insert in final PDF:
 
@@ -149,15 +173,19 @@ Demo: Upload the final MP4 directly in the portal.
 
 ## 3. Tech Architecture & Scaling
 
+> Jury focus: architecture complexity, algorithmic choices, API quality, and scalability.
+
 ### Architecture
 
 Paste this into Eraser's diagram-as-code editor for the PRD architecture visual:
 
 ```eraser
-direction: right
+direction: down
 
-Student Browser [icon: monitor, color: blue]
-Android Connector [icon: smartphone, color: blue]
+Clients [color: blue] {
+  Student Browser [icon: monitor]
+  Android Connector [icon: smartphone]
+}
 
 AWS Edge [color: orange] {
   Amazon CloudFront [icon: aws-cloudfront]
@@ -184,19 +212,19 @@ Operations [color: gray] {
   AWS Budgets [icon: wallet]
 }
 
-Student Browser > Amazon CloudFront: HTTPS web app and API calls
-Amazon CloudFront > Amazon S3: static React build and APK download
-Amazon CloudFront > Nginx on EC2: /api product routes
+Student Browser > Amazon CloudFront: HTTPS web app
+Amazon CloudFront > Amazon S3: React build and APK
+Amazon CloudFront > Nginx on EC2: /api/* product routes
 Nginx on EC2 > FastAPI App: reverse proxy
 FastAPI App > MongoDB Atlas: profiles, transactions, pools, travel, catalogs
-FastAPI App > Amazon Bedrock Nova Lite: travel coach and campus nudges
+FastAPI App > Amazon Bedrock Nova Lite: AI campus guidance
 
-Android Connector > Amazon CloudFront: /api/ingest/notification
-Amazon CloudFront > API Gateway: mobile webhook behavior
-API Gateway > Lambda Ingest: validate and enqueue event
-Lambda Ingest > Amazon SQS: durable buffer
-Amazon SQS > Lambda Processor: one event per batch
-Lambda Processor > DynamoDB Ledger: normalized ingest event
+Android Connector > Amazon CloudFront: mobile webhook
+Amazon CloudFront > API Gateway: /api/ingest/notification
+API Gateway > Lambda Ingest: validate event
+Lambda Ingest > Amazon SQS: durable queue
+Amazon SQS > Lambda Processor: batch size 1
+Lambda Processor > DynamoDB Ledger: normalized event
 
 FastAPI App > CloudWatch Logs: backend logs
 Lambda Ingest > CloudWatch Logs: ingest logs
@@ -210,45 +238,100 @@ Export the Eraser diagrams as PNG/SVG and insert them into the final PDF in plac
 
 | Layer | Technology | Why |
 | --- | --- | --- |
-| Frontend | React, Vite, TypeScript, TanStack Router, TanStack Query, Tailwind CSS | Fast interactive web app with typed routes, API caching, and responsive desktop/mobile screens. |
-| Backend | Python, FastAPI, Pydantic, Motor/PyMongo | Async APIs, validation, and flexible MongoDB integration. |
-| Android | Kotlin, NotificationListenerService, OkHttp | Native notification access and reliable webhook delivery. |
-| Data/ML | MongoDB Atlas, DynamoDB, Amazon Bedrock Nova Lite | MongoDB for product data, DynamoDB for serverless ingest ledger, Bedrock for contextual guidance. |
-| Infra | CloudFront, S3, EC2, Nginx, API Gateway, Lambda, SQS, CloudWatch | CDN delivery, stable backend, scalable mobile ingest, and operational visibility. |
+| Frontend | React, Vite, TypeScript, TanStack Router, TanStack Query, Tailwind CSS | Gives a fast, typed, mobile-responsive product surface. TanStack Query is important because synced phone events can refresh dashboard/history views without turning the app into a static mockup. |
+| Backend | Python, FastAPI, Pydantic, Motor/PyMongo | FastAPI gives strict request contracts for auth, transactions, pools, travel, food, and ingest. Motor/PyMongo keeps MongoDB operations flexible for evolving campus data. |
+| Android | Kotlin, NotificationListenerService, OkHttp | Android notification access is the only practical way to reduce manual ledger entry. OkHttp keeps delivery simple and reliable from the companion app to the webhook. |
+| Data/ML | MongoDB Atlas, DynamoDB, Amazon Bedrock Nova Lite | MongoDB Atlas stores user lifecycle data, profiles, transactions, pools, travel, and catalogs. DynamoDB is the append-style ledger for serverless ingest. Bedrock Nova Lite generates contextual travel and campus guidance without hosting a model. |
+| Infra | CloudFront, S3, EC2, Nginx, API Gateway, Lambda, SQS, CloudWatch | CloudFront creates one public entrypoint. S3 serves the frontend and APK. EC2/Nginx keeps the core product backend stable. API Gateway/Lambda/SQS isolate bursty phone ingest from the main backend. CloudWatch makes the demo observable. |
+| OCR pathway | Amazon Textract integration point | Optional menu-scanning path for faster campus catalog onboarding. The product's food intelligence also works from curated campus data, so OCR is an expansion accelerator, not a core dependency. |
+| Retrieval approach | Structured retrieval plus Bedrock context packing on MongoDB Atlas data | The current prototype retrieves scoped campus/profile data and packs it into bounded Bedrock prompts. The same Atlas data model can later support Vector Search for semantic campus memory without changing the product model. |
 
 ### Key Algorithms & Complexity
 
-1. **Notification parsing and deduplication**
-   Payment alerts can arrive from both SMS and a payment app. PocketBuddy first uses transaction reference/UTR where present, then falls back to a short-window match on amount, merchant, direction, and timestamp.
-
-   Expected complexity per event is constant time against a bounded recent-window query. This is important because notification ingest must stay fast on mobile and cloud.
-
-2. **Privacy-preserving sync logging**
-   Notification previews are masked before storage. Long digit sequences, links, transaction references, and sensitive fragments are replaced with placeholders. This keeps logs useful without storing raw personal payment alerts.
-
-3. **Runway calculation**
-   The dashboard computes remaining allowance and safe daily spend:
+1. **Passive notification normalization**
+   Raw payment/SMS notifications are converted into a normalized event:
 
    ```text
-   safe_daily_spend = remaining_allowance / days_left_in_cycle
+   {amount, currency, direction, merchant, source, transaction_reference, confidence}
    ```
 
-   This is intentionally simple because the user decision must be immediate and understandable.
+   The parser uses strong signals first: debit/credit words, UPI/SMS phrases, rupee amounts, UTR/reference numbers, and merchant tokens. If a field is weak, the event is still logged with lower confidence instead of being silently dropped. This is important for a campus product because students should not lose events just because one bank uses a different SMS format.
 
-4. **Wellness signal scoring**
-   PocketBuddy combines food gaps, late-night spend, spend velocity, exam period, and social/cart signals. It does not diagnose health. It produces practical nudges, such as asking whether dinner happened in mess after a long food gap.
+   Complexity: O(n) over notification text length, where n is small. In practice this behaves as constant time per phone alert.
 
-5. **Cart pool verification**
-   Pools track items, expected participant amounts, UTR submissions, and host verification. Matching incoming credit notifications can mark a pending payment as verified.
+2. **Duplicate-event suppression**
+   One real payment can generate both a payment-app notification and a bank SMS. PocketBuddy avoids double-counting by using a layered identity strategy:
 
-6. **Travel overcharge coefficient**
+   ```text
+   primary key: transaction_reference / UTR
+   fallback key: amount + direction + merchant + bounded time window
+   ```
+
+   Complexity: O(1) for fingerprint creation plus an indexed bounded-window lookup. This keeps ingest cheap even when many phones sync at the same time.
+
+3. **Privacy-preserving sync logging**
+   Notification previews are masked before storage. Long digit sequences, links, transaction references, and sensitive fragments are replaced with placeholders. This keeps logs useful without storing raw personal payment alerts.
+
+   Design choice: store enough context to explain and build trust, but not raw private bank messages.
+
+4. **Runway and safe-spend calculation**
+   The dashboard computes the student's monthly state:
+
+   ```text
+   remaining_allowance = monthly_allowance + income - expenses
+   days_left = reset_date - today
+   safe_daily_spend = remaining_allowance / max(days_left, 1)
+   ```
+
+   Complexity: O(t) over transactions in the current cycle, with normal database indexing by user and date. The algorithm is intentionally explainable: students can trust the number because it maps directly to their allowance cycle.
+
+5. **Food-gap and exam-context wellness state**
+   PocketBuddy treats wellness as a practical state machine, not a diagnosis. Signals include:
+
+   ```text
+   last_food_transaction_age
+   meal schedule
+   exam window
+   spend velocity
+   recent late-night food/travel behavior
+   ```
+
+   Example: if there is no food transaction for 16-17 hours during an exam window, the product can ask whether the student ate in mess, cooked, ordered, or skipped. This avoids a false assumption that "no payment" always means "no meal."
+
+   Complexity: O(1) after fetching the user's recent bounded transaction window.
+
+6. **Cart pool payment verification**
+   Pools maintain item-level contributions, participant states, UTR submissions, and host verification. Incoming credit notifications are matched against pending pool repayments using:
+
+   ```text
+   amount + direction=credit + payer alias/merchant text + UTR/reference + pool pending state
+   ```
+
+   Complexity: O(k) over a small set of pending repayments for the host, or O(log k) with an indexed pending-payment lookup. This is a high-value campus workflow because it reduces awkward manual follow-ups after shared orders.
+
+7. **Travel overcharge coefficient**
    Travel guidance compares a quoted fare to a route median:
 
    ```text
    overcharge_factor = quoted_fare / community_median_fare
    ```
 
-   This powers warnings, expected ranges, and negotiation copy.
+   This powers warnings, expected ranges, and negotiation copy. It is simple enough to explain to a first-year student while still capturing the core problem: uncertainty in a new city creates overpayment risk.
+
+8. **Bounded Bedrock context packing**
+   Bedrock/Nova Lite is used only after PocketBuddy selects the relevant context: route, quote, campus fare range, runway, food options, meal gap, and exam state. The model is not asked to inspect the whole database.
+
+   ```text
+   selected_context -> concise prompt -> short action message
+   ```
+
+   Complexity: O(c) where c is the bounded context size. This controls cost, latency, and privacy while making the AI output grounded in actual product data.
+
+9. **Catalog expansion path**
+   The food catalog and travel routes use defaults for demo readiness, but they are not product limits. The long-term path is moderated campus data: users and admins add colleges, routes, canteens, payment providers, cart platforms, and category rules without changing application code.
+
+10. **Menu OCR boundary**
+   A photo-menu scanner was implemented as a candidate ingestion path for campus menu onboarding. The product does not depend on OCR for the final demo because campus food intelligence also works from curated/catalog data. This keeps the core user flow stable while leaving menu photo ingestion as an expansion path.
 
 ### Scaling Strategy
 
@@ -264,6 +347,8 @@ PocketBuddy separates high-volume notification ingest from the main product back
 At 100x-1000x growth, the ingest path remains event-driven, while product APIs can be horizontally scaled behind a load balancer or moved to managed containers.
 
 ## 4. Future Vision
+
+> Jury focus: long-term thinking, multi-segment expansion, and value impact.
 
 ### Where This Goes
 
@@ -293,6 +378,19 @@ PocketBuddy starts with residential students, but the same model can expand to:
 
 The expansion path is campus-by-campus: seed default data, allow community reporting, moderate the catalog, and grow local intelligence over time.
 
+### Revenue Model
+
+PocketBuddy can make money without selling raw student payment data.
+
+| Revenue line | Buyer | What they pay for | Why it is realistic |
+| --- | --- | --- | --- |
+| Student premium | Individual students | Advanced insights, longer history, smarter subscription detection, custom alerts, exports, and multi-device sync. | Students already pay for small monthly digital services. A low-cost plan in the Rs 49-99/month range is realistic only after the free product proves savings. |
+| Campus/hostel license | Colleges, hostels, student welfare bodies | Privacy-preserving affordability dashboards, moderated campus catalogs, route/fare guardrails, and student check-in workflows. | Institutions benefit when students have fewer money-stress and basic-routine issues during exam periods. |
+| Verified local offers | Campus vendors and student services | Opt-in, relevant offers such as meal combos, stationery, laundry, or travel partners. | This works only if offers reduce student cost and remain clearly separated from financial advice. |
+| Partner integrations | Fintech, banking, scholarship, and student-benefit programs | Consent-based integrations for allowance, scholarship, and student-benefit workflows. | The platform already has the student context layer; partners can reduce friction without owning the whole experience. |
+
+The first monetization path should be campus pilots plus student premium. Advertising should not be the core model because trust is the product.
+
 ### Value Impact
 
 PocketBuddy's impact should be measured by outcomes students can feel:
@@ -307,4 +405,16 @@ PocketBuddy's impact should be measured by outcomes students can feel:
 
 At scale, even small savings compound. A few avoided overcharges, duplicate counts, or unnecessary delivery fees per student per month becomes meaningful across a campus. The larger impact is cognitive relief: students should understand the month without maintaining a spreadsheet.
 
-Links: GitHub https://github.com/nishantharkut/PocketBuddy | Demo Video [Uploaded MP4 in portal] | Live App https://d3g6cg7q9hn7hi.cloudfront.net/
+### Links
+
+- GitHub: https://github.com/nishantharkut/PocketBuddy
+- Live app: https://d3g6cg7q9hn7hi.cloudfront.net/
+- Android APK: https://d3g6cg7q9hn7hi.cloudfront.net/downloads/PocketBuddy-Connector-v0.1.0.apk
+- Demo video: uploaded as MP4 in the submission portal.
+
+### Source Notes For Market Context
+
+- NPCI UPI product statistics: https://www.npci.org.in/what-we-do/upi/product-statistics
+- UPI May 2026 transaction volume and value report: https://m.economictimes.com/tech/technology/upi-processes-rs-29-9-lakh-crore-in-may-transaction-volumes-hit-23-2-billion/articleshow/131439222.cms
+- RBI payments report coverage on UPI's volume share: https://m.economictimes.com/industry/banking/finance/upi-processes-85-of-indias-payment-volumes-but-just-9-5-of-value-rtgs-dominates-at-68-6/articleshow/131179619.cms
+- Higher-education enrolment context: https://timesofindia.indiatimes.com/city/bhubaneswar/indias-education-system-transformed-in-last-few-years-min/articleshow/123210126.cms
