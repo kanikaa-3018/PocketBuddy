@@ -257,6 +257,17 @@ function PoolCard({ pool }: { pool: Pool }) {
   const active = minsLeft > 0 && pool.status === "open";
   const platformBorderColor = getPlatformBorderColor(pool.platform);
 
+  const isFullyPaid = useMemo(() => {
+    if (pool.status !== "completed") return false;
+    const breakdown = pool.split_breakdown ?? {};
+    const roommates = Object.keys(breakdown).filter((rName) => {
+      const isHost = rName.toLowerCase() === "you" || rName.toLowerCase() === (pool.created_by_name ?? "").toLowerCase();
+      return !isHost;
+    });
+    if (roommates.length === 0) return true;
+    return roommates.every((rName) => breakdown[rName].paid);
+  }, [pool.status, pool.split_breakdown, pool.created_by_name]);
+
   const itemsCount = pool.items?.length ?? 0;
   const totalCartValue = useMemo(() => {
     return (pool.items ?? [])
@@ -296,18 +307,57 @@ function PoolCard({ pool }: { pool: Pool }) {
                 active
                   ? "border-[#16A34A]/30 text-[#16A34A]"
                   : statusLabel === "completed"
-                  ? "border-emerald-500/20 text-[#16A34A]"
+                  ? (isFullyPaid ? "border-green-500/30 text-green-400 bg-green-500/5" : "border-amber-500/30 text-amber-400 bg-amber-500/5")
                   : statusLabel === "cancelled"
                   ? "border-rose-500/20 text-[#FF6B4A]"
                   : "border-zinc-500/20 text-zinc-400"
               }`}>
                 {active && <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />}
-                {active ? "Active" : statusLabel}
+                {active ? "Active" : (statusLabel === "completed" ? (isFullyPaid ? "Settled" : "Splits Active") : statusLabel)}
               </span>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Host: <span className="font-semibold text-foreground capitalize">{pool.created_by_name || "—"}</span>
             </p>
+
+            {pool.status === "completed" && (
+              <div className="mt-3.5 space-y-2 border-t border-border/50 pt-2.5">
+                <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest pl-0.5">Roommate Splits Status:</p>
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(pool.split_breakdown ?? {}).map(([rName, details]: [string, any]) => {
+                    const isHost = rName.toLowerCase() === "you" || rName.toLowerCase() === (pool.created_by_name ?? "").toLowerCase();
+                    if (isHost) return null;
+
+                    const status = details.payment_status;
+                    let dotColor = "bg-zinc-500";
+                    let textColor = "text-zinc-400";
+                    let label = "Unpaid";
+                    if (status === "verified") {
+                      dotColor = "bg-green-500";
+                      textColor = "text-green-400/90";
+                      label = details.settlement_mode === "settle_in_kind" ? "In-Kind" : "Paid";
+                    } else if (status === "pending") {
+                      dotColor = "bg-amber-500 animate-pulse";
+                      textColor = "text-amber-400";
+                      label = "Verifying";
+                    }
+
+                    return (
+                      <span
+                        key={rName}
+                        className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg border border-border bg-white/5 text-[10px] font-bold ${textColor}`}
+                      >
+                        <span className={`h-1.5 w-1.5 rounded-full ${dotColor}`} />
+                        <span className="capitalize">{rName} ({rupees(details.total)}): {label}</span>
+                      </span>
+                    );
+                  })}
+                  {Object.keys(pool.split_breakdown ?? {}).filter(k => k.toLowerCase() !== "you" && k.toLowerCase() !== (pool.created_by_name ?? "").toLowerCase()).length === 0 && (
+                    <span className="text-[10px] text-zinc-500 italic pl-0.5">No roommate splits generated.</span>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="mt-5 flex justify-between items-end border-t border-border pt-3">
