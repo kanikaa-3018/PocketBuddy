@@ -83,6 +83,7 @@ function CompanionPage() {
     `POCKETBUDDY_WEBHOOK_URL=${companionWebhookUrl}`,
       `POCKETBUDDY_WEBHOOK_TOKEN=${pairingCode}`,
     `POCKETBUDDY_USER_ID=${user?.id ?? ""}`,
+    `POCKETBUDDY_ACCOUNT_EMAIL=${user?.email ?? ""}`,
     ].join("\n");
   }
 
@@ -99,7 +100,7 @@ function CompanionPage() {
     const savedPairing = await savePairingCode(pairingForDisplay, false);
     if (!savedPairing) return;
 
-    const deepLinkUrl = `pocketbuddy://configure?webhook_url=${encodeURIComponent(companionWebhookUrl)}&user_id=${encodeURIComponent(user?.id ?? "")}&webhook_token=${encodeURIComponent(savedPairing)}`;
+    const deepLinkUrl = `pocketbuddy://configure?webhook_url=${encodeURIComponent(companionWebhookUrl)}&user_id=${encodeURIComponent(user?.id ?? "")}&webhook_token=${encodeURIComponent(savedPairing)}&account_email=${encodeURIComponent(user?.email ?? "")}`;
     window.location.href = deepLinkUrl;
   }
 

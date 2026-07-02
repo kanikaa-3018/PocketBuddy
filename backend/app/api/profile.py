@@ -26,6 +26,7 @@ class ProfileUpdateReq(BaseModel):
     companion_device_name: Optional[str] = None
     companion_last_sync: Optional[str] = None
     companion_sync_enabled: Optional[bool] = None
+    companion_device_id: Optional[str] = None
 
 @router.get("")
 async def get_profile(user_id: str = Depends(get_current_user)):

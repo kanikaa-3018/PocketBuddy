@@ -77,7 +77,7 @@ function Onboarding() {
       qc.invalidateQueries({ queryKey: ["profile"] });
       
       const webhookUrl = getCompanionWebhookUrl();
-      const deepLinkUrl = `pocketbuddy://configure?webhook_url=${encodeURIComponent(webhookUrl)}&user_id=${encodeURIComponent(user.id)}&webhook_token=${encodeURIComponent(code)}`;
+      const deepLinkUrl = `pocketbuddy://configure?webhook_url=${encodeURIComponent(webhookUrl)}&user_id=${encodeURIComponent(user.id)}&webhook_token=${encodeURIComponent(code)}&account_email=${encodeURIComponent(user.email)}`;
       
       toast.success("Redirecting to auto-configure...");
       setTimeout(() => {

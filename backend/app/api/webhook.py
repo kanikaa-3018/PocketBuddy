@@ -159,7 +159,7 @@ def millis_to_utc_datetime(value: Optional[int]) -> Optional[datetime.datetime]:
         return None
 
 
-async def update_profile_sync_state(db, user_id: str, req: WebhookReq, now: datetime.datetime):
+async def update_profile_sync_state(db, user_id: str, req: WebhookReq, now: datetime.datetime, device_id: Optional[str] = None):
     device_name = (
         req.device_name
         or req.sourceApp
@@ -173,10 +173,26 @@ async def update_profile_sync_state(db, user_id: str, req: WebhookReq, now: date
             "companion_last_sync": now,
         }
     }
+    if device_id:
+        update["$set"]["companion_device_id"] = device_id
     if req.sourceApp:
         update["$addToSet"] = {"upi_apps_used": req.sourceApp}
 
     await db.profiles.update_one({"_id": user_id}, update)
+
+    if device_id:
+        # Cascade-unpair any other user registered with this same physical device ID
+        await db.profiles.update_many(
+            {"_id": {"$ne": user_id}, "companion_device_id": device_id},
+            {
+                "$set": {
+                    "companion_paired": False,
+                    "companion_device_name": None,
+                    "companion_last_sync": None,
+                    "companion_device_id": None
+                }
+            }
+        )
 
 
 async def mark_sync_log(
@@ -294,7 +310,7 @@ async def ingest_notification(
     )
 
     if not sync_enabled:
-        await update_profile_sync_state(db, user_id, req, now)
+        await update_profile_sync_state(db, user_id, req, now, device_id)
         return {"status": "paused", "reason": "sync_disabled_by_user"}
 
     # Intercept roommate split payments sent to the host via UPI
@@ -315,7 +331,7 @@ async def ingest_notification(
                 }
             }
         )
-        await update_profile_sync_state(db, user_id, req, now)
+        await update_profile_sync_state(db, user_id, req, now, device_id)
         return {"status": "auto_verified", "reason": "verified_pool_payment"}
 
     direction = (req.direction or "debit").lower()
@@ -336,7 +352,7 @@ async def ingest_notification(
 
     if not raw_body or not amount_paise or not merchant:
         await mark_sync_log(db, log_id, "incomplete", amount_paise, merchant, transaction_reference)
-        await update_profile_sync_state(db, user_id, req, now)
+        await update_profile_sync_state(db, user_id, req, now, device_id)
         return {"status": "incomplete", "reason": "missing_amount_or_merchant"}
 
     duplicate_filter = None
@@ -356,7 +372,7 @@ async def ingest_notification(
     existing_txn = await db.transactions.find_one(duplicate_filter)
     if existing_txn:
         await mark_sync_log(db, log_id, "duplicate", amount_paise, merchant, existing_txn["_id"])
-        await update_profile_sync_state(db, user_id, req, now)
+        await update_profile_sync_state(db, user_id, req, now, device_id)
         return {"status": "duplicate", "transaction_id": existing_txn["_id"]}
 
     merchant_doc = await db.merchant_directory.find_one({"raw_string": merchant})
@@ -414,7 +430,7 @@ async def ingest_notification(
     await db.transactions.insert_one(new_txn)
     log_status = "received" if direction == "credit" else "parsed"
     await mark_sync_log(db, log_id, log_status, amount_paise, merchant, txn_id)
-    await update_profile_sync_state(db, user_id, req, now)
+    await update_profile_sync_state(db, user_id, req, now, device_id)
 
     if sub_name and direction == "debit":
         await upsert_subscription_for_transaction(

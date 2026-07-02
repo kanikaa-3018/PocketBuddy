@@ -44,12 +44,15 @@ class SetupActivity : Activity() {
     private lateinit var configStore: ConnectorConfigStore
     private lateinit var identityStore: DeviceIdentityStore
     private lateinit var retryQueue: WebhookRetryQueue
+    private lateinit var accountEmailText: TextView
+    private var currentAccountEmail: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         configStore = ConnectorConfigStore(applicationContext)
         identityStore = DeviceIdentityStore(applicationContext)
         retryQueue = WebhookRetryQueue(applicationContext)
+        currentAccountEmail = configStore.accountEmail()
         applySystemBarTheme()
         setContentView(buildContentView())
         handleDeepLinkIntent(intent)
@@ -67,12 +70,15 @@ class SetupActivity : Activity() {
             val webhookUrl = data.getQueryParameter("webhook_url")
             val userId = data.getQueryParameter("user_id")
             val webhookToken = data.getQueryParameter("webhook_token")
+            val accountEmail = data.getQueryParameter("account_email")
 
             if (!webhookUrl.isNullOrBlank() && !userId.isNullOrBlank()) {
+                currentAccountEmail = accountEmail
                 configStore.save(
                     webhookUrl = webhookUrl,
                     userId = userId,
-                    webhookToken = webhookToken.orEmpty()
+                    webhookToken = webhookToken.orEmpty(),
+                    accountEmail = accountEmail
                 )
                 if (::webhookUrlInput.isInitialized) {
                     webhookUrlInput.setText(webhookUrl)
@@ -83,10 +89,18 @@ class SetupActivity : Activity() {
                 if (::webhookTokenInput.isInitialized) {
                     webhookTokenInput.setText(webhookToken.orEmpty())
                 }
-                Toast.makeText(this, "Configuration auto-loaded from browser!", Toast.LENGTH_LONG).show()
+                showPairingSuccessDialog(accountEmail ?: "PocketBuddy User")
                 refreshStatus()
             }
         }
+    }
+
+    private fun showPairingSuccessDialog(email: String) {
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Pairing Successful! 🎉")
+            .setMessage("PocketBuddy Connector is now successfully linked to your account:\n\n$email\n\nIt will securely sync supported UPI notifications. Please ensure Notification Access is enabled.")
+            .setPositiveButton("Awesome", null)
+            .show()
     }
 
     override fun onResume() {
@@ -156,11 +170,19 @@ class SetupActivity : Activity() {
             setTextColor(Color.rgb(113, 113, 122))
             setPadding(0, dp(6), 0, 0)
         }
+        accountEmailText = TextView(this).apply {
+            textSize = 14f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            setTextColor(Color.rgb(255, 107, 0)) // brand primary color
+            setPadding(0, dp(8), 0, 0)
+            visibility = View.GONE
+        }
 
         return sectionCard().apply {
             addView(sectionKicker("Sync status"))
             addView(statusText)
             addView(statusDetailText)
+            addView(accountEmailText)
         }
     }
 
@@ -322,6 +344,7 @@ class SetupActivity : Activity() {
         val appNotificationsEnabled = areAppNotificationsUsable()
         val userId = identityStore.userId()
         val ready = notificationAccessEnabled && !userId.isNullOrBlank()
+        val accountEmail = configStore.accountEmail()
 
         statusText.text = if (ready) "Ready to sync" else "Setup needed"
         statusText.setTextColor(if (ready) Color.rgb(22, 101, 52) else Color.rgb(146, 64, 14))
@@ -330,11 +353,20 @@ class SetupActivity : Activity() {
             userId.isNullOrBlank() -> "Next step: paste and save the user ID from PocketBuddy web."
             else -> "This phone can now send payment events to PocketBuddy."
         }
+
+        if (ready && !accountEmail.isNullOrBlank()) {
+            accountEmailText.text = "Connected Account: $accountEmail"
+            accountEmailText.visibility = View.VISIBLE
+        } else {
+            accountEmailText.visibility = View.GONE
+        }
+
         diagnosticsText.text = buildString {
             appendLine("Notification access: ${if (notificationAccessEnabled) "enabled" else "disabled"}")
             appendLine("App notifications: ${if (appNotificationsEnabled) "enabled" else "disabled"}")
             appendLine("Queued retries: ${retryQueue.size()}")
             appendLine("User ID: ${userId ?: "not set"}")
+            appendLine("Connected Account: ${accountEmail ?: "not set"}")
             appendLine("Device ID: ${identityStore.deviceId()}")
             appendLine("Webhook: ${configStore.webhookUrl()}")
             appendLine("Build default: ${BuildConfig.POCKETBUDDY_WEBHOOK_URL}")
@@ -365,8 +397,9 @@ class SetupActivity : Activity() {
             webhookUrl = webhookUrl,
             userId = userId,
             webhookToken = webhookToken,
+            accountEmail = currentAccountEmail
         )
-        Toast.makeText(this, "Saved. Now enable Notification Access.", Toast.LENGTH_LONG).show()
+        showPairingSuccessDialog(currentAccountEmail ?: "PocketBuddy User")
         refreshStatus()
     }
 
@@ -408,6 +441,9 @@ class SetupActivity : Activity() {
         } ?: run {
             if (filled) webhookTokenInput.setText("")
         }
+        values["POCKETBUDDY_ACCOUNT_EMAIL"]?.takeIf { it.isNotBlank() }?.let {
+            currentAccountEmail = it
+        }
 
         if (filled) {
             Toast.makeText(this, "Config pasted. Review and tap Save.", Toast.LENGTH_LONG).show()
@@ -418,6 +454,7 @@ class SetupActivity : Activity() {
 
     private fun resetConnectorConfig() {
         configStore.clearRuntimeConfig()
+        currentAccountEmail = null
         webhookUrlInput.setText(configStore.webhookUrl())
         userIdInput.setText(configStore.userId().orEmpty())
         webhookTokenInput.setText(configStore.webhookToken().orEmpty())

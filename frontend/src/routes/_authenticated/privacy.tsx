@@ -129,6 +129,7 @@ function PrivacyPage() {
           companion_paired: false,
           companion_device_name: null,
           companion_last_sync: null,
+          companion_device_id: null,
         },
       });
       qc.invalidateQueries({ queryKey: ["profile"] });
