@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { rupees } from "@/lib/format";
-import { Clock } from "lucide-react";
+import { Clock, AlertCircle, Check } from "lucide-react";
 import { getProfile, getCartPools, insertCartPool, getCatalog, addCatalogItem } from "@/lib/api/db.functions";
 
 export const Route = createFileRoute("/_authenticated/pool/")({
@@ -107,11 +107,24 @@ function PoolList() {
     queryFn: () => getCartPools(),
   });
 
-  const now = Date.now();
+  const isPoolFullyPaid = (p: any) => {
+    if (p.status !== "completed") return false;
+    const breakdown = p.split_breakdown ?? {};
+    const roommates = Object.keys(breakdown).filter((rName) => {
+      const isHost = rName.toLowerCase() === "you" || rName.toLowerCase() === (p.created_by_name ?? "").toLowerCase();
+      return !isHost;
+    });
+    if (roommates.length === 0) return true;
+    return roommates.every((rName) => breakdown[rName].paid);
+  };
+
   const activePools = (pools ?? []).filter(
-    (p) => p.status === "open" && new Date(p.expires_at).getTime() > now,
+    (p) => (p.status === "open" && new Date(p.expires_at).getTime() > now) ||
+           (p.status === "completed" && !isPoolFullyPaid(p)),
   );
-  const completedPools = (pools ?? []).filter((p) => p.status === "completed");
+  const completedPools = (pools ?? []).filter(
+    (p) => p.status === "completed" && isPoolFullyPaid(p),
+  );
   const cancelledPools = (pools ?? []).filter(
     (p) => p.status === "cancelled" || p.status === "closed" || (p.status === "open" && new Date(p.expires_at).getTime() <= now),
   );
@@ -268,6 +281,41 @@ function PoolCard({ pool }: { pool: Pool }) {
     return roommates.every((rName) => breakdown[rName].paid);
   }, [pool.status, pool.split_breakdown, pool.created_by_name]);
 
+  // Roommate summary calculations
+  const rSummary = useMemo(() => {
+    if (pool.status !== "completed") return null;
+
+    const namesMatch = (a: string | null | undefined, b: string | null | undefined) => {
+      const left = (a ?? "").trim().toLowerCase();
+      const right = (b ?? "").trim().toLowerCase();
+      return Boolean(left && right && (left === right || left.includes(right) || right.includes(left)));
+    };
+
+    const breakdown = pool.split_breakdown ?? {};
+    let unpaidCount = 0;
+    let unpaidTotal = 0;
+    let myOwed = 0;
+    let myStatus = "";
+
+    Object.entries(breakdown).forEach(([rName, details]: [string, any]) => {
+      const isHost = rName.toLowerCase() === "you" || rName.toLowerCase() === (pool.created_by_name ?? "").toLowerCase();
+      if (isHost) return;
+
+      if (!details.paid) {
+        unpaidCount += 1;
+        unpaidTotal += details.total;
+      }
+
+      const isMe = user && (rName.toLowerCase() === user.fullName.toLowerCase() || namesMatch(user.fullName, rName));
+      if (isMe) {
+        myOwed = details.total;
+        myStatus = details.payment_status;
+      }
+    });
+
+    return { unpaidCount, unpaidTotal, myOwed, myStatus };
+  }, [pool, user]);
+
   const itemsCount = pool.items?.length ?? 0;
   const totalCartValue = useMemo(() => {
     return (pool.items ?? [])
@@ -319,6 +367,43 @@ function PoolCard({ pool }: { pool: Pool }) {
             <p className="text-xs text-muted-foreground mt-1">
               Host: <span className="font-semibold text-foreground capitalize">{pool.created_by_name || "—"}</span>
             </p>
+
+            {rSummary && (
+              <div className="mt-3">
+                {user && pool.host_id === user.id ? (
+                  rSummary.unpaidTotal > 0 ? (
+                    <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/25 px-3 py-2 rounded-xl text-xs text-amber-400 font-bold shadow-sm shadow-black/25">
+                      <AlertCircle className="h-4 w-4 shrink-0 text-amber-500" />
+                      <span>Collect: <strong className="text-foreground">{rupees(rSummary.unpaidTotal)}</strong> pending from {rSummary.unpaidCount} roommates</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/25 px-3 py-2 rounded-xl text-xs text-green-400 font-bold shadow-sm shadow-black/25">
+                      <Check className="h-4 w-4 shrink-0 text-green-500" />
+                      <span>All splits collected & verified!</span>
+                    </div>
+                  )
+                ) : (
+                  rSummary.myOwed > 0 && (
+                    rSummary.myStatus === "verified" ? (
+                      <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/25 px-3 py-2 rounded-xl text-xs text-green-400 font-bold shadow-sm shadow-black/25">
+                        <Check className="h-4 w-4 shrink-0 text-green-500" />
+                        <span>You paid: <strong className="text-foreground">{rupees(rSummary.myOwed)}</strong> (verified)</span>
+                      </div>
+                    ) : rSummary.myStatus === "pending" ? (
+                      <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/25 px-3 py-2 rounded-xl text-xs text-blue-400 font-bold shadow-sm shadow-black/25 animate-pulse">
+                        <Clock className="h-4 w-4 shrink-0 text-blue-500" />
+                        <span>Verifying your split of <strong className="text-foreground">{rupees(rSummary.myOwed)}</strong> (UTR submitted)</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 bg-rose-500/10 border border-rose-500/25 px-3 py-2 rounded-xl text-xs text-rose-400 font-bold shadow-sm shadow-black/25">
+                        <AlertCircle className="h-4 w-4 shrink-0 text-rose-500" />
+                        <span>You owe: <strong className="text-foreground">{rupees(rSummary.myOwed)}</strong> to host</span>
+                      </div>
+                    )
+                  )
+                )}
+              </div>
+            )}
 
             {pool.status === "completed" && (
               <div className="mt-3.5 space-y-2 border-t border-border/50 pt-2.5">
