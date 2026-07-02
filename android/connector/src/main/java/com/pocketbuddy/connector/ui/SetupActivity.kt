@@ -45,6 +45,8 @@ class SetupActivity : Activity() {
     private lateinit var identityStore: DeviceIdentityStore
     private lateinit var retryQueue: WebhookRetryQueue
     private lateinit var accountEmailText: TextView
+    private lateinit var connectionBannerText: TextView
+    private lateinit var connectionBannerContainer: LinearLayout
     private var currentAccountEmail: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -96,11 +98,59 @@ class SetupActivity : Activity() {
     }
 
     private fun showPairingSuccessDialog(email: String) {
-        android.app.AlertDialog.Builder(this)
-            .setTitle("Pairing Successful! 🎉")
-            .setMessage("PocketBuddy Connector is now successfully linked to your account:\n\n$email\n\nIt will securely sync supported UPI notifications. Please ensure Notification Access is enabled.")
-            .setPositiveButton("Awesome", null)
-            .show()
+        runOnUiThread {
+            if (!isFinishing && !isDestroyed) {
+                try {
+                    android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Light_Dialog_Alert)
+                        .setTitle("Pairing Successful! 🎉")
+                        .setMessage("PocketBuddy Connector is now successfully linked to your account:\n\n$email\n\nIt will securely sync supported UPI notifications. Please ensure Notification Access is enabled.")
+                        .setPositiveButton("Awesome", null)
+                        .setCancelable(false)
+                        .show()
+                } catch (e: Exception) {
+                    // Fallback to simpler platform dialog if style resource is missing
+                    android.app.AlertDialog.Builder(this)
+                        .setTitle("Pairing Successful! 🎉")
+                        .setMessage("PocketBuddy Connector is now linked to:\n\n$email")
+                        .setPositiveButton("Awesome", null)
+                        .show()
+                }
+            }
+        }
+    }
+
+    private fun connectionBannerView(): LinearLayout {
+        connectionBannerText = TextView(this).apply {
+            textSize = 14f
+            setTextColor(Color.rgb(21, 128, 61)) // green
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        connectionBannerContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+            background = rounded(Color.rgb(240, 253, 244), dp(12), Color.rgb(220, 252, 231))
+            val lp = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                setMargins(0, 0, 0, dp(16))
+            }
+            layoutParams = lp
+            visibility = View.GONE
+
+            val icon = TextView(context).apply {
+                text = "✓"
+                textSize = 18f
+                setTextColor(Color.rgb(21, 128, 61))
+                typeface = Typeface.DEFAULT_BOLD
+                setPadding(0, 0, dp(10), 0)
+            }
+            addView(icon)
+            addView(connectionBannerText)
+        }
+        return connectionBannerContainer
     }
 
     override fun onResume() {
@@ -119,6 +169,7 @@ class SetupActivity : Activity() {
             )
             addView(headerView())
             addView(bodyText("Securely link this phone to sync UPI payment alerts from SMS and payment apps."))
+            addView(connectionBannerView())
             addView(statusCard())
             addView(configCard())
             addView(permissionCard())
@@ -357,8 +408,11 @@ class SetupActivity : Activity() {
         if (ready && !accountEmail.isNullOrBlank()) {
             accountEmailText.text = "Connected Account: $accountEmail"
             accountEmailText.visibility = View.VISIBLE
+            connectionBannerText.text = "Linked to $accountEmail"
+            connectionBannerContainer.visibility = View.VISIBLE
         } else {
             accountEmailText.visibility = View.GONE
+            connectionBannerContainer.visibility = View.GONE
         }
 
         diagnosticsText.text = buildString {
