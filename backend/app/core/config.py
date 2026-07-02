@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     BEDROCK_REGION: str = "us-east-1"
     BEDROCK_MODEL_ID: str = "us.amazon.nova-lite-v1:0"
 
+    WHATSAPP_API_TOKEN: str = ""
+    WHATSAPP_PHONE_NUMBER_ID: str = ""
+
     class Config:
         env_file = ".env"
 

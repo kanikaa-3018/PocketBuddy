@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { ChevronLeft, Share2, Trash2, Check, X, AlertCircle, Sparkles, ExternalLink, User, ShoppingBag, Clock, Shield, Link as LinkIcon } from "lucide-react";
+import { ChevronLeft, Share2, Trash2, Check, X, AlertCircle, Sparkles, ExternalLink, User, ShoppingBag, Clock, Shield, Link as LinkIcon, Bell } from "lucide-react";
 import { toast } from "sonner";
 import { rupees, relativeTime } from "@/lib/format";
 import { useAuth } from "@/lib/auth-context";
@@ -27,6 +27,7 @@ import {
   updateProfile,
   paymentConfirm,
   paymentVerify,
+  nudgeRoommate,
 } from "@/lib/api/db.functions";
 
 export const Route = createFileRoute("/pool/$id")({
@@ -206,6 +207,7 @@ function PoolDetail() {
   const [authName, setAuthName] = useState("");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
+  const [authPhone, setAuthPhone] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
 
   async function handleQuickAuth(e: React.FormEvent) {
@@ -214,8 +216,13 @@ function PoolDetail() {
       toast.error("Please fill in all credentials");
       return;
     }
-    if (authMode === "signup" && !authName) {
-      toast.error("Please enter your name");
+    if (authMode === "signup" && (!authName || !authPhone)) {
+      toast.error("Please enter your name and phone number");
+      return;
+    }
+    const cleanPhone = authPhone.replace(/\D/g, "");
+    if (authMode === "signup" && cleanPhone.length < 10) {
+      toast.error("Please enter a valid 10-digit phone number");
       return;
     }
 
@@ -235,6 +242,7 @@ function PoolDetail() {
             data: {
               onboarding_completed: true,
               setup_completed: true,
+              phone: cleanPhone,
               wing_label: pool.wing_label // Auto-add to the host's wing for rating compatibility
             }
           });
@@ -615,6 +623,42 @@ function PoolDetail() {
     }
   }
 
+  // Nudge / remind roommates about unpaid splits
+  async function handleNudgeRoommate(roommateName: string, owedAmount: number) {
+    const formattedAmount = (owedAmount / 100).toFixed(2);
+    const poolUrl = window.location.href;
+    const platform = theme.name; // e.g. Swiggy Instamart, Zepto
+    const message = `Hey ${roommateName}, please settle your ${platform} split of ₹${formattedAmount} for our cart pool. You can pay the host and verify here: ${poolUrl}`;
+    const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+
+    try {
+      const toastId = toast.loading(`Sending nudge to ${roommateName}...`);
+      const res = await nudgeRoommate({
+        pool_id: id,
+        data: { roommate_name: roommateName }
+      });
+      toast.dismiss(toastId);
+      if (res && res.success && res.mode === "automated") {
+        toast.success(`Automated WhatsApp nudge sent to ${roommateName}!`);
+        return;
+      }
+    } catch (err: any) {
+      toast.dismiss();
+    }
+
+    if (navigator.share) {
+      navigator.share({
+        title: `PocketBuddy ${platform} Pool Split`,
+        text: message,
+        url: poolUrl
+      }).catch(() => {
+        window.open(waUrl, "_blank");
+      });
+    } else {
+      window.open(waUrl, "_blank");
+    }
+  }
+
   // Generate UPI pay deep link
   const payeeDetails = splitBreakdown[selectedPayeeName || name];
   const upiPayUrl = pool.upi_id && payeeDetails
@@ -648,17 +692,30 @@ function PoolDetail() {
 
               <form onSubmit={handleQuickAuth} className="space-y-4">
                 {authMode === "signup" && (
-                  <div className="space-y-1.5">
-                    <label htmlFor="auth-name" className="text-xs font-bold text-muted-foreground uppercase tracking-widest pl-0.5">Full name</label>
-                    <Input
-                      id="auth-name"
-                      value={authName}
-                      onChange={(e) => setAuthName(e.target.value)}
-                      placeholder="e.g. Deb Mukherjee"
-                      className="bg-background text-sm h-10"
-                      required
-                    />
-                  </div>
+                  <>
+                    <div className="space-y-1.5">
+                      <label htmlFor="auth-name" className="text-xs font-bold text-muted-foreground uppercase tracking-widest pl-0.5">Full name</label>
+                      <Input
+                        id="auth-name"
+                        value={authName}
+                        onChange={(e) => setAuthName(e.target.value)}
+                        placeholder="e.g. Deb Mukherjee"
+                        className="bg-background text-sm h-10"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label htmlFor="auth-phone" className="text-xs font-bold text-muted-foreground uppercase tracking-widest pl-0.5">WhatsApp Phone Number</label>
+                      <Input
+                        id="auth-phone"
+                        value={authPhone}
+                        onChange={(e) => setAuthPhone(e.target.value)}
+                        placeholder="e.g. 9876543210"
+                        className="bg-background text-sm h-10"
+                        required
+                      />
+                    </div>
+                  </>
                 )}
                 <div className="space-y-1.5">
                   <label htmlFor="auth-email" className="text-xs font-bold text-muted-foreground uppercase tracking-widest pl-0.5">Email address</label>
@@ -1034,6 +1091,15 @@ function PoolDetail() {
                                       In Kind
                                     </Button>
                                   </div>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleNudgeRoommate(rName, details.total)}
+                                    className="h-8 border-primary/20 text-primary hover:bg-primary/5 py-1 px-2 text-[10px] uppercase font-bold tracking-wider flex items-center justify-center gap-1.5 w-full"
+                                  >
+                                    <Bell className="h-3.5 w-3.5 shrink-0" />
+                                    <span>Nudge Roommate</span>
+                                  </Button>
                                   {details.payment_status === "pending" && (
                                     <Button
                                       size="sm"

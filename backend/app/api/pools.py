@@ -25,6 +25,8 @@ class PoolReq(BaseModel):
     platform_display_label: Optional[str] = None
     delivery_fee: int
     created_by_name: str
+    auto_nudge_enabled: bool = False
+    nudge_interval_hours: int = 24
 
 class PoolUpdateReq(BaseModel):
     status: Optional[str] = None
@@ -34,6 +36,8 @@ class PoolUpdateReq(BaseModel):
     cancellation_reason: Optional[str] = None
     checkout_notes: Optional[str] = None
     created_by_name: Optional[str] = None
+    auto_nudge_enabled: Optional[bool] = None
+    nudge_interval_hours: Optional[int] = None
 
 class PaymentConfirmReq(BaseModel):
     roommate_name: str
@@ -535,6 +539,8 @@ async def create_cart_pool(req: PoolReq, user_id: str = Depends(get_current_user
         "final_discount": 0,
         "payments": [],  # List of {name, utr, status, submitted_at}
         "expires_at": parse_expires_at(req.expires_at),
+        "auto_nudge_enabled": req.auto_nudge_enabled,
+        "nudge_interval_hours": req.nudge_interval_hours,
         "created_at": utcnow()
     }
 
@@ -878,3 +884,170 @@ async def update_pool_item(pool_id: str, item_id: str, req: PoolItemUpdateReq):
         item = await db.cart_pool_items.find_one({"_id": item_id, "pool_id": pool_id})
 
     return map_doc(item)
+
+class NudgeReq(BaseModel):
+    roommate_name: str
+
+@router.post("/{pool_id}/nudge")
+async def nudge_roommate_api(pool_id: str, req: NudgeReq, user_id: str = Depends(get_current_user)):
+    db = get_db()
+    pool = await db.cart_pools.find_one({"_id": pool_id})
+    if not pool:
+        raise HTTPException(status_code=404, detail="Pool not found")
+        
+    roommate_name = req.roommate_name
+    
+    usr = await db.users.find_one({"full_name": {"$regex": f"^{re.escape(roommate_name)}$", "$options": "i"}})
+    if not usr or not usr.get("phone_number"):
+        raise HTTPException(status_code=400, detail=f"No registered phone number found for {roommate_name}. Please nudge manually.")
+        
+    phone = usr["phone_number"]
+    platform = pool.get("platform", "delivery").replace("_", " ").title()
+    p = await enrich_pool_document(db, pool)
+    details = p.get("split_breakdown", {}).get(roommate_name)
+    if not details or details.get("paid"):
+         return {"success": False, "mode": "fallback", "message": f"{roommate_name} has already paid."}
+         
+    owed_amount = details.get("total", 0)
+    formatted_amount = f"{owed_amount / 100:.2f}"
+    
+    pool_url = f"https://pocketbuddy.net/pool/{pool_id}"
+    message_text = f"Hey {roommate_name}, please settle your {platform} split of INR {formatted_amount} for our cart pool. You can pay the host and verify here: {pool_url}"
+    
+    from app.core.config import settings
+    whatsapp_token = getattr(settings, "WHATSAPP_API_TOKEN", None)
+    phone_id = getattr(settings, "WHATSAPP_PHONE_NUMBER_ID", None)
+    
+    if whatsapp_token and phone_id:
+        import httpx
+        url = f"https://graph.facebook.com/v20.0/{phone_id}/messages"
+        headers = {
+            "Authorization": f"Bearer {whatsapp_token}",
+            "Content-Type": "application/json"
+        }
+        
+        clean_phone = "".join(filter(str.isdigit, phone))
+        if len(clean_phone) == 10:
+            clean_phone = f"91{clean_phone}"
+            
+        payload = {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": clean_phone,
+            "type": "text",
+            "text": {
+                "body": message_text
+            }
+        }
+        
+        try:
+            async with httpx.AsyncClient() as client:
+                res = await client.post(url, headers=headers, json=payload, timeout=10.0)
+            if res.status_code in (200, 201):
+                await db.cart_pools.update_one(
+                    {"_id": pool_id},
+                    {"$set": {f"last_nudge_sent_at_{roommate_name.lower().replace(' ', '_')}": utcnow().isoformat()}}
+                )
+                return {"success": True, "mode": "automated", "message": f"Nudge sent to {roommate_name}!"}
+            else:
+                return {
+                    "success": False, 
+                    "mode": "fallback", 
+                    "message": f"Meta API returned status {res.status_code}",
+                    "details": res.text
+                }
+        except Exception as e:
+            return {"success": False, "mode": "fallback", "message": f"API request error: {str(e)}"}
+            
+    return {"success": False, "mode": "fallback", "message": "WhatsApp API keys not configured. Opening manual sharing fallback."}
+
+@router.post("/cron/auto-nudge")
+async def cron_auto_nudge():
+    db = get_db()
+    pools_cursor = db.cart_pools.find({"status": "completed", "auto_nudge_enabled": True})
+    pools = await pools_cursor.to_list(length=500)
+    
+    from app.core.config import settings
+    whatsapp_token = getattr(settings, "WHATSAPP_API_TOKEN", None)
+    phone_id = getattr(settings, "WHATSAPP_PHONE_NUMBER_ID", None)
+    if not whatsapp_token or not phone_id:
+         return {"success": False, "message": "WhatsApp API keys not configured. Auto-nudge cron skipped."}
+         
+    import httpx
+    nudge_count = 0
+    
+    for pool in pools:
+        pool_id = pool["_id"]
+        completed_at = pool.get("completed_at")
+        if not completed_at:
+             continue
+             
+        interval_hours = pool.get("nudge_interval_hours", 24)
+        elapsed_seconds = (utcnow() - completed_at).total_seconds()
+        elapsed_hours = elapsed_seconds / 3600
+        
+        if elapsed_hours < interval_hours:
+             continue
+             
+        p = await enrich_pool_document(db, pool)
+        platform = p.get("platform", "delivery").replace("_", " ").title()
+        pool_url = f"https://pocketbuddy.net/pool/{pool_id}"
+        
+        for rName, details in p.get("split_breakdown", {}).items():
+            is_host = rName.lower() == "you" or name_key(rName) == name_key(p.get("created_by_name"))
+            if is_host:
+                 continue
+                 
+            if details.get("paid"):
+                 continue
+                 
+            nudge_key = f"last_nudge_sent_at_{rName.lower().replace(' ', '_')}"
+            last_nudge = p.get(nudge_key)
+            if last_nudge:
+                 try:
+                     last_dt = datetime.datetime.fromisoformat(last_nudge)
+                     if (utcnow() - last_dt).total_seconds() / 3600 < interval_hours:
+                          continue
+                 except Exception:
+                      pass
+                      
+            usr = await db.users.find_one({"full_name": {"$regex": f"^{re.escape(rName)}$", "$options": "i"}})
+            if not usr or not usr.get("phone_number"):
+                 continue
+                 
+            phone = usr["phone_number"]
+            clean_phone = "".join(filter(str.isdigit, phone))
+            if len(clean_phone) == 10:
+                clean_phone = f"91{clean_phone}"
+                
+            formatted_amount = f"{details['total'] / 100:.2f}"
+            message_text = f"Hey {rName}, this is an automated reminder to settle your {platform} split of INR {formatted_amount} for our cart pool. Pay here: {pool_url}"
+            
+            payload = {
+                "messaging_product": "whatsapp",
+                "recipient_type": "individual",
+                "to": clean_phone,
+                "type": "text",
+                "text": {
+                    "body": message_text
+                }
+            }
+            
+            try:
+                url = f"https://graph.facebook.com/v20.0/{phone_id}/messages"
+                headers = {
+                    "Authorization": f"Bearer {whatsapp_token}",
+                    "Content-Type": "application/json"
+                }
+                async with httpx.AsyncClient() as client:
+                    res = await client.post(url, headers=headers, json=payload, timeout=10.0)
+                if res.status_code in (200, 201):
+                    await db.cart_pools.update_one(
+                        {"_id": pool_id},
+                        {"$set": {nudge_key: utcnow().isoformat()}}
+                    )
+                    nudge_count += 1
+            except Exception:
+                pass
+                
+    return {"success": True, "messages_sent": nudge_count}

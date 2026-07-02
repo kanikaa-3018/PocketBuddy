@@ -503,6 +503,8 @@ function CreatePoolForm({
   const [minCart, setMinCart] = useState("199");
   const [fee, setFee] = useState("25");
   const [dur, setDur] = useState("30");
+  const [autoNudge, setAutoNudge] = useState(false);
+  const [nudgeInterval, setNudgeInterval] = useState("24");
   const [busy, setBusy] = useState(false);
   const [showCustomInput, setShowCustomInput] = useState(false);
 
@@ -571,6 +573,8 @@ function CreatePoolForm({
           min_cart_value: Math.round(parseFloat(minCart) * 100),
           delivery_fee: Math.round(parseFloat(fee) * 100),
           expires_at: expires,
+          auto_nudge_enabled: autoNudge,
+          nudge_interval_hours: parseInt(nudgeInterval, 10),
         },
       });
       toast.success("Pool created! Share with your wing.");
@@ -684,6 +688,38 @@ function CreatePoolForm({
             </SelectContent>
           </Select>
         </div>
+
+        <div className="space-y-3 pt-2 border-t border-border/50">
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col">
+              <span className="text-xs font-bold text-foreground">Auto-Nudge Roommates</span>
+              <span className="text-[10px] text-muted-foreground">Automated WhatsApp alerts for unpaid splits</span>
+            </div>
+            <input
+              type="checkbox"
+              checked={autoNudge}
+              onChange={(e) => setAutoNudge(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary accent-primary"
+            />
+          </div>
+          {autoNudge && (
+            <div className="animate-fade-in">
+              <label className="text-xs text-muted-foreground font-semibold">Reminder Frequency</label>
+              <Select value={nudgeInterval} onValueChange={setNudgeInterval}>
+                <SelectTrigger className="mt-1 text-xs h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="12">Every 12 hours</SelectItem>
+                  <SelectItem value="24">Every 24 hours (Daily)</SelectItem>
+                  <SelectItem value="48">Every 2 days</SelectItem>
+                  <SelectItem value="72">Every 3 days</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
+
         <Button
           id="btn-create-pool"
           onClick={create}

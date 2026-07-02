@@ -253,3 +253,10 @@ export async function getWingNettedBalances() {
   return apiRequest("/api/cart-pools/wing/netted-balances");
 }
 
+export async function nudgeRoommate({ pool_id, data }: { pool_id: string; data: { roommate_name: string } }) {
+  return apiRequest(`/api/cart-pools/${pool_id}/nudge`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
