@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     WHATSAPP_API_TOKEN: str = ""
     WHATSAPP_PHONE_NUMBER_ID: str = ""
 
+    # Twilio WhatsApp
+    TWILIO_ACCOUNT_SID: str = ""
+    TWILIO_AUTH_TOKEN: str = ""
+    TWILIO_WHATSAPP_FROM: str = ""  # e.g. whatsapp:+14155238886
+
     class Config:
         env_file = ".env"
 

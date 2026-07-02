@@ -922,34 +922,62 @@ async def nudge_roommate_api(pool_id: str, req: NudgeReq, user_id: str = Depends
     formatted_amount = f"{owed_amount / 100:.2f}"
     
     pool_url = f"https://pocketbuddy.net/pool/{pool_id}"
-    message_text = f"Hey {roommate_name}, please settle your {platform} split of INR {formatted_amount} for our cart pool. You can pay the host and verify here: {pool_url}"
-    
+    message_text = f"Hey {roommate_name}, please settle your {platform} split of INR {formatted_amount} for our cart pool. Pay the host and verify here: {pool_url}"
+
     from app.core.config import settings
+    
+    clean_phone = "".join(filter(str.isdigit, phone))
+    if len(clean_phone) == 10:
+        clean_phone = f"91{clean_phone}"
+
+    # --- TWILIO WHATSAPP (Primary — works out of the box with Sandbox) ---
+    twilio_sid     = getattr(settings, "TWILIO_ACCOUNT_SID", None)
+    twilio_token   = getattr(settings, "TWILIO_AUTH_TOKEN", None)
+    twilio_from_no = getattr(settings, "TWILIO_WHATSAPP_FROM", None)  # e.g. "whatsapp:+14155238886"
+
+    if twilio_sid and twilio_token and twilio_from_no:
+        import httpx, base64
+        auth = base64.b64encode(f"{twilio_sid}:{twilio_token}".encode()).decode()
+        url  = f"https://api.twilio.com/2010-04-01/Accounts/{twilio_sid}/Messages.json"
+        payload = {
+            "From": twilio_from_no,
+            "To":   f"whatsapp:+{clean_phone}",
+            "Body": message_text,
+        }
+        try:
+            async with httpx.AsyncClient() as client:
+                res = await client.post(url, data=payload, headers={"Authorization": f"Basic {auth}"}, timeout=10.0)
+            data = res.json()
+            if res.status_code in (200, 201):
+                await db.cart_pools.update_one(
+                    {"_id": pool_id},
+                    {"$set": {f"last_nudge_sent_at_{roommate_name.lower().replace(' ', '_')}": utcnow().isoformat()}}
+                )
+                return {"success": True, "mode": "twilio", "message": f"WhatsApp nudge sent to {roommate_name}!"}
+            else:
+                error_msg = data.get("message", res.text)
+                # fall through to Meta below
+        except Exception as e:
+            error_msg = str(e)
+
+    # --- META CLOUD API (Fallback — requires verified recipient in sandbox) ---
     whatsapp_token = getattr(settings, "WHATSAPP_API_TOKEN", None)
-    phone_id = getattr(settings, "WHATSAPP_PHONE_NUMBER_ID", None)
+    phone_id       = getattr(settings, "WHATSAPP_PHONE_NUMBER_ID", None)
     
     if whatsapp_token and phone_id:
         import httpx
-        url = f"https://graph.facebook.com/v20.0/{phone_id}/messages"
+        url = f"https://graph.facebook.com/v25.0/{phone_id}/messages"
         headers = {
             "Authorization": f"Bearer {whatsapp_token}",
             "Content-Type": "application/json"
         }
-        
-        clean_phone = "".join(filter(str.isdigit, phone))
-        if len(clean_phone) == 10:
-            clean_phone = f"91{clean_phone}"
-            
         payload = {
             "messaging_product": "whatsapp",
             "recipient_type": "individual",
             "to": clean_phone,
             "type": "text",
-            "text": {
-                "body": message_text
-            }
+            "text": {"body": message_text}
         }
-        
         try:
             async with httpx.AsyncClient() as client:
                 res = await client.post(url, headers=headers, json=payload, timeout=10.0)
@@ -958,18 +986,13 @@ async def nudge_roommate_api(pool_id: str, req: NudgeReq, user_id: str = Depends
                     {"_id": pool_id},
                     {"$set": {f"last_nudge_sent_at_{roommate_name.lower().replace(' ', '_')}": utcnow().isoformat()}}
                 )
-                return {"success": True, "mode": "automated", "message": f"Nudge sent to {roommate_name}!"}
+                return {"success": True, "mode": "meta", "message": f"WhatsApp nudge sent to {roommate_name} via Meta!"}
             else:
-                return {
-                    "success": False, 
-                    "mode": "fallback", 
-                    "message": f"Meta API returned status {res.status_code}",
-                    "details": res.text
-                }
+                return {"success": False, "mode": "fallback", "message": f"Meta API error: {res.text}"}
         except Exception as e:
-            return {"success": False, "mode": "fallback", "message": f"API request error: {str(e)}"}
-            
-    return {"success": False, "mode": "fallback", "message": "WhatsApp API keys not configured. Opening manual sharing fallback."}
+            return {"success": False, "mode": "fallback", "message": f"Meta request error: {str(e)}"}
+
+    return {"success": False, "mode": "fallback", "message": "No WhatsApp provider configured. Use manual sharing."}
 
 @router.post("/cron/auto-nudge")
 async def cron_auto_nudge():

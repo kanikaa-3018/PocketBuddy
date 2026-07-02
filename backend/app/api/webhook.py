@@ -240,8 +240,8 @@ async def try_auto_verify_pool_payment(db, user_id: str, text: str, amount_from_
             sender_name = match.group(1).strip()
             break
 
-    # Search for completed pools in the last 48 hours hosted by this user
-    since = datetime.datetime.utcnow() - datetime.timedelta(hours=48)
+    # Search for completed pools in the last 7 days hosted by this user
+    since = datetime.datetime.utcnow() - datetime.timedelta(days=7)
     pools_cursor = db.cart_pools.find({
         "host_id": user_id,
         "status": "completed",
@@ -273,8 +273,8 @@ async def try_auto_verify_pool_payment(db, user_id: str, text: str, amount_from_
             roommate_payment = next((p for p in payments if local_name_key(p["name"]) == local_name_key(roommate)), None)
 
             if not roommate_payment or roommate_payment.get("status") in ("pending", "needs_review"):
-                # Compare amount (allowing ±100 paise i.e. 1 rupee tolerance)
-                if abs(total_owed - amount_paise) <= 100:
+                # Compare amount (allowing ±500 paise i.e. 5 rupee tolerance for rounding)
+                if abs(total_owed - amount_paise) <= 500:
                     confidence = "medium"
                     if sender_name:
                         r_key = local_name_key(roommate)
