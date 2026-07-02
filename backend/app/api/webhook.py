@@ -284,6 +284,20 @@ async def ingest_notification(
         if not client_pairing_code or profile["pairing_code"] != client_pairing_code:
             raise HTTPException(status_code=403, detail="Invalid pairing code")
 
+    if req.type == "unpair" or req.source == "unpair":
+        await db.profiles.update_one(
+            {"_id": user_id},
+            {
+                "$set": {
+                    "companion_paired": False,
+                    "companion_device_name": None,
+                    "companion_last_sync": None,
+                    "companion_device_id": None
+                }
+            }
+        )
+        return {"status": "ok", "message": "unpaired_successfully"}
+
     raw_body = req.text or req.body or ""
     notification_preview = mask_notification_text(raw_body)
     notification_source = req.captureSource or req.type or req.source or "unknown"

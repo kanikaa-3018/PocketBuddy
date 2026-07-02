@@ -32,6 +32,7 @@ import com.pocketbuddy.connector.PocketBuddyNotificationListener
 import com.pocketbuddy.connector.R
 import com.pocketbuddy.connector.config.ConnectorConfigStore
 import com.pocketbuddy.connector.identity.DeviceIdentityStore
+import com.pocketbuddy.connector.network.WebhookClient
 import com.pocketbuddy.connector.retry.WebhookRetryQueue
 
 class SetupActivity : Activity() {
@@ -508,6 +509,13 @@ class SetupActivity : Activity() {
     }
 
     private fun resetConnectorConfig() {
+        val userId = configStore.userId()
+        val deviceId = identityStore.deviceId()
+        if (!userId.isNullOrBlank()) {
+            val client = WebhookClient(applicationContext)
+            client.unpair(deviceId, userId)
+        }
+
         configStore.clearRuntimeConfig()
         currentAccountEmail = null
         webhookUrlInput.setText(configStore.webhookUrl())
