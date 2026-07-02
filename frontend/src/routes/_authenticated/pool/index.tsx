@@ -254,6 +254,7 @@ function PoolList() {
 }
 
 function PoolCard({ pool }: { pool: Pool }) {
+  const { user } = useAuth();
   const minsLeft = Math.max(
     0,
     Math.round((new Date(pool.expires_at).getTime() - Date.now()) / 60000),
