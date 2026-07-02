@@ -69,10 +69,10 @@ class SetupActivity : Activity() {
     private fun handleDeepLinkIntent(intent: Intent?) {
         val data: Uri = intent?.data ?: return
         if (data.scheme == "pocketbuddy" && data.host == "configure") {
-            val webhookUrl = data.getQueryParameter("webhook_url")
-            val userId = data.getQueryParameter("user_id")
-            val webhookToken = data.getQueryParameter("webhook_token")
-            val accountEmail = data.getQueryParameter("account_email")
+            val webhookUrl = data.getQueryParameter("webhook_url")?.trim()?.removeSuffix("\\")
+            val userId = data.getQueryParameter("user_id")?.trim()?.removeSuffix("\\")
+            val webhookToken = data.getQueryParameter("webhook_token")?.trim()?.removeSuffix("\\")
+            val accountEmail = data.getQueryParameter("account_email")?.trim()?.removeSuffix("\\")
 
             if (!webhookUrl.isNullOrBlank() && !userId.isNullOrBlank()) {
                 currentAccountEmail = accountEmail
@@ -405,7 +405,8 @@ class SetupActivity : Activity() {
             else -> "This phone can now send payment events to PocketBuddy."
         }
 
-        if (ready && !accountEmail.isNullOrBlank()) {
+        val hasConfig = !userId.isNullOrBlank()
+        if (hasConfig && !accountEmail.isNullOrBlank()) {
             accountEmailText.text = "Connected Account: $accountEmail"
             accountEmailText.visibility = View.VISIBLE
             connectionBannerText.text = "Linked to $accountEmail"
@@ -428,9 +429,9 @@ class SetupActivity : Activity() {
     }
 
     private fun saveConnectorConfig() {
-        val webhookUrl = webhookUrlInput.text.toString().trim()
-        val userId = userIdInput.text.toString().trim()
-        val webhookToken = webhookTokenInput.text.toString().trim()
+        val webhookUrl = webhookUrlInput.text.toString().trim().removeSuffix("\\")
+        val userId = userIdInput.text.toString().trim().removeSuffix("\\")
+        val webhookToken = webhookTokenInput.text.toString().trim().removeSuffix("\\")
 
         if (!webhookUrl.startsWith("http://") && !webhookUrl.startsWith("https://")) {
             webhookUrlInput.error = "Use a full http:// or https:// URL"
