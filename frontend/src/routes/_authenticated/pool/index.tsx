@@ -37,6 +37,7 @@ const FALLBACK_PLATFORMS = [
   { v: "swiggy_instamart", l: "Swiggy Instamart" },
   { v: "bigbasket", l: "BigBasket" },
   { v: "jiomart", l: "JioMart" },
+  { v: "amazon_now", l: "Amazon Now" },
 ];
 
 const BRAND_THEMES: Record<string, { bg: string; text: string; name: string; gradient: string; accent: string }> = {
@@ -75,6 +76,13 @@ const BRAND_THEMES: Record<string, { bg: string; text: string; name: string; gra
     gradient: "from-[#0078AD] to-[#005B8C]",
     accent: "text-[#0078AD]"
   },
+  amazon_now: {
+    bg: "bg-[#FF9900]",
+    text: "text-black",
+    name: "Amazon Now",
+    gradient: "from-[#19222D] to-[#FF9900]",
+    accent: "text-[#FF9900]"
+  },
 };
 
 function getPlatformBorderColor(platform: string): string {
@@ -84,6 +92,7 @@ function getPlatformBorderColor(platform: string): string {
     swiggy_instamart: "border-l-[#FC8019]",
     bigbasket: "border-l-[#84C225]",
     jiomart: "border-l-[#0078AD]",
+    amazon_now: "border-l-[#FF9900]",
   };
   return map[platform] || "border-l-primary";
 }
@@ -94,6 +103,7 @@ function PoolList() {
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<"active" | "completed" | "cancelled">("active");
+  const now = Date.now();
 
   const { data: profile } = useQuery({
     queryKey: ["profile", user?.id],
@@ -179,7 +189,7 @@ function PoolList() {
           </Sheet>
         ) : (
           <Dialog open={open} onOpenChange={setOpen}>
-            <DialogContent id="dialog-create-pool" className="max-h-[85vh] max-w-xl overflow-y-auto bg-background text-foreground border border-border">
+            <DialogContent id="dialog-create-pool" aria-describedby={undefined} className="max-h-[85vh] max-w-xl overflow-y-auto bg-background text-foreground border border-border">
               {createPoolForm}
             </DialogContent>
           </Dialog>

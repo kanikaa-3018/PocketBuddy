@@ -28,6 +28,9 @@ import {
   paymentConfirm,
   paymentVerify,
   nudgeRoommate,
+  createAmazonCheckoutSession,
+  confirmAmazonCheckoutCallback,
+  processAmazonRoommatePayment,
 } from "@/lib/api/db.functions";
 
 export const Route = createFileRoute("/pool/$id")({
@@ -74,6 +77,13 @@ const BRAND_THEMES: Record<string, { bg: string; text: string; name: string; gra
     gradient: "from-[#0078AD] to-[#005B8C]",
     accent: "text-[#0078AD]"
   },
+  amazon_now: {
+    bg: "bg-[#FF9900]",
+    text: "text-black",
+    name: "Amazon Now",
+    gradient: "from-[#19222D] to-[#FF9900]",
+    accent: "text-[#FF9900]"
+  },
 };
 
 function formatExternalUrl(url: string | null | undefined): string {
@@ -103,8 +113,15 @@ function isHostParticipant(pool: Pool | null | undefined, participantName: strin
   const pName = participantName.trim().toLowerCase();
   const hostName = (pool.created_by_name ?? "").trim().toLowerCase();
 
-  if (pName === "host" || pName === "you" || pName === hostName) {
+  if (pName === "host" || pName === hostName) {
     return true;
+  }
+
+  if (pName === "you") {
+    if (user && pool.host_id === user.id) {
+      return true;
+    }
+    return false;
   }
 
   if (user && user.fullName) {
@@ -182,6 +199,10 @@ function PoolDetail() {
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReasonOption, setCancelReasonOption] = useState("Minimum cart value not met");
   const [cancelCustomReason, setCancelCustomReason] = useState("");
+
+  // Amazon Pay integration states
+  const [showAmazonMockGateway, setShowAmazonMockGateway] = useState(false);
+  const [amazonSessionId, setAmazonSessionId] = useState("");
 
   // Track toasting status to avoid spamming on 3-second polls
   const [hasToastedStatus, setHasToastedStatus] = useState<string | null>(null);
@@ -553,6 +574,70 @@ function PoolDetail() {
     }
   }
 
+  async function initiateAmazonCheckout() {
+    setBusy(true);
+    try {
+      const overheadValue = Math.round((parseFloat(finalDeliveryFee || "0") + parseFloat(finalSurgeFee || "0")) * 100);
+      const discountValue = Math.round(parseFloat(finalDiscount || "0") * 100);
+      
+      const res = await createAmazonCheckoutSession({
+        pool_id: id,
+        data: {
+          final_overhead: overheadValue,
+          final_discount: discountValue,
+          checkout_notes: checkoutNotes.trim() || null,
+          upi_id: hostUpi.trim() || null,
+        }
+      });
+      
+      setAmazonSessionId(res.checkoutSessionId);
+      setCheckoutOpen(false);
+      setShowAmazonMockGateway(true);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to create Amazon checkout session");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleAmazonGatewayCallback() {
+    setBusy(true);
+    try {
+      await confirmAmazonCheckoutCallback({
+        pool_id: id,
+        session_id: amazonSessionId,
+      });
+      toast.success("Amazon Pay Checkout approved & order split finalized!");
+      setShowAmazonMockGateway(false);
+      qc.invalidateQueries({ queryKey: ["pool", id] });
+      qc.invalidateQueries({ queryKey: ["pool-items", id] });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to approve Amazon Pay checkout");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleAmazonRoommateReimburse(roommateName: string, amount: number) {
+    setBusy(true);
+    try {
+      await processAmazonRoommatePayment({
+        pool_id: id,
+        data: {
+          roommate_name: roommateName,
+          amount: amount,
+        }
+      });
+      toast.success("Split settled instantly via Amazon Pay Later!");
+      qc.invalidateQueries({ queryKey: ["pool", id] });
+      qc.invalidateQueries({ queryKey: ["pool-items", id] });
+    } catch (err: any) {
+      toast.error(err.message || "Reimbursement failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function cancelPool(reason: string) {
     setBusy(true);
     try {
@@ -819,6 +904,7 @@ function PoolDetail() {
           swiggy_instamart: "border-t-[#FC8019]",
           bigbasket: "border-t-[#84C225]",
           jiomart: "border-t-[#0078AD]",
+          amazon_now: "border-t-[#FF9900]",
         } as Record<string, string>)[pool.platform] || "border-t-primary"
       } px-6 py-8 text-foreground flex flex-col justify-between relative overflow-hidden rounded-2xl shadow-lg shadow-black/30`}>
         <div className="absolute right-0 top-0 opacity-5 transform translate-x-4 -translate-y-4 pointer-events-none">
@@ -1207,134 +1293,178 @@ function PoolDetail() {
               <Badge className="bg-white/5 border border-border text-foreground text-xs font-bold uppercase tracking-wider px-2 py-0.5">VPA Direct</Badge>
             </div>
 
-            {!pool.upi_id ? (
-              <div className="flex gap-2.5 items-start text-xs text-destructive bg-destructive/5 border border-destructive/20 rounded-xl p-4">
-                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                <p className="font-semibold leading-relaxed">
-                  No host UPI address found. Contact <strong>{pool.created_by_name}</strong> to pay manually.
-                </p>
+            <div className="space-y-4">
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest pl-0.5">Select roommate to pay:</label>
+                <select
+                  className="w-full bg-surface text-foreground border border-border rounded-md py-2 px-3 text-xs font-bold uppercase tracking-wider focus:outline-none focus:border-primary/40"
+                  value={selectedPayeeName || name}
+                  onChange={(e) => setSelectedPayeeName(e.target.value)}
+                >
+                  <option value="" disabled>-- Choose Roommate --</option>
+                  {participants.filter(p => splitBreakdown[p]).map(p => (
+                    <option key={p} value={p}>
+                      {p} ({rupees(splitBreakdown[p].total)}) - {
+                        splitBreakdown[p].paymentStatus === "verified"
+                          ? "Verified"
+                          : splitBreakdown[p].paymentStatus === "pending"
+                            ? "Pending Verify"
+                            : splitBreakdown[p].paymentStatus === "host"
+                              ? "Host Mode"
+                              : "Unpaid"
+                      }
+                    </option>
+                  ))}
+                </select>
               </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="flex flex-col gap-2">
-                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest pl-0.5">Select roommate to pay:</label>
-                  <select
-                    className="w-full bg-surface text-foreground border border-border rounded-md py-2 px-3 text-xs font-bold uppercase tracking-wider focus:outline-none focus:border-primary/40"
-                    value={selectedPayeeName || name}
-                    onChange={(e) => setSelectedPayeeName(e.target.value)}
-                  >
-                    <option value="" disabled>-- Choose Roommate --</option>
-                    {participants.filter(p => splitBreakdown[p]).map(p => (
-                      <option key={p} value={p}>
-                        {p} ({rupees(splitBreakdown[p].total)}) - {
-                          splitBreakdown[p].paymentStatus === "verified"
-                            ? "Verified"
-                            : splitBreakdown[p].paymentStatus === "pending"
-                              ? "Pending Verify"
-                              : splitBreakdown[p].paymentStatus === "host"
-                                ? "Host Mode"
-                                : "Unpaid"
-                        }
-                      </option>
-                    ))}
-                  </select>
-                </div>
 
-                {payeeDetails ? (
-                  <div className="bg-surface rounded-xl p-5 border border-border flex flex-col items-center justify-center text-center space-y-4">
-                    <div className="text-center space-y-1">
-                      <p className="text-xs text-zinc-500 font-bold uppercase tracking-wider">Final Pay Share</p>
-                      <h4 className="text-2xl font-black text-foreground tnum">{rupees(payeeDetails.total)}</h4>
+              {payeeDetails ? (
+                <div className="bg-surface rounded-xl p-5 border border-border flex flex-col items-center justify-center text-center space-y-4">
+                  <div className="text-center space-y-1">
+                    <p className="text-xs text-zinc-500 font-bold uppercase tracking-wider">Final Pay Share</p>
+                    <h4 className="text-2xl font-black text-foreground tnum">{rupees(payeeDetails.total)}</h4>
+                    {pool.upi_id && (
                       <p className="text-xs text-muted-foreground">UPI ID: <code className="bg-white/5 px-2 py-0.5 rounded border border-border font-mono select-all text-foreground text-xs">{pool.upi_id}</code></p>
-                    </div>
-
-                    {payeeDetails.paymentStatus === "verified" ? (
-                      <div className="flex items-center gap-1.5 text-xs text-green-500 bg-green-600/10 border border-green-600/20 px-4 py-2 rounded-full font-bold">
-                        <Check className="h-4 w-4" /> Paid & Confirmed
-                      </div>
-                    ) : payeeDetails.paymentStatus === "pending" ? (
-                      <div className="text-center space-y-1.5">
-                        <div className="inline-flex items-center gap-1.5 text-xs text-amber-500 bg-amber-500/10 border border-amber-500/20 px-4 py-2 rounded-full font-bold">
-                          Pending Verification
-                        </div>
-                        <p className="text-xs text-muted-foreground font-mono">UTR: {payeeDetails.utr}</p>
-                      </div>
-                    ) : payeeDetails.paymentStatus === "host" ? (
-                      <div className="flex items-center gap-1.5 text-xs text-green-500 bg-green-600/10 border border-green-600/20 px-4 py-2 rounded-full font-bold">
-                        <Check className="h-4 w-4" /> Host User (Automatically Verified)
-                      </div>
-                    ) : (
-                      <div className="w-full space-y-4 text-center">
-                        {/* QR Code Container for desktop */}
-                        <div className="hidden sm:flex flex-col items-center gap-2 p-4 bg-white rounded-xl border border-border max-w-[200px] mx-auto shadow-md">
-                          <img src={qrCodeUrl} alt="UPI Pay QR" className="h-32 w-32" />
-                          <span className="text-xs text-gray-500 font-black uppercase tracking-wider">Scan with UPI App</span>
-                        </div>
-
-                        {/* Step 1: Make Payment */}
-                        <div className="w-full space-y-2 text-left bg-surface-raised/40 p-4 rounded-xl border border-border">
-                          <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
-                            <span className="bg-primary text-primary-foreground w-4 h-4 rounded-full inline-flex items-center justify-center text-xs font-bold">1</span>
-                            <span>Pay Host</span>
-                          </p>
-                          {/* Click to Pay Button (All Screens) */}
-                          <a
-                            href={upiPayUrl}
-                            className="block w-full"
-                            onClick={() => {
-                              toast.info("Opening UPI mobile app...");
-                            }}
-                          >
-                            <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/95 flex items-center justify-center gap-1.5 h-10 font-black uppercase text-xs tracking-wider">
-                              Pay via UPI App <ExternalLink className="h-4 w-4" />
-                            </Button>
-                          </a>
-                          <p className="text-xs text-muted-foreground mt-1.5 leading-normal">
-                            Transfer exactly <strong className="text-foreground">{rupees(payeeDetails.total)}</strong> to the host.
-                          </p>
-                        </div>
-
-                        {/* Step 2: Confirm Payment */}
-                        <div className="w-full space-y-2 text-left bg-surface-raised/40 p-4 rounded-xl border border-border">
-                          <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
-                            <span className="bg-success text-white w-4 h-4 rounded-full inline-flex items-center justify-center text-xs font-bold">2</span>
-                            <span>Verify UTR</span>
-                          </p>
-                          <Button
-                            className="w-full text-xs font-black uppercase tracking-wider bg-success text-white hover:bg-success/90 flex items-center justify-center gap-1.5 h-10 shadow-sm"
-                            onClick={() => {
-                              setConfirmUtrOpen(true);
-                            }}
-                          >
-                            Enter 12-Digit UTR
-                          </Button>
-                          <p className="text-xs text-muted-foreground mt-1.5 leading-normal">
-                            Enter the UPI Ref / UTR number from your receipt to notify the host to verify your transfer.
-                          </p>
-                        </div>
-                      </div>
                     )}
                   </div>
-                ) : (
-                  <div className="text-center p-6 border border-dashed border-border rounded-xl bg-surface-raised/40 text-xs text-muted-foreground font-semibold">
-                    Select your name in the dropdown list above to fetch splits, scan QR, and confirm transfer.
-                  </div>
-                )}
 
-                {/* General payment checklist */}
-                <div className="bg-surface p-4 rounded-xl border border-border space-y-2">
-                  <p className="text-xs font-bold uppercase tracking-widest text-zinc-500">
-                    Settlement Checklist:
-                  </p>
-                  <ol className="list-decimal pl-4 text-xs space-y-2 text-zinc-400 leading-relaxed">
-                    <li>Select your roommate name from the dropdown menu.</li>
-                    <li>Pay the split total to the host's QR code or VPA.</li>
-                    <li>Fetch the 12-digit UTR reference ID from your transaction receipt.</li>
-                    <li>Enter and submit the UTR to complete the verification checklist.</li>
-                  </ol>
+                  {payeeDetails.paymentStatus === "verified" ? (
+                    <div className="flex items-center gap-1.5 text-xs text-green-500 bg-green-600/10 border border-green-600/20 px-4 py-2 rounded-full font-bold">
+                      <Check className="h-4 w-4" /> Paid & Confirmed
+                    </div>
+                  ) : payeeDetails.paymentStatus === "pending" ? (
+                    <div className="text-center space-y-1.5">
+                      <div className="inline-flex items-center gap-1.5 text-xs text-amber-500 bg-amber-500/10 border border-amber-500/20 px-4 py-2 rounded-full font-bold">
+                        Pending Verification
+                      </div>
+                      <p className="text-xs text-muted-foreground font-mono">UTR: {payeeDetails.utr}</p>
+                    </div>
+                  ) : payeeDetails.paymentStatus === "host" ? (
+                    <div className="flex items-center gap-1.5 text-xs text-green-500 bg-green-600/10 border border-green-600/20 px-4 py-2 rounded-full font-bold">
+                      <Check className="h-4 w-4" /> Host User (Automatically Verified)
+                    </div>
+                  ) : (
+                    <div className="w-full space-y-4 text-center">
+                      
+                      {/* UPI Section: Rendered ONLY if pool.upi_id exists */}
+                      {pool.upi_id ? (
+                        <>
+                          {/* QR Code Container for desktop */}
+                          <div className="hidden sm:flex flex-col items-center gap-2 p-4 bg-white rounded-xl border border-border max-w-[200px] mx-auto shadow-md">
+                            <img src={qrCodeUrl} alt="UPI Pay QR" className="h-32 w-32" />
+                            <span className="text-xs text-gray-500 font-black uppercase tracking-wider">Scan with UPI App</span>
+                          </div>
+
+                          {/* Step 1: Make Payment */}
+                          <div className="w-full space-y-2 text-left bg-surface-raised/40 p-4 rounded-xl border border-border">
+                            <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
+                              <span className="bg-primary text-primary-foreground w-4 h-4 rounded-full inline-flex items-center justify-center text-xs font-bold">1</span>
+                              <span>Pay Host</span>
+                            </p>
+                            {/* Click to Pay Button (All Screens) */}
+                            <a
+                              href={upiPayUrl}
+                              className="block w-full"
+                              onClick={() => {
+                                toast.info("Opening UPI mobile app...");
+                              }}
+                            >
+                              <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/95 flex items-center justify-center gap-1.5 h-10 font-black uppercase text-xs tracking-wider">
+                                Pay via UPI App <ExternalLink className="h-4 w-4" />
+                              </Button>
+                            </a>
+                            <p className="text-xs text-muted-foreground mt-1.5 leading-normal">
+                              Transfer exactly <strong className="text-foreground">{rupees(payeeDetails.total)}</strong> to the host.
+                            </p>
+                          </div>
+
+                          {/* Step 2: Confirm Payment */}
+                          <div className="w-full space-y-2 text-left bg-surface-raised/40 p-4 rounded-xl border border-border">
+                            <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
+                              <span className="bg-success text-white w-4 h-4 rounded-full inline-flex items-center justify-center text-xs font-bold">2</span>
+                              <span>Verify UTR</span>
+                            </p>
+                            <Button
+                              className="w-full text-xs font-black uppercase tracking-wider bg-success text-white hover:bg-success/90 flex items-center justify-center gap-1.5 h-10 shadow-sm"
+                              onClick={() => {
+                                setConfirmUtrOpen(true);
+                              }}
+                            >
+                              Enter 12-Digit UTR
+                            </Button>
+                            <p className="text-xs text-muted-foreground mt-1.5 leading-normal">
+                              Enter the UPI Ref / UTR number from your receipt to notify the host to verify your transfer.
+                            </p>
+                          </div>
+                        </>
+                      ) : (
+                        /* UPI Missing warning: rendered instead of Step 1 & Step 2 */
+                        <div className="space-y-3">
+                          <div className="flex gap-2.5 items-start text-xs text-destructive bg-destructive/5 border border-destructive/20 rounded-xl p-4 text-left">
+                            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                            <p className="font-semibold leading-relaxed">
+                              No host UPI address found. Contact <strong>{pool.created_by_name}</strong> to pay manually.
+                            </p>
+                          </div>
+                          {pool.host_phone && (
+                            <Button
+                              onClick={() => {
+                                const cleanPhone = pool.host_phone.replace(/\D/g, "");
+                                const targetPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+                                const text = encodeURIComponent(
+                                  `Hey ${pool.created_by_name}, your ${pool.platform_display_label || "delivery"} cart pool is settled but no UPI VPA was provided in PocketBuddy. Can you please share your UPI ID so I can settle my split?`
+                                );
+                                window.open(`https://wa.me/${targetPhone}?text=${text}`, "_blank");
+                              }}
+                              className="w-full text-xs font-black uppercase tracking-wider bg-green-600 hover:bg-green-700 text-white flex items-center justify-center gap-1.5 h-10 shadow-sm rounded-xl"
+                            >
+                              <span>Contact {pool.created_by_name} on WhatsApp</span>
+                            </Button>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Step 3: Instant Settle via Amazon Pay Later - ALWAYS available */}
+                      <div className="w-full space-y-2 text-left bg-surface-raised/40 p-4 rounded-xl border border-border">
+                        <p className="text-xs font-bold text-[#FF9900] uppercase tracking-widest flex items-center gap-1.5">
+                          <span className="bg-[#FF9900] text-black w-4 h-4 rounded-full inline-flex items-center justify-center text-xs font-bold">{pool.upi_id ? '3' : '1'}</span>
+                          <span>Amazon Pay Later</span>
+                        </p>
+                        <Button
+                          className="w-full text-xs font-black uppercase tracking-wider bg-[#FF9900] hover:bg-[#E48A00] text-black flex items-center justify-center gap-1.5 h-10 shadow-sm border border-[#D58000]"
+                          onClick={() => {
+                            handleAmazonRoommateReimburse(selectedPayeeName || name, payeeDetails.total);
+                          }}
+                          disabled={busy}
+                        >
+                          Pay Instantly (Later)
+                        </Button>
+                        <p className="text-xs text-muted-foreground mt-1.5 leading-normal">
+                          Settle instantly using pre-authorized billing agreement. No manual UTR checks needed!
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
+              ) : (
+                <div className="text-center p-6 border border-dashed border-border rounded-xl bg-surface-raised/40 text-xs text-muted-foreground font-semibold">
+                  Select your name in the dropdown list above to fetch splits, scan QR, and confirm transfer.
+                </div>
+              )}
+
+              {/* General payment checklist */}
+              <div className="bg-surface p-4 rounded-xl border border-border space-y-2">
+                <p className="text-xs font-bold uppercase tracking-widest text-zinc-500">
+                  Settlement Checklist:
+                </p>
+                <ol className="list-decimal pl-4 text-xs space-y-2 text-zinc-400 leading-relaxed">
+                  <li>Select your roommate name from the dropdown menu.</li>
+                  <li>Pay the split total to the host's QR code or VPA.</li>
+                  <li>Fetch the 12-digit UTR reference ID from your transaction receipt.</li>
+                  <li>Enter and submit the UTR to complete the verification checklist.</li>
+                </ol>
               </div>
-            )}
+            </div>
           </Card>
         )}
 
@@ -1677,13 +1807,25 @@ function PoolDetail() {
             </div>
           </div>
 
-          <DialogFooter className="mt-2">
-            <Button variant="outline" onClick={() => setCheckoutOpen(false)} disabled={busy}>
-              Close
-            </Button>
-            <Button onClick={completeCheckout} disabled={busy} className="bg-green-600 hover:bg-green-700 text-white">
-              {busy ? "Finalizing..." : "Calculate Split & Notify"}
-            </Button>
+          <DialogFooter className="mt-2 flex flex-col gap-2 sm:flex-col sm:space-x-0">
+            <div className="flex flex-col gap-2 w-full">
+              <Button 
+                onClick={initiateAmazonCheckout} 
+                disabled={busy} 
+                className="w-full bg-[#FF9900] hover:bg-[#E48A00] text-black font-extrabold flex items-center justify-center gap-2 rounded-xl py-2.5 h-11 border border-[#D58000] shadow-sm tracking-wide"
+              >
+                <span>{busy ? "Connecting..." : "Pay & Split via Amazon Pay"}</span>
+              </Button>
+              
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setCheckoutOpen(false)} disabled={busy} className="flex-1 rounded-xl h-10">
+                  Close
+                </Button>
+                <Button onClick={completeCheckout} disabled={busy} className="flex-1 bg-green-600 hover:bg-green-700 text-white rounded-xl h-10 font-bold">
+                  {busy ? "Finalizing..." : "Manual UPI Split"}
+                </Button>
+              </div>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1819,6 +1961,79 @@ function PoolDetail() {
               Awesome
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Amazon Pay Sandbox Gateway Overlay */}
+      <Dialog open={showAmazonMockGateway} onOpenChange={(val) => {
+        if (!val) {
+          setShowAmazonMockGateway(false);
+          setCheckoutOpen(true);
+        }
+      }}>
+        <DialogContent id="dialog-amazon-pay-gateway" className="max-w-[420px] bg-white text-black p-0 border border-zinc-200 overflow-hidden shadow-2xl rounded-2xl">
+          {/* Header Bar */}
+          <div className="bg-[#19222D] text-white px-5 py-4 flex items-center justify-between border-b border-zinc-800">
+            <div className="flex items-center gap-1.5">
+              <span className="font-extrabold text-lg tracking-tight text-[#FF9900]">amazon</span>
+              <span className="font-light text-lg text-zinc-300">pay</span>
+            </div>
+            <Badge variant="outline" className="text-[#FF9900] border-[#FF9900]/40 font-mono text-[9px] uppercase tracking-widest px-2 py-0.5">
+              Sandbox Mode
+            </Badge>
+          </div>
+
+          <div className="p-6 space-y-5 text-left text-sm">
+            <div className="border-b border-zinc-100 pb-3">
+              <h2 className="text-base font-bold text-zinc-800 tracking-tight">Confirm Payment & Stored Consent</h2>
+              <p className="text-[11px] text-zinc-500 mt-0.5">
+                Authorise PocketBuddy to charge your payment method for this pool.
+              </p>
+            </div>
+
+            <div className="bg-zinc-50 border border-zinc-200/60 rounded-xl p-4 space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-zinc-500 font-medium">Merchant:</span>
+                <span className="text-zinc-800 font-bold">PocketBuddy Pool Checkout</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-zinc-500 font-medium">Transaction ID:</span>
+                <span className="text-zinc-800 font-mono select-all font-semibold">{amazonSessionId.slice(0, 18)}...</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-zinc-500 font-medium">Authorized Amount:</span>
+                <span className="text-zinc-800 font-extrabold text-sm">{rupees(Math.round(((items ?? []).reduce((s: number, it: any) => s + it.estimated_price, 0) + (parseFloat(finalDeliveryFee || "0") + parseFloat(finalSurgeFee || "0")) * 100 - parseFloat(finalDiscount || "0") * 100)))}</span>
+              </div>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 text-amber-800 text-[11px] leading-relaxed rounded-xl p-3.5 flex gap-2 font-medium">
+              <Sparkles className="h-4 w-4 shrink-0 text-[#FF9900]" />
+              <div>
+                <strong>Prototype Notice:</strong> This flow simulates a production-grade Amazon Pay Checkout Session. Confirming will finalize the pool split and notify your roommates.
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 pt-2">
+              <Button 
+                onClick={handleAmazonGatewayCallback} 
+                disabled={busy} 
+                className="w-full bg-[#FF9900] hover:bg-[#E48A00] text-black font-extrabold py-2.5 h-11 border border-[#D58000] shadow-sm rounded-xl"
+              >
+                {busy ? "Authorizing..." : "Authorize and Pay"}
+              </Button>
+              <Button 
+                variant="ghost" 
+                onClick={() => {
+                  setShowAmazonMockGateway(false);
+                  setCheckoutOpen(true);
+                }} 
+                disabled={busy} 
+                className="w-full text-zinc-500 hover:text-zinc-700 hover:bg-zinc-100/50 py-2 text-xs font-bold"
+              >
+                Cancel and return to checkout
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </AppShell>

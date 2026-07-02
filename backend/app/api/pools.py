@@ -275,6 +275,10 @@ async def get_roommate_reliability(db, wing_label: str) -> dict:
 
 async def enrich_pool_document(db, p: dict, current_user_id: Optional[str] = None) -> dict:
     pool_id = p["_id"] if "_id" in p else p.get("id")
+    host_id = p.get("host_id")
+    host_user = await db.users.find_one({"_id": host_id}) if host_id else None
+    p["host_phone"] = host_user.get("phone_number", "") if host_user else ""
+    
     items_cursor = db.cart_pool_items.find({"pool_id": pool_id})
     items = await items_cursor.to_list(length=200)
     
@@ -1083,3 +1087,212 @@ async def cron_auto_nudge():
                 pass
                 
     return {"success": True, "messages_sent": nudge_count}
+
+
+# ── Amazon Pay E2E Integration (V2 API Compliant) ───────────────────────────
+
+class AmazonCheckoutReq(BaseModel):
+    final_overhead: int
+    final_discount: int
+    checkout_notes: Optional[str] = None
+    upi_id: Optional[str] = None
+
+class RoommateAmznPayReq(BaseModel):
+    roommate_name: str
+    amount: int
+
+@router.post("/{pool_id}/amazon-checkout-session")
+async def create_amazon_checkout_session(
+    pool_id: str,
+    req: AmazonCheckoutReq,
+    user_id: str = Depends(get_current_user)
+):
+    db = get_db()
+    pool = await db.cart_pools.find_one({"_id": pool_id})
+    if not pool:
+        raise HTTPException(status_code=404, detail="Pool not found")
+        
+    if pool.get("host_id") != user_id:
+        raise HTTPException(status_code=403, detail="Only the pool host can initiate Amazon Pay checkout")
+        
+    # Generate mock Amazon Pay session ID in region S01 format
+    checkout_session_id = f"S01-{uuid.uuid4().hex[:14].upper()}"
+    
+    # Calculate net total amount in paise to display in INR
+    items_cursor = db.cart_pool_items.find({"pool_id": pool_id})
+    items = await items_cursor.to_list(length=1000)
+    items_total = sum(it.get("estimated_price", 0) for it in items if it.get("is_purchased", True))
+    net_total = max(0, items_total + req.final_overhead - req.final_discount)
+    
+    # Store standard Amazon Pay V2 session state
+    amazon_checkout = {
+        "checkoutSessionId": checkout_session_id,
+        "statusDetails": {"state": "Open"},
+        "webCheckoutDetails": {
+            "checkoutReviewReturnUrl": f"/pool/{pool_id}?amazonCheckoutSessionId={checkout_session_id}"
+        },
+        "paymentDetails": {
+            "paymentIntent": "AuthorizeWithCapture",
+            "chargeAmount": {
+                "amount": f"{net_total / 100:.2f}",
+                "currencyCode": "INR"
+            }
+        },
+        "final_overhead": req.final_overhead,
+        "final_discount": req.final_discount,
+        "checkout_notes": req.checkout_notes,
+        "upi_id": req.upi_id,
+        "created_at": utcnow()
+    }
+    
+    await db.cart_pools.update_one(
+        {"_id": pool_id},
+        {"$set": {"amazon_checkout": amazon_checkout}}
+    )
+    
+    return {
+        "checkoutSessionId": checkout_session_id,
+        "amazonPayRedirectUrl": f"/mock-amazon-pay-gateway?pool_id={pool_id}&checkoutSessionId={checkout_session_id}",
+        "statusDetails": {"state": "Open"}
+    }
+
+@router.post("/{pool_id}/amazon-checkout-session/{checkout_session_id}/complete")
+async def complete_amazon_checkout_session(
+    pool_id: str,
+    checkout_session_id: str,
+    user_id: str = Depends(get_current_user)
+):
+    db = get_db()
+    pool = await db.cart_pools.find_one({"_id": pool_id})
+    if not pool:
+        raise HTTPException(status_code=404, detail="Pool not found")
+        
+    amzn_checkout = pool.get("amazon_checkout")
+    if not amzn_checkout or amzn_checkout.get("checkoutSessionId") != checkout_session_id:
+        raise HTTPException(status_code=400, detail="Invalid Amazon Pay checkout session ID")
+        
+    # Mark pool as completed and log host transaction
+    final_overhead = amzn_checkout.get("final_overhead", 0)
+    final_discount = amzn_checkout.get("final_discount", 0)
+    checkout_notes = amzn_checkout.get("checkout_notes")
+    upi_id = amzn_checkout.get("upi_id")
+    
+    # Gather items and calculate host split
+    items_cursor = db.cart_pool_items.find({"pool_id": pool_id})
+    items = await items_cursor.to_list(length=1000)
+    
+    participants = list(set(it["added_by_name"] for it in items if it.get("is_purchased", True)))
+    num_people = len(participants)
+    
+    if num_people == 0:
+        raise HTTPException(status_code=400, detail="Cannot complete checkout with zero items.")
+        
+    host_name = pool.get("created_by_name")
+    host_items_total = 0
+    for it in items:
+        if it.get("is_purchased", True) and name_key(it["added_by_name"]) == name_key(host_name):
+            host_items_total += it["estimated_price"]
+            
+    net_overhead = final_overhead - final_discount
+    overhead_per_person = int(net_overhead / num_people) if num_people > 0 else 0
+    host_share = host_items_total + overhead_per_person
+    platform_name = pool.get("platform", "delivery").replace("_", " ").title()
+    
+    if host_share > 0:
+        txn_id = f"amzn_txn_{uuid.uuid4().hex[:12]}"
+        new_txn = {
+            "_id": txn_id,
+            "user_id": pool.get("host_id"),
+            "amount": host_share,
+            "raw_merchant_string": f"{platform_name} Pool - Amazon Pay Host checkout",
+            "mapped_merchant_name": f"{platform_name} Pool (Amazon Pay)",
+            "category": "food",
+            "source": "amazon_pay",
+            "is_mapped": True,
+            "created_at": utcnow()
+        }
+        await db.transactions.insert_one(new_txn)
+        
+    # Update pool document status
+    await db.cart_pools.update_one(
+        {"_id": pool_id},
+        {
+            "$set": {
+                "status": "completed",
+                "upi_id": upi_id,
+                "final_overhead": final_overhead,
+                "final_discount": final_discount,
+                "checkout_notes": checkout_notes,
+                "completed_at": utcnow(),
+                "amazon_checkout.statusDetails.state": "Completed",
+                "amazon_checkout.completed_at": utcnow()
+            }
+        }
+    )
+    
+    # Return enriched pool document
+    updated = await db.cart_pools.find_one({"_id": pool_id})
+    updated["id"] = str(updated.pop("_id"))
+    
+    from app.core.security import _serialize_value
+    for k, v in list(updated.items()):
+        updated[k] = _serialize_value(v)
+    return await enrich_pool_document(db, updated)
+
+@router.post("/{pool_id}/amazon-charge-permission/roommate-reimburse")
+async def process_amazon_roommate_payment(
+    pool_id: str,
+    req: RoommateAmznPayReq,
+    user_id: str = Depends(get_current_user)
+):
+    db = get_db()
+    pool = await db.cart_pools.find_one({"_id": pool_id})
+    if not pool:
+        raise HTTPException(status_code=404, detail="Pool not found")
+        
+    # Verify the roommate payment via Amazon Pay Later mock authorization
+    exact_roommate_name = await match_wing_roommate(db, pool, req.roommate_name)
+    
+    charge_permission_id = f"B01-{uuid.uuid4().hex[:14].upper()}"
+    payment_entry = {
+        "name": exact_roommate_name,
+        "utr": charge_permission_id,
+        "status": "verified", # Auto-verifies roommate split immediately via pre-authorized charge permission!
+        "submitted_at": utcnow().isoformat(),
+        "verified_at": utcnow().isoformat(),
+        "settlement_mode": "amazon_pay_later",
+        "confidence": 1.0
+    }
+    
+    # Pull old payment record and push new one
+    await db.cart_pools.update_one(
+        {"_id": pool_id},
+        {"$pull": {"payments": {"name": exact_roommate_name}}}
+    )
+    await db.cart_pools.update_one(
+        {"_id": pool_id},
+        {"$push": {"payments": payment_entry}}
+    )
+    
+    # Log transaction for the paying roommate
+    txn_id = f"amzn_ltr_{uuid.uuid4().hex[:12]}"
+    new_txn = {
+        "_id": txn_id,
+        "user_id": user_id,
+        "amount": req.amount,
+        "raw_merchant_string": f"Amazon Pay Later - Reimburse {pool.get('created_by_name')}",
+        "mapped_merchant_name": "Amazon Pay Later",
+        "category": "food",
+        "source": "amazon_pay",
+        "is_mapped": True,
+        "created_at": utcnow()
+    }
+    await db.transactions.insert_one(new_txn)
+    
+    return {
+        "chargePermissionId": charge_permission_id,
+        "chargePermissionStatus": {
+            "state": "Chargeable",
+            "lastUpdatedTimestamp": utcnow().isoformat()
+        }
+    }

@@ -260,3 +260,23 @@ export async function nudgeRoommate({ pool_id, data }: { pool_id: string; data: 
   });
 }
 
+export async function createAmazonCheckoutSession({ pool_id, data }: { pool_id: string; data: { final_overhead: number; final_discount: number; checkout_notes: string | null; upi_id: string | null } }) {
+  return apiRequest(`/api/cart-pools/${pool_id}/amazon-checkout-session`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function confirmAmazonCheckoutCallback({ pool_id, session_id }: { pool_id: string; session_id: string }) {
+  return apiRequest(`/api/cart-pools/${pool_id}/amazon-checkout-session/${session_id}/complete`, {
+    method: "POST",
+  });
+}
+
+export async function processAmazonRoommatePayment({ pool_id, data }: { pool_id: string; data: { roommate_name: string; amount: number } }) {
+  return apiRequest(`/api/cart-pools/${pool_id}/amazon-charge-permission/roommate-reimburse`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
