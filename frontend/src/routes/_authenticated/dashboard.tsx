@@ -856,6 +856,14 @@ function Dashboard() {
   const [isFloatingQuizDismissed, setIsFloatingQuizDismissed] = useState(false);
   const [isCenterQuizDismissed, setIsCenterQuizDismissed] = useState(false);
   const [isQuizTriggered, setIsQuizTriggered] = useState(false);
+  const dismissTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const clearDismissTimer = () => {
+    if (dismissTimerRef.current) {
+      clearTimeout(dismissTimerRef.current);
+      dismissTimerRef.current = null;
+    }
+  };
 
   useEffect(() => {
     const delay = 4000 + Math.random() * 8000;
@@ -864,6 +872,20 @@ function Dashboard() {
     }, delay);
     return () => clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (isQuizTriggered) {
+      dismissTimerRef.current = setTimeout(() => {
+        setIsFloatingQuizDismissed(true);
+        setIsCenterQuizDismissed(true);
+      }, 10000);
+    }
+    return () => {
+      if (dismissTimerRef.current) {
+        clearTimeout(dismissTimerRef.current);
+      }
+    };
+  }, [isQuizTriggered]);
 
   const safeDailyLimit = wellness?.safe_daily_limit_rs ?? 150.0;
   const remainingAllowance = wellness?.remaining_allowance_rs ?? 4500.0;
@@ -3266,13 +3288,19 @@ function Dashboard() {
                 }
               }}
             >
-              <DialogContent className="sm:max-w-md bg-background border border-border text-foreground space-y-4 text-center" id="dialog-recurring-menu-builder">
+              <DialogContent 
+                className="sm:max-w-md bg-background border border-border text-foreground space-y-4 text-center" 
+                id="dialog-recurring-menu-builder"
+                onClick={clearDismissTimer}
+                onFocus={clearDismissTimer}
+                onKeyDown={clearDismissTimer}
+              >
                 <DialogHeader className="space-y-1.5">
                   <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-500">
                     <Sparkles className="w-5 h-5 animate-pulse" />
                   </div>
                   <DialogTitle className="text-sm font-black uppercase tracking-wider text-amber-600 dark:text-amber-400">
-                    Recurring Payment Detected
+                    Let's Answer This!
                   </DialogTitle>
                 </DialogHeader>
 
@@ -3291,7 +3319,10 @@ function Dashboard() {
                     <Input
                       placeholder="e.g. Ginger Tea, Samosa, Veg Dinner Thali"
                       value={recurringItemName}
-                      onChange={(e) => setRecurringItemName(e.target.value)}
+                      onChange={(e) => {
+                        clearDismissTimer();
+                        setRecurringItemName(e.target.value);
+                      }}
                       className="bg-surface border border-border text-foreground placeholder-muted-foreground text-xs font-semibold focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 h-9"
                     />
                   </div>
@@ -3303,7 +3334,10 @@ function Dashboard() {
                         <button
                           key={opt}
                           type="button"
-                          onClick={() => setRecurringItemName(opt)}
+                          onClick={() => {
+                            clearDismissTimer();
+                            setRecurringItemName(opt);
+                          }}
                           className="px-2.5 py-1.5 rounded-lg border border-border bg-surface text-foreground text-[10px] font-black uppercase tracking-wider hover:bg-surface-raised cursor-pointer transition-colors"
                         >
                           {opt}
@@ -3317,7 +3351,10 @@ function Dashboard() {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => setIsCenterQuizDismissed(true)}
+                    onClick={() => {
+                      clearDismissTimer();
+                      setIsCenterQuizDismissed(true);
+                    }}
                     className="flex-1 bg-transparent hover:bg-white/5 text-zinc-400 font-bold uppercase text-xs h-10 tracking-wider cursor-pointer border border-border"
                   >
                     Skip
@@ -3326,6 +3363,7 @@ function Dashboard() {
                     type="button"
                     disabled={isSubmitting || !recurringItemName.trim()}
                     onClick={async () => {
+                      clearDismissTimer();
                       await handleQuizAnswer(activeRecurringQuiz, recurringItemName.trim());
                       setRecurringItemName("");
                       setIsCenterQuizDismissed(true);
@@ -3340,7 +3378,7 @@ function Dashboard() {
           );
         })()}
 
-        {/* Global Floating Community Intel Quiz Popup */}
+        {/* Global Floating Community Intel Quiz Popup (Now Centered Dialog) */}
         {(() => {
           if (!isQuizTriggered) return null;
           if (isFloatingQuizDismissed) return null;
@@ -3351,120 +3389,135 @@ function Dashboard() {
           const isSubmitting = submittingQuizId === activeQuiz.id;
 
           return (
-            <div className="fixed bottom-6 right-6 z-[100] max-w-sm w-[calc(100%-2rem)] md:w-96 bg-background border border-border/80 p-4 rounded-2xl shadow-2xl backdrop-blur-md animate-[slideIn_0.3s_ease-out] space-y-3.5 text-foreground">
-              <div className="flex justify-between items-center pb-2 border-b border-border/60">
-                <div className="flex items-center gap-1.5">
-                  <Sparkles className="w-4 h-4 text-amber-500 animate-pulse" />
-                  <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">{activeQuiz.title}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsFloatingQuizDismissed(true)}
-                  className="text-muted-foreground hover:text-foreground text-xs font-black cursor-pointer bg-transparent border-0"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <div className="space-y-1.5">
-                <p className="text-xs font-bold text-foreground leading-relaxed">
-                  {activeQuiz.question}
-                </p>
-                <p className="text-[10px] text-muted-foreground font-semibold font-mono">
-                  {activeQuiz.detail}
-                </p>
-              </div>
-
-              {/* Category-Specific Inputs (Category & Location) */}
-              {activeQuiz.type === "category" && (
-                <div className="space-y-2.5 pt-1.5 border-t border-border/60">
-                  <div className="space-y-1">
-                    <label className="text-[9px] text-muted-foreground font-black uppercase tracking-widest pl-0.5">Where is this located?</label>
-                    <Input
-                      placeholder="e.g. BH-2 Hostel, Shopping Complex"
-                      value={quizLocation}
-                      onChange={(e) => setQuizLocation(e.target.value)}
-                      className="bg-surface border border-border text-foreground placeholder-muted-foreground text-xs font-semibold focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 h-8"
-                    />
+            <Dialog 
+              open={true} 
+              onOpenChange={(o) => {
+                if (!o) {
+                  setIsFloatingQuizDismissed(true);
+                }
+              }}
+            >
+              <DialogContent 
+                className="sm:max-w-md bg-background border border-border text-foreground space-y-4 text-center" 
+                id="dialog-category-audit"
+                onClick={clearDismissTimer}
+                onFocus={clearDismissTimer}
+                onKeyDown={clearDismissTimer}
+              >
+                <DialogHeader className="space-y-1.5">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-500">
+                    <Sparkles className="w-5 h-5 animate-pulse" />
                   </div>
-                </div>
-              )}
+                  <DialogTitle className="text-sm font-black uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                    Let's Answer This!
+                  </DialogTitle>
+                </DialogHeader>
 
-              {/* Price Spike Quiz - Receipt-Backed Audit Upload */}
-              {activeQuiz.type === "price_spike" && (
-                <div className="space-y-1.5 pt-1.5 border-t border-border/60">
-                  <label className="text-[9px] text-muted-foreground font-black uppercase tracking-widest pl-0.5">Verify with Receipt Photo</label>
-                  <label className="flex flex-col items-center justify-center w-full h-14 border border-dashed border-border rounded-xl cursor-pointer bg-surface hover:bg-surface-raised transition-all select-none">
-                    <div className="text-center p-2">
-                      <p className="text-[9px] text-foreground font-bold truncate max-w-[200px]">
-                        {quizReceiptFile ? quizReceiptFile.name : "Attach payment screenshot"}
-                      </p>
-                    </div>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      disabled={quizReceiptBusy}
-                      onChange={(e) => {
-                        if (e.target.files && e.target.files[0]) {
-                          setQuizReceiptFile(e.target.files[0]);
-                          handleQuizReceiptUpload(e.target.files[0], activeQuiz);
-                        }
-                      }}
-                    />
-                  </label>
-                  {quizReceiptBusy && (
-                    <p className="text-[8px] text-center text-primary font-bold animate-pulse">Scanning Receipt details...</p>
-                  )}
+                <div className="space-y-2">
+                  <p className="text-xs font-bold text-foreground leading-relaxed">
+                    {activeQuiz.question}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground font-semibold font-mono">
+                    {activeQuiz.detail}
+                  </p>
                 </div>
-              )}
 
-              {/* Options selection map */}
-              <div className="space-y-2.5 pt-2 border-t border-border/60">
+                {/* Category-Specific Inputs (Category & Location) */}
                 {activeQuiz.type === "category" && (
-                  <label className="text-[9px] text-muted-foreground font-black uppercase tracking-widest pl-0.5 block">Select Merchant Category</label>
+                  <div className="space-y-2.5 pt-1.5 border-t border-border/60 text-left">
+                    <div className="space-y-1">
+                      <label className="text-[9px] text-muted-foreground font-black uppercase tracking-widest pl-0.5">Where is this located?</label>
+                      <Input
+                        placeholder="e.g. BH-2 Hostel, Shopping Complex"
+                        value={quizLocation}
+                        onChange={(e) => {
+                          clearDismissTimer();
+                          setQuizLocation(e.target.value);
+                        }}
+                        className="bg-surface border border-border text-foreground placeholder-muted-foreground text-xs font-semibold focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 h-9"
+                      />
+                    </div>
+                  </div>
                 )}
-                
-                <div className="flex flex-wrap gap-1.5">
-                  {activeQuiz.options.map((opt: string) => {
-                    const isSelected = selectedOption === opt;
-                    return (
+
+                {/* Price Spike Quiz - Receipt-Backed Audit Upload */}
+                {activeQuiz.type === "price_spike" && (
+                  <div className="space-y-1.5 pt-1.5 border-t border-border/60 text-left">
+                    <label className="text-[9px] text-muted-foreground font-black uppercase tracking-widest pl-0.5">Verify with Receipt Photo</label>
+                    <label className="flex flex-col items-center justify-center w-full h-14 border border-dashed border-border rounded-xl cursor-pointer bg-surface hover:bg-surface-raised transition-all select-none">
+                      <div className="text-center p-2">
+                        <p className="text-[9px] text-foreground font-bold truncate max-w-[200px]">
+                          {quizReceiptFile ? quizReceiptFile.name : "Attach payment screenshot"}
+                        </p>
+                      </div>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={quizReceiptBusy}
+                        onChange={(e) => {
+                          clearDismissTimer();
+                          if (e.target.files && e.target.files[0]) {
+                            setQuizReceiptFile(e.target.files[0]);
+                            handleQuizReceiptUpload(e.target.files[0], activeQuiz);
+                          }
+                        }}
+                      />
+                    </label>
+                    {quizReceiptBusy && (
+                      <p className="text-[8px] text-center text-primary font-bold animate-pulse">Scanning Receipt details...</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Options selection map */}
+                <div className="space-y-2.5 pt-2 border-t border-border/60 text-left">
+                  {activeQuiz.type === "category" && (
+                    <label className="text-[9px] text-muted-foreground font-black uppercase tracking-widest pl-0.5 block">Select Merchant Category</label>
+                  )}
+                  
+                  <div className="flex flex-wrap gap-1.5">
+                    {activeQuiz.options.map((opt: string) => {
+                      const isSelected = selectedOption === opt;
+                      return (
+                        <button
+                          key={opt}
+                          type="button"
+                          disabled={isSubmitting}
+                          onClick={() => {
+                            clearDismissTimer();
+                            setSelectedOption(opt);
+                            setShowCustomCategoryInput(false);
+                          }}
+                          className={`px-2.5 py-1.5 rounded-lg border text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                            isSelected
+                              ? "bg-amber-500/10 border-amber-500 text-amber-600 dark:text-amber-300 font-extrabold"
+                              : "bg-surface border-border text-foreground hover:bg-surface-raised"
+                          }`}
+                        >
+                          {opt}
+                        </button>
+                      );
+                    })}
+                    {activeQuiz.type === "category" && (
                       <button
-                        key={opt}
                         type="button"
                         disabled={isSubmitting}
                         onClick={() => {
-                          setSelectedOption(opt);
-                          setShowCustomCategoryInput(false);
+                          clearDismissTimer();
+                          setSelectedOption("__custom__");
+                          setShowCustomCategoryInput(true);
                         }}
                         className={`px-2.5 py-1.5 rounded-lg border text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
-                          isSelected
+                          selectedOption === "__custom__"
                             ? "bg-amber-500/10 border-amber-500 text-amber-600 dark:text-amber-300 font-extrabold"
                             : "bg-surface border-border text-foreground hover:bg-surface-raised"
                         }`}
                       >
-                        {opt}
+                        + Custom Category
                       </button>
-                    );
-                  })}
-
-                  {activeQuiz.type === "category" && (
-                    <button
-                      type="button"
-                      disabled={isSubmitting}
-                      onClick={() => {
-                        setSelectedOption("__custom__");
-                        setShowCustomCategoryInput(true);
-                      }}
-                      className={`px-2.5 py-1.5 rounded-lg border text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
-                        selectedOption === "__custom__"
-                          ? "bg-amber-500/10 border-amber-500 text-amber-600 dark:text-amber-300 font-extrabold"
-                          : "bg-surface border-border text-foreground hover:bg-surface-raised"
-                      }`}
-                    >
-                      + Custom Category
-                    </button>
-                  )}
+                    )}
+                  </div>
                 </div>
 
                 {activeQuiz.type === "category" && showCustomCategoryInput && (
@@ -3472,7 +3525,10 @@ function Dashboard() {
                     <Input
                       placeholder="Type custom category (e.g. Juice Bar)"
                       value={customCategory}
-                      onChange={(e) => setCustomCategory(e.target.value)}
+                      onChange={(e) => {
+                        clearDismissTimer();
+                        setCustomCategory(e.target.value);
+                      }}
                       className="bg-surface border border-border text-foreground placeholder-muted-foreground text-xs font-semibold focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 h-8"
                     />
                   </div>
@@ -3485,6 +3541,7 @@ function Dashboard() {
                       id={`floating-custom-input-${activeQuiz.id}`}
                       className="bg-surface border border-border text-foreground placeholder-muted-foreground text-xs font-semibold focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 flex-1 h-8"
                       onKeyDown={(e) => {
+                        clearDismissTimer();
                         if (e.key === "Enter") {
                           const val = (e.target as HTMLInputElement).value;
                           if (val.trim()) {
@@ -3498,6 +3555,7 @@ function Dashboard() {
                       type="button"
                       disabled={isSubmitting}
                       onClick={() => {
+                        clearDismissTimer();
                         const el = document.getElementById(`floating-custom-input-${activeQuiz.id}`) as HTMLInputElement;
                         if (el && el.value.trim()) {
                           handleQuizAnswer(activeQuiz, el.value.trim());
@@ -3510,27 +3568,39 @@ function Dashboard() {
                     </button>
                   </div>
                 )}
-              </div>
 
-              {/* Submit Action Button */}
-              {activeQuiz.type !== "item_name" && (
-                <div className="pt-2 border-t border-border/60">
+                <div className="flex gap-2 pt-2 border-t border-border/60">
                   <Button
                     type="button"
-                    disabled={isSubmitting || (!selectedOption && !customCategory.trim())}
+                    variant="outline"
                     onClick={() => {
-                      const finalAnswer = selectedOption === "__custom__" ? customCategory : selectedOption;
-                      if (finalAnswer) {
-                        handleQuizAnswer(activeQuiz, finalAnswer);
-                      }
+                      clearDismissTimer();
+                      setIsFloatingQuizDismissed(true);
                     }}
-                    className="w-full bg-amber-500 hover:bg-amber-400 text-black font-black uppercase text-xs h-9 tracking-wider cursor-pointer disabled:opacity-50 transition-all active:scale-[0.98]"
+                    className="flex-1 bg-transparent hover:bg-white/5 text-zinc-400 font-bold uppercase text-[10px] h-10 tracking-wider cursor-pointer border border-border"
                   >
-                    {isSubmitting ? "Submitting Intel..." : "Submit Answer"}
+                    Skip
                   </Button>
+                  {activeQuiz.type !== "item_name" && (
+                    <Button
+                      type="button"
+                      disabled={isSubmitting || (!selectedOption && !customCategory.trim())}
+                      onClick={async () => {
+                        clearDismissTimer();
+                        const finalAnswer = selectedOption === "__custom__" ? customCategory.trim() : (selectedOption || "");
+                        if (finalAnswer) {
+                          await handleQuizAnswer(activeQuiz, finalAnswer);
+                          setIsFloatingQuizDismissed(true);
+                        }
+                      }}
+                      className="flex-1 bg-amber-500 hover:bg-amber-400 text-black font-black uppercase text-[10px] h-10 tracking-wider cursor-pointer disabled:opacity-50 transition-all active:scale-[0.98]"
+                    >
+                      {isSubmitting ? "Submitting..." : "Submit Answer"}
+                    </Button>
+                  )}
                 </div>
-              )}
-            </div>
+              </DialogContent>
+            </Dialog>
           );
         })()}
       </div>
