@@ -187,6 +187,17 @@ function SourceBadge({ label }: { label?: string }) {
   return <Badge className="text-[8px] bg-zinc-700/30 border border-zinc-700/50 text-zinc-500 py-0 px-1.5 font-bold uppercase shrink-0">Estimated</Badge>;
 }
 
+function ConfidenceBadge({ confidence }: { confidence?: string }) {
+  const c = confidence?.toLowerCase() || "low";
+  if (c === "high") {
+    return <Badge className="text-[8px] bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 py-0 px-1.5 font-bold uppercase shrink-0">High Trust</Badge>;
+  }
+  if (c === "medium") {
+    return <Badge className="text-[8px] bg-blue-500/15 border border-blue-500/30 text-blue-400 py-0 px-1.5 font-bold uppercase shrink-0">Medium Trust</Badge>;
+  }
+  return <Badge className="text-[8px] bg-amber-500/10 border border-amber-500/25 text-amber-500/80 py-0 px-1.5 font-bold uppercase shrink-0">Low Trust</Badge>;
+}
+
 function TravelPage() {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -805,7 +816,10 @@ function TravelPage() {
                   {selectedRouteId === r.id && <span className="absolute top-0 left-0 w-full h-[2px] bg-primary" />}
                   <div className="flex justify-between items-start gap-1 mb-1.5">
                     <p className="text-[11px] font-black text-foreground uppercase tracking-wider truncate flex-1">{r.name.split("→")[0].trim()}</p>
-                    <SourceBadge label={r.source} />
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <SourceBadge label={r.source} />
+                      <ConfidenceBadge confidence={r.confidence} />
+                    </div>
                   </div>
                   <p className="text-[10px] text-muted-foreground truncate">{r.name.split("→")[1]?.trim() || activeCollege}</p>
                   {r.distance_km && (
@@ -821,14 +835,14 @@ function TravelPage() {
         <Card className="bg-surface border-border overflow-hidden">
           <button
             onClick={() => setShowCalculator(!showCalculator)}
-            className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-all cursor-pointer"
+            className="w-full flex items-center justify-between p-3.5 hover:bg-white/5 transition-all cursor-pointer"
           >
-            <div className="flex items-center gap-2">
-              <Search className="h-4 w-4 text-primary" />
-              <span className="text-sm font-black uppercase tracking-wider text-foreground">Estimate Fare for Any Route</span>
-              <Badge className="text-[9px] bg-primary/10 border border-primary/20 text-primary font-bold uppercase py-0 px-1.5">Live</Badge>
+            <div className="flex items-center gap-2 min-w-0">
+              <Search className="h-4 w-4 text-primary shrink-0" />
+              <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-foreground truncate">Estimate Fare for Any Route</span>
+              <Badge className="text-[8px] sm:text-[9px] bg-primary/10 border border-primary/20 text-primary font-bold uppercase py-0 px-1.5 shrink-0">Live</Badge>
             </div>
-            <span className="text-xs text-muted-foreground">{showCalculator ? "Hide" : "Open"}</span>
+            <span className="text-[10px] sm:text-xs text-muted-foreground shrink-0 pl-2">{showCalculator ? "Hide" : "Open"}</span>
           </button>
 
           {showCalculator && (
@@ -948,6 +962,7 @@ function TravelPage() {
                   <Badge variant="secondary" className="font-bold font-mono text-xs bg-white/5 border border-border text-foreground">{selectedRoute.distance_km} km</Badge>
                 )}
                 <SourceBadge label={selectedRoute.source} />
+                <ConfidenceBadge confidence={selectedRoute.confidence} />
               </div>
             </div>
 
@@ -962,7 +977,7 @@ function TravelPage() {
             </div>
 
             {/* Time of Day Surge Predictor Widget */}
-            <Card className="bg-surface border border-border p-5 space-y-4">
+            <Card className="bg-surface border border-border p-4 sm:p-5 space-y-4">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-2">
                   <Clock className="h-4 w-4 text-primary animate-pulse" />
@@ -971,7 +986,7 @@ function TravelPage() {
                 <Badge className="bg-primary/10 border border-primary/20 text-primary font-mono text-[9px] px-2 py-0.5 font-bold uppercase tracking-wider">Surge Projections</Badge>
               </div>
               
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
                 {([
                   { label: "Morning Rush", time: "08:00 - 11:00", factor: 1.20, active: timeContext.label === "Morning Rush", colorClass: "text-amber-400 border-amber-500/20 bg-amber-500/5", badgeLabel: "1.2x Surge" },
                   { label: "Off-Peak", time: "11:00 - 17:00", factor: 1.0, active: timeContext.label === "Off-Peak", colorClass: "text-green-400 border-green-500/20 bg-green-500/5", badgeLabel: "Baseline" },
@@ -983,29 +998,29 @@ function TravelPage() {
                   return (
                     <div
                       key={h.label}
-                      className={`p-4 rounded-2xl border transition-all flex flex-col justify-between space-y-3 relative overflow-hidden ${
+                      className={`p-3 rounded-xl border transition-all flex flex-col justify-between space-y-2 relative overflow-hidden ${
                         h.active
-                          ? "bg-primary/5 border-primary shadow-[0_0_15px_rgba(99,102,241,0.15)]"
-                          : "bg-surface-raised/40 border-border/60 opacity-80 hover:opacity-100 hover:bg-surface-raised/70"
+                          ? "bg-primary/5 border-primary shadow-[0_0_15px_rgba(99,102,241,0.15)] animate-[pulse_2s_infinite]"
+                          : "bg-surface-raised/40 border-border/60 opacity-85 hover:opacity-100 hover:bg-surface-raised/70"
                       }`}
                     >
                       {h.active && (
-                        <div className="absolute top-0 right-0 bg-primary text-primary-foreground font-mono text-[7px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-bl-lg animate-pulse">
+                        <div className="absolute top-0 right-0 bg-primary text-primary-foreground font-mono text-[6px] sm:text-[7px] font-black uppercase tracking-widest px-1.5 sm:px-2.5 py-0.5 rounded-bl-lg">
                           Live Now
                         </div>
                       )}
                       <div>
-                        <p className="text-[10px] text-muted-foreground font-black uppercase tracking-wider">{h.label}</p>
-                        <p className="text-[9px] text-muted-foreground/60">{h.time}</p>
+                        <p className="text-[10px] sm:text-[11px] text-muted-foreground font-black uppercase tracking-wider">{h.label}</p>
+                        <p className="text-[8px] sm:text-[9px] text-muted-foreground/60">{h.time}</p>
                       </div>
 
                       <div className="flex justify-between items-end pt-1">
                         <div>
-                          <p className="text-xl font-mono font-black text-foreground">₹{currentFare}</p>
-                          <p className="text-[8px] text-muted-foreground/80 font-bold uppercase">Estimated Fare</p>
+                          <p className="text-base sm:text-xl font-mono font-black text-foreground">₹{currentFare}</p>
+                          <p className="text-[7px] sm:text-[8px] text-muted-foreground/80 font-bold uppercase">Est. Fare</p>
                         </div>
-                        <Badge variant="outline" className={`text-[8px] font-bold py-0.5 px-2 ${h.colorClass}`}>
-                          {h.badgeLabel}
+                        <Badge variant="outline" className={`text-[7px] sm:text-[8px] font-bold py-0.5 px-1.5 ${h.colorClass} shrink-0`}>
+                          {h.badgeLabel.split(" ")[0]}
                         </Badge>
                       </div>
                     </div>
@@ -1435,17 +1450,17 @@ function TravelPage() {
                       <p className="text-xs text-muted-foreground leading-relaxed">
                         Are you travelling during early morning (4 AM – 8 AM) or late night (9 PM – 3 AM) hours? Auto prices suffer high night charges and low availability during these durations.
                       </p>
-                      <div className="flex gap-3">
+                      <div className="flex flex-col sm:flex-row gap-2.5">
                         <Button
                           onClick={() => setTravelTimingPrompt("early_or_night")}
-                          className="flex-1 bg-primary text-primary-foreground font-black uppercase tracking-wider text-[10px] h-9"
+                          className="w-full sm:flex-1 bg-primary text-primary-foreground font-black uppercase tracking-wider text-[10px] h-9"
                         >
                           Yes, Peak / Night
                         </Button>
                         <Button
                           variant="outline"
                           onClick={() => setTravelTimingPrompt("regular")}
-                          className="flex-1 border-border text-foreground font-black uppercase tracking-wider text-[10px] h-9"
+                          className="w-full sm:flex-1 border-border text-foreground font-black uppercase tracking-wider text-[10px] h-9"
                         >
                           No, Regular Hours
                         </Button>
@@ -1620,33 +1635,33 @@ function TravelPage() {
                                         const isSelfPassenger = sp.user_id === user?.id;
                                         const isPending = sp.status === "pending";
                                         return (
-                                          <div key={sp.user_id} className="flex justify-between items-center text-xs p-2 bg-surface rounded-lg border border-border/40">
-                                            <span className="font-semibold text-foreground">{sp.full_name}</span>
+                                          <div key={sp.user_id} className="flex justify-between items-center text-xs p-2 bg-surface rounded-lg border border-border/40 gap-2 min-w-0">
+                                            <span className="font-semibold text-foreground truncate min-w-0">{sp.full_name}</span>
                                             {isPending ? (
-                                              <div className="flex items-center gap-1.5">
+                                              <div className="flex items-center gap-1.5 shrink-0">
                                                 {isHost ? (
-                                                  <div className="flex items-center gap-1">
+                                                  <div className="flex items-center gap-1 shrink-0">
                                                     <Button
                                                       onClick={() => settlePoolMutation.mutate({ poolId: p.id, data: { passenger_user_id: sp.user_id } })}
                                                       disabled={settlePoolMutation.isPending}
-                                                      className="h-6 text-[8px] font-black uppercase tracking-widest bg-green-600 hover:bg-green-500 text-white py-0.5 px-2"
+                                                      className="h-6 text-[8px] font-black uppercase tracking-widest bg-green-600 hover:bg-green-500 text-white py-0.5 px-2 shrink-0"
                                                     >
                                                       Confirm Paid
                                                     </Button>
                                                     <Button
                                                       type="button"
                                                       onClick={() => setActiveQrUpiLink(sp.upi_link)}
-                                                      className="h-6 w-6 p-0 bg-surface border border-border text-muted-foreground hover:text-foreground text-[8px] font-bold uppercase tracking-wider flex items-center justify-center cursor-pointer"
+                                                      className="h-6 w-6 p-0 bg-surface border border-border text-muted-foreground hover:text-foreground text-[8px] font-bold uppercase tracking-wider flex items-center justify-center cursor-pointer shrink-0"
                                                       title="Show QR Code"
                                                     >
                                                       QR
                                                     </Button>
                                                   </div>
                                                 ) : isSelfPassenger ? (
-                                                  <div className="flex items-center gap-1">
+                                                  <div className="flex items-center gap-1 shrink-0">
                                                     <a
                                                       href={sp.upi_link}
-                                                      className="h-6 text-[8px] font-black uppercase tracking-widest bg-primary hover:bg-primary/90 text-primary-foreground py-1 px-2 rounded-md flex items-center justify-center transition-all shadow-sm"
+                                                      className="h-6 text-[8px] font-black uppercase tracking-widest bg-primary hover:bg-primary/90 text-primary-foreground py-1 px-2 rounded-md flex items-center justify-center transition-all shadow-sm shrink-0"
                                                       title="Open GPay / PhonePe / Paytm"
                                                     >
                                                       Pay ₹{sp.amount}
@@ -1654,21 +1669,21 @@ function TravelPage() {
                                                     <Button
                                                       type="button"
                                                       onClick={() => setActiveQrUpiLink(sp.upi_link)}
-                                                      className="h-6 w-6 p-0 bg-surface border border-border text-muted-foreground hover:text-foreground text-[8px] font-bold uppercase tracking-wider flex items-center justify-center cursor-pointer"
+                                                      className="h-6 w-6 p-0 bg-surface border border-border text-muted-foreground hover:text-foreground text-[8px] font-bold uppercase tracking-wider flex items-center justify-center cursor-pointer shrink-0"
                                                       title="Show QR Code"
                                                     >
                                                       QR
                                                     </Button>
                                                   </div>
                                                 ) : (
-                                                  <div className="flex items-center gap-1">
-                                                    <Badge variant="outline" className="text-[8px] font-bold text-amber-400 border-amber-500/30 bg-amber-500/5 py-1">
+                                                  <div className="flex items-center gap-1 shrink-0">
+                                                    <Badge variant="outline" className="text-[8px] font-bold text-amber-400 border-amber-500/30 bg-amber-500/5 py-1 shrink-0">
                                                       Unsettled
                                                     </Badge>
                                                     <Button
                                                       type="button"
                                                       onClick={() => setActiveQrUpiLink(sp.upi_link)}
-                                                      className="h-6 w-6 p-0 bg-surface border border-border text-muted-foreground hover:text-foreground text-[8px] font-bold uppercase tracking-wider flex items-center justify-center cursor-pointer"
+                                                      className="h-6 w-6 p-0 bg-surface border border-border text-muted-foreground hover:text-foreground text-[8px] font-bold uppercase tracking-wider flex items-center justify-center cursor-pointer shrink-0"
                                                       title="Show QR Code"
                                                     >
                                                       QR
@@ -1677,7 +1692,7 @@ function TravelPage() {
                                                 )}
                                               </div>
                                             ) : (
-                                              <Badge variant="outline" className="text-[8px] font-bold text-green-400 border-green-500/30 bg-green-500/5">
+                                              <Badge variant="outline" className="text-[8px] font-bold text-green-400 border-green-500/30 bg-green-500/5 shrink-0">
                                                 Settled
                                               </Badge>
                                             )}

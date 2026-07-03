@@ -389,6 +389,8 @@ async def get_routes(college: Optional[str] = Query(None), user_id: str = Depend
         reports_cursor = db.travel_reports.find({"route_id": route_id}).sort("created_at", -1)
         r_reports = await reports_cursor.to_list(length=10)
         
+        age_days = None
+        has_recent = False
         if r_reports:
             latest = r_reports[0]
             latest_time = latest.get("created_at")
@@ -398,19 +400,49 @@ async def get_routes(college: Optional[str] = Query(None), user_id: str = Depend
                         latest_time = datetime.datetime.fromisoformat(latest_time)
                     except ValueError:
                         latest_time = datetime.datetime.utcnow()
+                
+                # Make timezone-naive if it's timezone-aware to prevent comparison TypeErrors
+                if latest_time.tzinfo is not None:
+                    latest_time = latest_time.replace(tzinfo=None)
+                    
                 age_days = (datetime.datetime.utcnow() - latest_time).days
-                if age_days > 30:
-                    route_dict["source"] = "stale"
-                elif age_days <= 14:
-                    route_dict["source"] = "recent student report"
+                if age_days <= 14:
+                    has_recent = True
+        
+        if age_days is not None:
+            if age_days > 30:
+                route_dict["source"] = "stale"
+            elif age_days <= 14:
+                route_dict["source"] = "recent student report"
+            else:
+                if len(r_reports) >= 3:
+                    route_dict["source"] = "community median"
                 else:
-                    if len(r_reports) >= 3:
-                        route_dict["source"] = "community median"
-                    else:
-                        route_dict["source"] = "recent student report"
+                    route_dict["source"] = "recent student report"
         else:
             if route_dict.get("source") == "seeded":
                 route_dict["source"] = "official"
+
+        # Determine confidence:
+        # - high: official + recent community reports, or community median with >=3 reports and recent report
+        # - medium: community only (without recent report, or official without recent report)
+        # - low: stale or sparse reports
+        resolved_source = route_dict.get("source", "")
+
+        if resolved_source == "stale":
+            route_dict["confidence"] = "low"
+        elif resolved_source == "official":
+            if r_reports and has_recent:
+                route_dict["confidence"] = "high"
+            else:
+                route_dict["confidence"] = "medium"
+        elif resolved_source == "recent student report" or resolved_source == "community median":
+            if len(r_reports) >= 3 and has_recent:
+                route_dict["confidence"] = "high"
+            else:
+                route_dict["confidence"] = "medium"
+        else:
+            route_dict["confidence"] = "low"
                 
         mapped_routes.append(route_dict)
 
@@ -449,6 +481,7 @@ async def create_custom_route(req: CustomRouteCreateReq, user_id: str = Depends(
         "scam_warnings": "Always check app base fare before negotiating flat prices.",
         "campus_landmark": req.campus_landmark,
         "source": "user_added",
+        "confidence": "low",
         "distance_km": d
     }
 
@@ -1725,7 +1758,7 @@ async def complete_ride_pool(pool_id: str, req: RidePoolCompleteReq, user_id: st
     host_txn = {
         "_id": str(uuid.uuid4()),
         "user_id": user_id,
-        "amount": int(split_amount),
+        "amount": int(split_amount * 100),
         "raw_merchant_string": f"Travel Split - {route_name}",
         "mapped_merchant_name": "Travel Pool",
         "category": "travel",
@@ -1767,7 +1800,7 @@ async def settle_ride_pool(pool_id: str, req: RidePoolSettleReq, user_id: str = 
             passenger_txn = {
                 "_id": str(uuid.uuid4()),
                 "user_id": req.passenger_user_id,
-                "amount": int(split_amount),
+                "amount": int(split_amount * 100),
                 "raw_merchant_string": f"Travel Split - {route_name}",
                 "mapped_merchant_name": "Travel Pool",
                 "category": "travel",
