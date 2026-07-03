@@ -187,6 +187,17 @@ function SourceBadge({ label }: { label?: string }) {
   return <Badge className="text-[8px] bg-zinc-700/30 border border-zinc-700/50 text-zinc-500 py-0 px-1.5 font-bold uppercase shrink-0">Estimated</Badge>;
 }
 
+function ConfidenceBadge({ confidence }: { confidence?: string }) {
+  const c = confidence?.toLowerCase() || "low";
+  if (c === "high") {
+    return <Badge className="text-[8px] bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 py-0 px-1.5 font-bold uppercase shrink-0">High Trust</Badge>;
+  }
+  if (c === "medium") {
+    return <Badge className="text-[8px] bg-blue-500/15 border border-blue-500/30 text-blue-400 py-0 px-1.5 font-bold uppercase shrink-0">Medium Trust</Badge>;
+  }
+  return <Badge className="text-[8px] bg-amber-500/10 border border-amber-500/25 text-amber-500/80 py-0 px-1.5 font-bold uppercase shrink-0">Low Trust</Badge>;
+}
+
 function TravelPage() {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -805,7 +816,10 @@ function TravelPage() {
                   {selectedRouteId === r.id && <span className="absolute top-0 left-0 w-full h-[2px] bg-primary" />}
                   <div className="flex justify-between items-start gap-1 mb-1.5">
                     <p className="text-[11px] font-black text-foreground uppercase tracking-wider truncate flex-1">{r.name.split("→")[0].trim()}</p>
-                    <SourceBadge label={r.source} />
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <SourceBadge label={r.source} />
+                      <ConfidenceBadge confidence={r.confidence} />
+                    </div>
                   </div>
                   <p className="text-[10px] text-muted-foreground truncate">{r.name.split("→")[1]?.trim() || activeCollege}</p>
                   {r.distance_km && (
@@ -948,6 +962,7 @@ function TravelPage() {
                   <Badge variant="secondary" className="font-bold font-mono text-xs bg-white/5 border border-border text-foreground">{selectedRoute.distance_km} km</Badge>
                 )}
                 <SourceBadge label={selectedRoute.source} />
+                <ConfidenceBadge confidence={selectedRoute.confidence} />
               </div>
             </div>
 

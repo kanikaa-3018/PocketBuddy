@@ -411,6 +411,40 @@ async def get_routes(college: Optional[str] = Query(None), user_id: str = Depend
         else:
             if route_dict.get("source") == "seeded":
                 route_dict["source"] = "official"
+
+        # Determine confidence:
+        # - high: official + recent community reports, or community median with >=3 reports and recent report
+        # - medium: community only (without recent report, or official without recent report)
+        # - low: stale or sparse reports
+        resolved_source = route_dict.get("source", "")
+        has_recent = False
+        if r_reports:
+            latest = r_reports[0]
+            latest_time = latest.get("created_at")
+            if latest_time:
+                if isinstance(latest_time, str):
+                    try:
+                        latest_time = datetime.datetime.fromisoformat(latest_time)
+                    except ValueError:
+                        latest_time = datetime.datetime.utcnow()
+                age_days = (datetime.datetime.utcnow() - latest_time).days
+                if age_days <= 14:
+                    has_recent = True
+
+        if resolved_source == "stale":
+            route_dict["confidence"] = "low"
+        elif resolved_source == "official":
+            if r_reports and has_recent:
+                route_dict["confidence"] = "high"
+            else:
+                route_dict["confidence"] = "medium"
+        elif resolved_source == "recent student report" or resolved_source == "community median":
+            if len(r_reports) >= 3 and has_recent:
+                route_dict["confidence"] = "high"
+            else:
+                route_dict["confidence"] = "medium"
+        else:
+            route_dict["confidence"] = "low"
                 
         mapped_routes.append(route_dict)
 
@@ -449,6 +483,7 @@ async def create_custom_route(req: CustomRouteCreateReq, user_id: str = Depends(
         "scam_warnings": "Always check app base fare before negotiating flat prices.",
         "campus_landmark": req.campus_landmark,
         "source": "user_added",
+        "confidence": "low",
         "distance_km": d
     }
 
