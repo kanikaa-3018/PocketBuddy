@@ -123,6 +123,48 @@ async def get_insights(user_id: str = Depends(get_current_user)):
     mess_count = max(0, len(food_txns) - delivery_count)
     delivery_spend_paise = sum(t.get("amount", 0) for t in delivery_txns)
 
+    # ── Price spikes detection ─────────────────────────────────────────────
+    price_spikes = []
+    active_foods = await db.campus_food.find({"status": "active"}).to_list(length=1000)
+    venue_items = {}
+    for item in active_foods:
+        v_name = item.get("venue_name")
+        if v_name:
+            venue_items.setdefault(v_name.lower().strip(), []).append(item)
+
+    food_txns_7d = [t for t in food_txns if t.get("created_at", now) >= since_7]
+    merchant_txns = {}
+    for t in food_txns_7d:
+        m_name = t.get("mapped_merchant_name") or t.get("raw_merchant_string")
+        if m_name:
+            merchant_txns.setdefault(m_name.lower().strip(), []).append(t)
+
+    for m_name_lower, txs in merchant_txns.items():
+        matching_venue = None
+        for v_name in venue_items.keys():
+            if v_name in m_name_lower or m_name_lower in v_name:
+                matching_venue = v_name
+                break
+
+        if matching_venue:
+            catalog_items = venue_items[matching_venue]
+            for tx in txs:
+                amount_rs = tx.get("amount", 0) / 100.0
+                for cat_it in catalog_items:
+                    cat_price_rs = cat_it.get("price", 0) / 100.0
+                    if cat_price_rs > 0 and 1.05 < (amount_rs / cat_price_rs) <= 1.50:
+                        pct_diff = round(((amount_rs - cat_price_rs) / cat_price_rs) * 100)
+                        if not any(ps["item_name"] == cat_it["item_name"] and ps["venue_name"] == cat_it["venue_name"] for ps in price_spikes):
+                            price_spikes.append({
+                                "id": str(cat_it.get("_id") or cat_it.get("id")),
+                                "venue_name": cat_it.get("venue_name"),
+                                "item_name": cat_it.get("item_name"),
+                                "old_price": cat_price_rs,
+                                "new_price": amount_rs,
+                                "pct_increase": pct_diff
+                            })
+                        break
+
     # Calculate unpaid pool debts (committed spend runway impact)
     unpaid_pool_debt_paise = 0
     user_doc = await db.users.find_one({"_id": user_id})
@@ -169,6 +211,7 @@ async def get_insights(user_id: str = Depends(get_current_user)):
             "delivery_count_30d": delivery_count,
             "mess_count_30d": mess_count,
             "delivery_spend_paise": delivery_spend_paise,
+            "price_spikes": price_spikes[:3],
         },
         "velocity": {
             "pct_change": velocity_pct,
@@ -623,7 +666,9 @@ async def get_wellness_insights(user_id: str = Depends(get_current_user)):
         "message": message,
         "signals": signals,
         "generated_by": "local_rules",
-        "avg_food_gap_hours_7d": round(avg_food_gap_hours_7d, 1)
+        "avg_food_gap_hours_7d": round(avg_food_gap_hours_7d, 1),
+        "safe_daily_limit_rs": round(safe_daily_limit_rs, 2),
+        "remaining_allowance_rs": round(remaining_rs, 2)
     }
 
 

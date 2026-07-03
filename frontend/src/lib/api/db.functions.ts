@@ -59,10 +59,10 @@ export async function getCampusFood(status?: string) {
   return apiRequest(url);
 }
 
-export async function scanMenuPhoto({ data }: { data: FormData }) {
+export async function scanMenuPhoto({ data }: { data: { venue_name: string; campus: string; image_b64: string } }) {
   return apiRequest("/api/campus-food/scan", {
     method: "POST",
-    body: data,
+    body: JSON.stringify(data),
   });
 }
 
@@ -70,6 +70,61 @@ export async function verifyCampusFoodItem({ id, vote }: { id: string; vote: "up
   return apiRequest(`/api/campus-food/${id}/verify`, {
     method: "POST",
     body: JSON.stringify({ vote }),
+  });
+}
+
+export async function editFoodItem({ id, item_name, price }: { id: string; item_name?: string; price?: number }) {
+  return apiRequest(`/api/campus-food/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ item_name, price }),
+  });
+}
+
+export async function getVenuePhoto(venue: string) {
+  return apiRequest(`/api/campus-food/venue-photo?venue=${encodeURIComponent(venue)}`);
+}
+
+export async function createCampusFoodItem({ venue_name, item_name, price, campus, status }: { venue_name: string; item_name: string; price: number; campus?: string; status?: string }) {
+  return apiRequest("/api/campus-food", {
+    method: "POST",
+    body: JSON.stringify({ venue_name, item_name, price, campus, status }),
+  });
+}
+
+export async function deleteFoodItem(id: string) {
+  return apiRequest(`/api/campus-food/${id}`, {
+    method: "DELETE",
+  });
+}
+
+export async function scanReceiptScreenshot({ image_b64 }: { image_b64: string }) {
+  return apiRequest("/api/campus-food/scan-receipt", {
+    method: "POST",
+    body: JSON.stringify({ image_b64 }),
+  });
+}
+
+export async function getCommunityQuizzes() {
+  return apiRequest("/api/campus-food/quizzes");
+}
+
+export async function submitQuizResponse(data: {
+  quiz_id: string;
+  quiz_type: string;
+  merchant_raw?: string;
+  venue_name?: string;
+  response_val: string;
+  price?: number;
+  item_name?: string;
+  old_price?: number;
+  new_price?: number;
+  custom_category?: string;
+  location?: string;
+  image_b64?: string;
+}) {
+  return apiRequest("/api/campus-food/submit-quiz", {
+    method: "POST",
+    body: JSON.stringify(data),
   });
 }
 
