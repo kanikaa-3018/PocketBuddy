@@ -855,6 +855,15 @@ function Dashboard() {
   const [dismissedCenterQuizId, setDismissedCenterQuizId] = useState<string | null>(null);
   const [isFloatingQuizDismissed, setIsFloatingQuizDismissed] = useState(false);
   const [isCenterQuizDismissed, setIsCenterQuizDismissed] = useState(false);
+  const [isQuizTriggered, setIsQuizTriggered] = useState(false);
+
+  useEffect(() => {
+    const delay = 4000 + Math.random() * 8000;
+    const timer = setTimeout(() => {
+      setIsQuizTriggered(true);
+    }, delay);
+    return () => clearTimeout(timer);
+  }, []);
 
   const safeDailyLimit = wellness?.safe_daily_limit_rs ?? 150.0;
   const remainingAllowance = wellness?.remaining_allowance_rs ?? 4500.0;
@@ -2593,9 +2602,20 @@ function Dashboard() {
                             </a>
                           </div>
                         </div>
-                        <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest font-mono shrink-0">
-                          Rating: ★ {rating} ({reviewsCount} reviews)
-                        </span>
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest font-mono shrink-0">
+                            Rating: ★ {rating} ({reviewsCount} reviews)
+                          </span>
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border ${
+                            (items[0]?.crowd_density || "").includes("High")
+                              ? "bg-destructive/10 text-destructive border-destructive/20"
+                              : (items[0]?.crowd_density || "").includes("Moderate")
+                                ? "bg-warning/10 text-warning border-warning/20"
+                                : "bg-success/10 text-success border-success/20"
+                          }`}>
+                            ⚡ Crowd: {items[0]?.crowd_density || "Low (Quick Service)"}
+                          </span>
+                        </div>
                       </div>
 
                       {/* Expanded Photo Container */}
@@ -2698,7 +2718,18 @@ function Dashboard() {
                                   
                                   <div className="flex items-center gap-3 shrink-0">
                                     {renderSparkline(it.price_history)}
-                                    <span className="tnum text-xs font-black text-primary font-mono shrink-0">{rupees(it.price)}</span>
+                                    <div className="flex flex-col items-end gap-0.5">
+                                      <span className="tnum text-xs font-black text-primary font-mono shrink-0">{rupees(it.price)}</span>
+                                      {it.price_stable ? (
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-success/10 text-success text-[7px] font-black uppercase tracking-wider border border-success/20">
+                                          ✓ Stable Price
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 text-[7px] font-black uppercase tracking-wider border border-amber-500/20">
+                                          ⚠ {it.price_change_pct > 0 ? `+${it.price_change_pct}% Hike` : `${it.price_change_pct}% Hike`}
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
                                 </>
                               )}
@@ -3217,6 +3248,7 @@ function Dashboard() {
 
         {/* Recurring Payment Canteen Menu Builder dialog */}
         {(() => {
+          if (!isQuizTriggered) return null;
           if (isCenterQuizDismissed) return null;
           const activeRecurringQuiz = quizzes?.find(
             (q: any) => (q.type === "item_name" || q.type === "meal_guess") && q.id !== dismissedCenterQuizId
@@ -3310,6 +3342,7 @@ function Dashboard() {
 
         {/* Global Floating Community Intel Quiz Popup */}
         {(() => {
+          if (!isQuizTriggered) return null;
           if (isFloatingQuizDismissed) return null;
           if (!quizzes || quizzes.length === 0) return null;
           const activeQuiz = quizzes.find((q: any) => q.type !== "item_name" && q.type !== "meal_guess" && q.id !== dismissedQuizId);
