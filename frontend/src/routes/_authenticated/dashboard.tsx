@@ -2016,12 +2016,8 @@ function Dashboard() {
         </ResponsiveFoodPanel>
 
         {/* Check-in dialog */}
-        <Dialog open={showCheckIn} onOpenChange={() => { /* not dismissible */ }}>
-          <DialogContent
-            id="dialog-checkin"
-            onPointerDownOutside={(e) => e.preventDefault()}
-            onEscapeKeyDown={(e) => e.preventDefault()}
-          >
+        <Dialog open={showCheckIn} onOpenChange={setShowCheckIn}>
+          <DialogContent id="dialog-checkin">
             <DialogHeader>
               <DialogTitle>Hey, it's been a while since your last meal.</DialogTitle>
             </DialogHeader>
@@ -2031,7 +2027,7 @@ function Dashboard() {
               <button
                 id="btn-checkin-ate"
                 onClick={handleCheckInAte}
-                className="w-full rounded-md border-l-4 border-l-success bg-surface p-3 text-left text-[13px]"
+                className="w-full rounded-md border-l-4 border-l-success bg-surface p-3 text-left text-[13px] cursor-pointer hover:bg-surface-raised transition-colors"
               >
                 I ate at mess / cooked / ordered in
               </button>
@@ -2039,7 +2035,7 @@ function Dashboard() {
                 <button
                   id="btn-checkin-skipped"
                   onClick={() => setCheckInExpanded(true)}
-                  className="w-full text-left text-[13px]"
+                  className="w-full text-left text-[13px] cursor-pointer"
                 >
                   Skipped / couldn't eat
                 </button>
@@ -2062,6 +2058,13 @@ function Dashboard() {
                   </div>
                 )}
               </div>
+              <Button
+                variant="ghost"
+                className="w-full text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => setShowCheckIn(false)}
+              >
+                Not now
+              </Button>
             </div>
           </DialogContent>
         </Dialog>

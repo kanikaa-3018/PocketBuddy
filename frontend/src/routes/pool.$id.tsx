@@ -40,6 +40,18 @@ export const Route = createFileRoute("/pool/$id")({
 
 type Pool = any;
 type Item = any;
+type SplitBreakdownEntry = {
+  itemsTotal: number;
+  share: number;
+  total: number;
+  name: string;
+  email?: string;
+  paid: boolean;
+  paymentStatus: string;
+  utr: string;
+  settlementMode?: string | null;
+  confidence?: string | null;
+};
 
 const BRAND_THEMES: Record<string, { bg: string; text: string; name: string; gradient: string; accent: string }> = {
   zepto: {
@@ -373,7 +385,7 @@ function PoolDetail() {
 
   // Split logic
   let deliveryPerPerson = 0;
-  let splitBreakdown: Record<string, { itemsTotal: number; share: number; total: number; name: string; paid: boolean; paymentStatus: string; utr: string }> = {};
+  let splitBreakdown: Record<string, SplitBreakdownEntry> = {};
 
   if (pool.status === "completed") {
     const activeParticipants = listActiveParticipants(allItems);
@@ -397,6 +409,8 @@ function PoolDetail() {
         paid: isHostUser ? true : (payment ? payment.status === "verified" : false),
         paymentStatus: isHostUser ? "host" : (payment ? payment.status : "unpaid"),
         utr: payment ? payment.utr : "",
+        settlementMode: payment?.settlement_mode ?? null,
+        confidence: payment?.confidence ?? null,
       };
     });
   } else {
@@ -419,6 +433,8 @@ function PoolDetail() {
         paid: isHostUser ? true : false,
         paymentStatus: isHostUser ? "host" : "unpaid",
         utr: "",
+        settlementMode: null,
+        confidence: null,
       };
     });
   }
@@ -1150,7 +1166,7 @@ function PoolDetail() {
                                   <Badge className="bg-green-600/10 border border-green-600/20 text-green-500 font-bold py-1 px-2.5">
                                     VERIFIED
                                   </Badge>
-                                  {details.settlement_mode === "settle_in_kind" && (
+                                  {details.settlementMode === "settle_in_kind" && (
                                     <span className="text-[10px] text-amber-500 font-bold bg-amber-500/10 border border-amber-500/20 px-1.5 rounded">
                                       Settled In Kind
                                     </span>

@@ -1,3 +1,5 @@
+import re
+
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from typing import Literal, Optional
@@ -72,6 +74,9 @@ async def update_profile(req: ProfileUpdateReq, user_id: str = Depends(get_curre
 @router.post("/delete-account")
 async def delete_account(user_id: str = Depends(get_current_user)):
     db = get_db()
+    user = await db.users.find_one({"_id": user_id}) or {}
+    full_name = (user.get("full_name") or "").strip()
+    name_filter = {"$regex": f"^{re.escape(full_name)}$", "$options": "i"} if full_name else None
     
     # Cascade delete all data for this user
     await db.transactions.delete_many({"user_id": user_id})
@@ -81,6 +86,10 @@ async def delete_account(user_id: str = Depends(get_current_user)):
     await db.checkin_logs.delete_many({"user_id": user_id})
     await db.travel_savings.delete_many({"user_id": user_id})
     await db.travel_reports.delete_many({"user_id": user_id})
+    await db.travel_pools.update_many(
+        {"host_id": {"$ne": user_id}},
+        {"$pull": {"co_passengers": {"user_id": user_id}, "splits": {"user_id": user_id}}},
+    )
     await db.travel_pools.delete_many({"host_id": user_id})
     
     # Clean up cart items from pools hosted by this user
@@ -89,6 +98,10 @@ async def delete_account(user_id: str = Depends(get_current_user)):
     user_pool_ids = [p["_id"] for p in user_pools]
     if user_pool_ids:
         await db.cart_pool_items.delete_many({"pool_id": {"$in": user_pool_ids}})
+    if name_filter:
+        # Cart pools currently store non-host participants by display name only.
+        await db.cart_pool_items.delete_many({"added_by_name": name_filter})
+        await db.cart_pools.update_many({}, {"$pull": {"payments": {"name": name_filter}}})
     await db.cart_pools.delete_many({"host_id": user_id})
     
     await db.profiles.delete_one({"_id": user_id})

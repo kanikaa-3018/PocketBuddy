@@ -139,7 +139,13 @@ export async function paymentConfirm({ pool_id, data }: { pool_id: string; data:
   });
 }
 
-export async function paymentVerify({ pool_id, data }: { pool_id: string; data: { roommate_name: string; action: "verify" | "reject" } }) {
+export async function paymentVerify({
+  pool_id,
+  data,
+}: {
+  pool_id: string;
+  data: { roommate_name: string; action: "verify" | "reject" | "settle_in_kind" };
+}) {
   return apiRequest(`/api/cart-pools/${pool_id}/payment-verify`, {
     method: "POST",
     body: JSON.stringify(data),

@@ -998,9 +998,13 @@ async def nudge_roommate_api(pool_id: str, req: NudgeReq, user_id: str = Depends
     return {"success": False, "mode": "fallback", "message": "No WhatsApp provider configured. Use manual sharing."}
 
 @router.post("/cron/auto-nudge")
-async def cron_auto_nudge():
+async def cron_auto_nudge(user_id: str = Depends(get_current_user)):
     db = get_db()
-    pools_cursor = db.cart_pools.find({"status": "completed", "auto_nudge_enabled": True})
+    pools_cursor = db.cart_pools.find({
+        "host_id": user_id,
+        "status": "completed",
+        "auto_nudge_enabled": True,
+    })
     pools = await pools_cursor.to_list(length=500)
     
     from app.core.config import settings
