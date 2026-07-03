@@ -16,7 +16,8 @@ import {
   LogOut,
   Compass,
   BarChart3,
-  ShieldCheck
+  ShieldCheck,
+  Activity
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { getProfile } from "@/lib/api/db.functions";
@@ -36,6 +37,7 @@ const tabs = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, id: "nav-dashboard" },
   { to: "/transactions", label: "History", icon: List, id: "nav-transactions" },
   { to: "/stats", label: "Stats", icon: BarChart3, id: "nav-stats" },
+  { to: "/runway", label: "Runway", icon: Activity, id: "nav-runway" },
   { to: "/pool", label: "Pool", icon: ShoppingCart, id: "nav-pool" },
   { to: "/travel", label: "Travel", icon: Compass, id: "nav-travel" },
   { to: "/settings", label: "Settings", icon: Settings, id: "nav-settings" },
