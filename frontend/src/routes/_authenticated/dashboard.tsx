@@ -7,7 +7,7 @@ import { PlatformIcon } from "@/components/PlatformIcon";
 import {
   Plus, ChevronRight, AlertTriangle, Users, Utensils, ShoppingBag,
   Bus, Receipt, MoreHorizontal, Wallet, Timer, MessageSquare, Phone, Mail, MapPin, ExternalLink, Compass, TrendingDown,
-  ShieldCheck, Sparkles, Image, ZoomIn, ZoomOut, Maximize2
+  ShieldCheck, Sparkles, Image, ZoomIn, ZoomOut, Maximize2, Home, Flame
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -406,131 +406,185 @@ function ResponsiveFoodPanel({
 }
 
 function SpendingSmartCheck({ calc }: { calc: any }) {
-  const [selectedPlan, setSelectedPlan] = useState<null | "delivery" | "mess" | "maggi">(null);
+  // Meals per week state (default is a mixed routine)
+  const [meals, setMeals] = useState({
+    mess: 7,
+    home: 4,
+    cooking: 4,
+    canteen: 4,
+    delivery: 2
+  });
+
   const safeDaily = calc?.safeDailyLimit ?? 200;
+  const targetWeekly = safeDaily * 7;
 
-  if (selectedPlan === "delivery") {
-    const isAboveLimit = 250 > safeDaily;
-    const gap = 250 - safeDaily;
-    return (
-      <Card className="bg-surface border-border p-5 relative overflow-hidden transition-all duration-300">
-        <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at top right, rgba(239,68,68,0.05), transparent 65%)" }} />
-        <h4 className="text-xs font-bold tracking-[0.12em] text-zinc-500 uppercase mb-2">Food Plan: Delivery</h4>
-        <div className="space-y-3">
-          <p className="text-xs text-zinc-300 leading-relaxed font-medium">
-            {isAboveLimit ? (
-              <>
-                A typical Swiggy/Zomato delivery order (~₹250) is <span className="text-pb-red font-bold">₹{gap} above</span> your safe daily spend limit of <span className="font-bold text-foreground">₹{safeDaily}</span>. Doing this daily will slash your runway early!
-              </>
-            ) : (
-              <>
-                A typical Swiggy/Zomato order (~₹250) fits within your current safe limit of <span className="font-bold text-foreground">₹{safeDaily}</span>. However, you can save more by pooling orders.
-              </>
-            )}
-          </p>
-          <div className="flex gap-2 flex-wrap">
-            <Link to="/pool" className="h-8 rounded-lg bg-primary text-primary-foreground px-3 flex items-center justify-center text-[10px] font-bold uppercase tracking-wider hover:bg-primary/90 transition-all">
-              Join Swiggy Pool
-            </Link>
-            <Link to="/runway" className="h-8 rounded-lg bg-surface border border-border text-foreground px-3 flex items-center justify-center text-[10px] font-bold uppercase tracking-wider hover:bg-surface-raised transition-all">
-              Runway Sandbox
-            </Link>
-            <button onClick={() => setSelectedPlan(null)} className="h-8 rounded-lg bg-surface-raised text-zinc-400 px-3 text-[10px] font-bold uppercase tracking-wider hover:text-zinc-200 transition-all cursor-pointer">
-              Change
-            </button>
-          </div>
-        </div>
-      </Card>
-    );
-  }
+  // Costs in rupees per meal type
+  const mealCosts = {
+    mess: 0,       // prepaid
+    home: 0,       // zero cost
+    cooking: 60,   // self-cooked pg meal
+    canteen: 100,  // campus canteen meal
+    delivery: 250  // zomato/swiggy order
+  };
 
-  if (selectedPlan === "mess") {
-    return (
-      <Card className="bg-surface border-border p-5 relative overflow-hidden transition-all duration-300">
-        <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at top right, rgba(34,197,94,0.05), transparent 65%)" }} />
-        <h4 className="text-xs font-bold tracking-[0.12em] text-zinc-500 uppercase mb-2">Food Plan: Hostel Mess</h4>
-        <div className="space-y-3">
-          <p className="text-xs text-zinc-300 leading-relaxed font-medium">
-            Awesome! You've already prepaid for the hostel mess. Eating at the mess today saves ₹250 of discretionary money, helping extend your runway length.
-          </p>
-          <div className="flex gap-2 flex-wrap">
-            <Link to="/runway" className="h-8 rounded-lg bg-primary text-primary-foreground px-3 flex items-center justify-center text-[10px] font-bold uppercase tracking-wider hover:bg-primary/90 transition-all">
-              Track Projections
-            </Link>
-            <button onClick={() => setSelectedPlan(null)} className="h-8 rounded-lg bg-surface-raised text-zinc-400 px-3 text-[10px] font-bold uppercase tracking-wider hover:text-zinc-200 transition-all cursor-pointer">
-              Change
-            </button>
-          </div>
-        </div>
-      </Card>
-    );
-  }
+  // Presets
+  const applyPreset = (preset: "hostel" | "pg" | "day" | "mixed") => {
+    if (preset === "hostel") {
+      setMeals({ mess: 15, home: 0, cooking: 0, canteen: 4, delivery: 2 });
+    } else if (preset === "pg") {
+      setMeals({ mess: 0, home: 0, cooking: 14, canteen: 5, delivery: 2 });
+    } else if (preset === "day") {
+      setMeals({ mess: 0, home: 18, cooking: 0, canteen: 3, delivery: 0 });
+    } else if (preset === "mixed") {
+      setMeals({ mess: 7, home: 4, cooking: 4, canteen: 4, delivery: 2 });
+    }
+  };
 
-  if (selectedPlan === "maggi") {
-    return (
-      <Card className="bg-surface border-border p-5 relative overflow-hidden transition-all duration-300">
-        <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at top right, rgba(245,158,11,0.05), transparent 65%)" }} />
-        <h4 className="text-xs font-bold tracking-[0.12em] text-zinc-500 uppercase mb-2">Food Plan: Maggi / Tapri</h4>
-        <div className="space-y-3">
-          <p className="text-xs text-zinc-300 leading-relaxed font-medium">
-            Budget saver! Spending only ~₹40 for tea or late night Maggi helps you stay well below your daily pace, building a safe buffer for unexpected campus expenses.
-          </p>
-          <div className="flex gap-2 flex-wrap">
-            <Link to="/runway" className="h-8 rounded-lg bg-primary text-primary-foreground px-3 flex items-center justify-center text-[10px] font-bold uppercase tracking-wider hover:bg-primary/90 transition-all">
-              Check Runway
-            </Link>
-            <button onClick={() => setSelectedPlan(null)} className="h-8 rounded-lg bg-surface-raised text-zinc-400 px-3 text-[10px] font-bold uppercase tracking-wider hover:text-zinc-200 transition-all cursor-pointer">
-              Change
-            </button>
-          </div>
-        </div>
-      </Card>
-    );
-  }
+  const totalMeals = Object.values(meals).reduce((a, b) => a + b, 0);
+  const totalWeeklyCost = Object.entries(meals).reduce(
+    (acc, [key, val]) => acc + val * mealCosts[key as keyof typeof mealCosts],
+    0
+  );
+  
+  const avgMealCost = totalMeals > 0 ? Math.round(totalWeeklyCost / totalMeals) : 0;
+  const runwayDiff = Math.round((targetWeekly - totalWeeklyCost) / (safeDaily || 1));
+
+  // Modify counters helper
+  const adjustMeals = (key: keyof typeof meals, amount: number) => {
+    setMeals(prev => {
+      const nextVal = Math.max(0, prev[key] + amount);
+      return { ...prev, [key]: nextVal };
+    });
+  };
 
   return (
-    <Card className="bg-surface border border-border rounded-2xl p-5 relative overflow-hidden">
+    <Card className="bg-surface border border-border rounded-2xl p-6 relative overflow-hidden space-y-5">
       <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at top right, rgba(255,107,0,0.03), transparent 65%)" }} />
-      <div className="flex items-center gap-2 mb-3">
-        <Compass className="h-4.5 w-4.5 text-primary" />
-        <p className="text-xs font-bold tracking-[0.15em] text-zinc-500 uppercase">Interactive Runway Check</p>
+      
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <Compass className="h-4.5 w-4.5 text-primary" />
+          <p className="text-xs font-black tracking-[0.15em] text-zinc-400 uppercase">Runway Meal Routine Mixer</p>
+        </div>
+        <div className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider border ${
+          runwayDiff >= 0 
+            ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500" 
+            : "bg-red-500/10 border-red-500/20 text-red-500 animate-pulse"
+        }`}>
+          {runwayDiff >= 0 ? `+${runwayDiff} Days Runway Extension` : `${runwayDiff} Days Runway Reduction`}
+        </div>
       </div>
-      <p className="text-xs text-zinc-300 leading-relaxed font-medium mb-4">
-        What's your plan for dinner tonight? Choose an option to see how it affects your Runway countdown.
+
+      <p className="text-xs text-zinc-300 leading-relaxed font-semibold">
+        Adjust your weekly routine below. We'll simulate how your choices (cooking vs. dining hall vs. delivery) affect your runway forecast.
       </p>
-      <div className="flex flex-col gap-2">
-        <button
-          onClick={() => setSelectedPlan("delivery")}
-          className="w-full flex items-center justify-between p-3 rounded-xl border border-border bg-surface-raised hover:bg-surface hover:border-primary/40 transition-all text-xs font-semibold text-foreground cursor-pointer group"
-        >
-          <span className="flex items-center gap-2">
-            <ShoppingBag className="h-4 w-4 text-pb-red" />
-            <span>Order Swiggy / Zomato Delivery</span>
-          </span>
-          <ChevronRight className="h-4 w-4 text-zinc-500 group-hover:text-primary transition-transform group-hover:translate-x-0.5" />
-        </button>
 
-        <button
-          onClick={() => setSelectedPlan("mess")}
-          className="w-full flex items-center justify-between p-3 rounded-xl border border-border bg-surface-raised hover:bg-surface hover:border-primary/40 transition-all text-xs font-semibold text-foreground cursor-pointer group"
-        >
-          <span className="flex items-center gap-2">
-            <Utensils className="h-4 w-4 text-pb-green" />
-            <span>Eat at Campus Hostel Mess</span>
-          </span>
-          <ChevronRight className="h-4 w-4 text-zinc-500 group-hover:text-primary transition-transform group-hover:translate-x-0.5" />
-        </button>
+      {/* Routine Presets */}
+      <div className="space-y-1.5">
+        <p className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Apply Student Preset</p>
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            onClick={() => applyPreset("hostel")}
+            className="px-2.5 py-1 text-[9px] font-bold uppercase rounded-lg border border-border bg-surface-raised hover:bg-surface text-zinc-300 hover:text-foreground transition-all cursor-pointer"
+          >
+            🎓 Hostel Mess
+          </button>
+          <button
+            type="button"
+            onClick={() => applyPreset("pg")}
+            className="px-2.5 py-1 text-[9px] font-bold uppercase rounded-lg border border-border bg-surface-raised hover:bg-surface text-zinc-300 hover:text-foreground transition-all cursor-pointer"
+          >
+            🍳 PG Self-Cook
+          </button>
+          <button
+            type="button"
+            onClick={() => applyPreset("day")}
+            className="px-2.5 py-1 text-[9px] font-bold uppercase rounded-lg border border-border bg-surface-raised hover:bg-surface text-zinc-300 hover:text-foreground transition-all cursor-pointer"
+          >
+            🏠 Day Scholar
+          </button>
+          <button
+            type="button"
+            onClick={() => applyPreset("mixed")}
+            className="px-2.5 py-1 text-[9px] font-bold uppercase rounded-lg border border-border bg-surface-raised hover:bg-surface text-zinc-300 hover:text-foreground transition-all cursor-pointer"
+          >
+            🔄 Mixed Flex
+          </button>
+        </div>
+      </div>
 
-        <button
-          onClick={() => setSelectedPlan("maggi")}
-          className="w-full flex items-center justify-between p-3 rounded-xl border border-border bg-surface-raised hover:bg-surface hover:border-primary/40 transition-all text-xs font-semibold text-foreground cursor-pointer group"
-        >
-          <span className="flex items-center gap-2">
-            <Timer className="h-4 w-4 text-pb-amber" />
-            <span>Late Night Maggi / Tapri (₹40)</span>
-          </span>
-          <ChevronRight className="h-4 w-4 text-zinc-500 group-hover:text-primary transition-transform group-hover:translate-x-0.5" />
-        </button>
+      {/* Mixer Counters List */}
+      <div className="space-y-2 bg-surface-raised/20 p-3.5 rounded-xl border border-border/40">
+        {[
+          { key: "mess", label: "Hostel Mess Meals", cost: 0, color: "text-pb-green", icon: Utensils },
+          { key: "home", label: "Home Cooked (Scholar)", cost: 0, color: "text-cyan-500", icon: Home },
+          { key: "cooking", label: "PG Cooking (Groceries)", cost: 60, color: "text-purple-500", icon: Flame },
+          { key: "canteen", label: "Canteen & Dhabas", cost: 100, color: "text-pb-amber", icon: Compass },
+          { key: "delivery", label: "Zomato & Swiggy", cost: 250, color: "text-pb-red", icon: ShoppingBag }
+        ].map((item) => {
+          const val = meals[item.key as keyof typeof meals];
+          const Icon = item.icon;
+          return (
+            <div key={item.key} className="flex items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2 min-w-0">
+                <Icon className={`h-4 w-4 shrink-0 ${item.color}`} />
+                <div className="min-w-0">
+                  <p className="font-semibold text-foreground truncate">{item.label}</p>
+                  <p className="text-[9px] text-zinc-500 font-mono">₹{item.cost}/meal</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => adjustMeals(item.key as keyof typeof meals, -1)}
+                  className="h-6 w-6 rounded-lg bg-surface-raised border border-border text-zinc-400 hover:text-zinc-100 flex items-center justify-center font-bold text-sm cursor-pointer select-none active:scale-95 transition-all"
+                >
+                  -
+                </button>
+                <span className="w-6 text-center font-mono font-bold text-foreground text-xs">{val}</span>
+                <button
+                  type="button"
+                  onClick={() => adjustMeals(item.key as keyof typeof meals, 1)}
+                  className="h-6 w-6 rounded-lg bg-surface-raised border border-border text-zinc-400 hover:text-zinc-100 flex items-center justify-center font-bold text-sm cursor-pointer select-none active:scale-95 transition-all"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Projection Feedback */}
+      <div className="grid grid-cols-3 gap-3 text-center">
+        <div className="bg-surface-raised/40 p-2.5 border border-border rounded-xl">
+          <p className="text-[8px] font-bold text-zinc-500 uppercase tracking-wider">Weekly Budget</p>
+          <p className="text-[13px] font-black text-foreground mt-0.5 font-mono">₹{totalWeeklyCost}</p>
+        </div>
+        <div className="bg-surface-raised/40 p-2.5 border border-border rounded-xl">
+          <p className="text-[8px] font-bold text-zinc-500 uppercase tracking-wider">Avg Meal Cost</p>
+          <p className="text-[13px] font-black text-primary mt-0.5 font-mono">₹{avgMealCost}</p>
+        </div>
+        <div className="bg-surface-raised/40 p-2.5 border border-border rounded-xl">
+          <p className="text-[8px] font-bold text-zinc-500 uppercase tracking-wider">Total Meals</p>
+          <p className="text-[13px] font-black text-zinc-300 mt-0.5 font-mono">{totalMeals} / wk</p>
+        </div>
+      </div>
+
+      <div className="pt-2 border-t border-border/40 flex items-start gap-2.5">
+        <Compass className={`h-4 w-4 mt-0.5 shrink-0 ${runwayDiff >= 0 ? "text-emerald-500" : "text-pb-red"}`} />
+        <p className="text-[10px] text-zinc-400 leading-relaxed font-semibold">
+          {runwayDiff >= 0 ? (
+            <>
+              <span className="text-emerald-500 font-extrabold">Safe Routine.</span> Your custom plan spends <span className="font-bold text-foreground">₹{Math.round(targetWeekly - totalWeeklyCost)} less</span> than your target allowance, saving you money!
+            </>
+          ) : (
+            <>
+              <span className="text-pb-red font-extrabold">Runway pressure.</span> This routine is <span className="font-bold text-foreground">₹{Math.round(totalWeeklyCost - targetWeekly)} above</span> your target. Consider swapping {Math.ceil((totalWeeklyCost - targetWeekly) / 190)} Zomato orders to PG Cooking to save ₹{Math.ceil((totalWeeklyCost - targetWeekly) / 190) * 190}!
+            </>
+          )}
+        </p>
       </div>
     </Card>
   );
@@ -1449,14 +1503,31 @@ function Dashboard() {
       });
     }
 
-    // 3. Add meal gap warning
-    if (foodGapHours > 8 || (insights?.food?.gap_hours ?? 0) > 8) {
-      const gap = Math.round(foodGapHours || insights?.food?.gap_hours || 0);
+    // 3. Add meal gap warning with different severity levels
+    const gap = Math.round(foodGapHours || insights?.food?.gap_hours || 0);
+    
+    if (gap >= 12) {
+      // Critical - 12+ hours
+      const bodyText = bestFood 
+        ? `CRITICAL: ${gap} hours without food! Your health and focus are at risk. Get a ${bestFood.item_name} for ${rupees(bestFood.price)} at ${bestFood.venue_name} immediately.`
+        : `CRITICAL: ${gap} hours without food! Your health and focus are at risk. Find the nearest campus canteen immediately.`;
+      list.push({
+        id: "meal_gap_critical",
+        type: "meal_gap",
+        icon: AlertTriangle,
+        accent: "#ef4444",
+        title: "🚨 FIND MEAL NOW",
+        body: bodyText,
+        onAction: () => setShowFoodSheet(true),
+        actionText: "FIND MEAL NOW"
+      });
+    } else if (gap >= 8) {
+      // Warning - 8+ hours
       const bodyText = bestFood 
         ? `It has been ${gap} hours since your last meal. Protect your runway with a ${bestFood.item_name} for ${rupees(bestFood.price)} at ${bestFood.venue_name}.`
         : `It has been ${gap} hours since your last meal. Grab a healthy meal at a campus canteen to stay active.`;
       list.push({
-        id: "meal_gap",
+        id: "meal_gap_warning",
         type: "meal_gap",
         icon: Utensils,
         accent: "#f59e0b",
@@ -1464,6 +1535,21 @@ function Dashboard() {
         body: bodyText,
         onAction: () => setShowFoodSheet(true),
         actionText: "Find Food"
+      });
+    } else if (gap >= 6) {
+      // Early warning - 6+ hours
+      const bodyText = bestFood 
+        ? `${gap} hours since your last meal. Consider a ${bestFood.item_name} for ${rupees(bestFood.price)} at ${bestFood.venue_name} to maintain energy.`
+        : `${gap} hours since your last meal. Consider grabbing something healthy soon to maintain energy.`;
+      list.push({
+        id: "meal_gap_early",
+        type: "meal_gap",
+        icon: Timer,
+        accent: "#8b5cf6",
+        title: "Meal Reminder",
+        body: bodyText,
+        onAction: () => setShowFoodSheet(true),
+        actionText: "Browse Menu"
       });
     }
 
@@ -1735,7 +1821,7 @@ function Dashboard() {
 
           {/* AI Food Guard Live Banner */}
           {((insights?.food?.price_spikes && insights.food.price_spikes.length > 0) || 
-            (foodGapHours > 8 || (insights?.food?.gap_hours ?? 0) > 8)) && (
+            (foodGapHours >= 6 || (insights?.food?.gap_hours ?? 0) >= 6)) && (
             <div className="space-y-2 animate-[fadeIn_0.3s_ease-out]">
               {/* Price Spike Notification */}
               {insights?.food?.price_spikes?.map((spike: any, idx: number) => (
@@ -1765,22 +1851,64 @@ function Dashboard() {
               ))}
 
               {/* Food Gap / Meal Miss Guardrail */}
-              {(foodGapHours > 8 || (insights?.food?.gap_hours ?? 0) > 8) && (
-                <div className="flex items-center justify-between gap-3 rounded-2xl border border-warning/20 bg-warning/5 p-4 text-xs">
+              {(foodGapHours >= 6 || (insights?.food?.gap_hours ?? 0) >= 6) && (
+                <div className={`flex items-center justify-between gap-3 rounded-2xl p-4 text-xs ${
+                  (foodGapHours >= 12 || (insights?.food?.gap_hours ?? 0) >= 12)
+                    ? 'border border-destructive/30 bg-destructive/10 animate-pulse'
+                    : (foodGapHours >= 8 || (insights?.food?.gap_hours ?? 0) >= 8)
+                    ? 'border border-warning/20 bg-warning/5'
+                    : 'border border-purple-500/20 bg-purple-500/5'
+                }`}>
                   <div className="flex items-center gap-3">
-                    <div className="grid place-items-center h-8 w-8 rounded-lg bg-warning/10 text-warning shrink-0">
-                      <Utensils className="h-4 w-4" />
+                    <div className={`grid place-items-center h-8 w-8 rounded-lg shrink-0 ${
+                      (foodGapHours >= 12 || (insights?.food?.gap_hours ?? 0) >= 12)
+                        ? 'bg-destructive/20 text-destructive'
+                        : (foodGapHours >= 8 || (insights?.food?.gap_hours ?? 0) >= 8)
+                        ? 'bg-warning/10 text-warning'
+                        : 'bg-purple-500/10 text-purple-500'
+                    }`}>
+                      {(foodGapHours >= 12 || (insights?.food?.gap_hours ?? 0) >= 12) ? (
+                        <AlertTriangle className="h-4 w-4" />
+                      ) : (foodGapHours >= 8 || (insights?.food?.gap_hours ?? 0) >= 8) ? (
+                        <Utensils className="h-4 w-4" />
+                      ) : (
+                        <Timer className="h-4 w-4" />
+                      )}
                     </div>
                     <div>
-                      <p className="font-black text-warning uppercase tracking-wider">Meal Gap Warning</p>
+                      <p className={`font-black uppercase tracking-wider ${
+                        (foodGapHours >= 12 || (insights?.food?.gap_hours ?? 0) >= 12)
+                          ? 'text-destructive'
+                          : (foodGapHours >= 8 || (insights?.food?.gap_hours ?? 0) >= 8)
+                          ? 'text-warning'
+                          : 'text-purple-500'
+                      }`}>
+                        {(foodGapHours >= 12 || (insights?.food?.gap_hours ?? 0) >= 12)
+                          ? '🚨 FIND MEAL NOW'
+                          : (foodGapHours >= 8 || (insights?.food?.gap_hours ?? 0) >= 8)
+                          ? 'Meal Gap Warning'
+                          : 'Meal Reminder'}
+                      </p>
                       <p className="text-zinc-300 font-medium leading-relaxed mt-0.5">
-                        It has been <strong className="text-foreground">{Math.round(foodGapHours || insights?.food?.gap_hours || 0)} hours</strong> since your last meal.
-                        {bestFood ? (
+                        {(foodGapHours >= 12 || (insights?.food?.gap_hours ?? 0) >= 12) ? (
                           <>
-                            {" "}Protect your runway with a <strong className="text-foreground">{bestFood.item_name}</strong> for <strong className="text-success font-mono">{rupees(bestFood.price)}</strong> at <strong className="text-foreground">{bestFood.venue_name}</strong>.
+                            <strong className="text-destructive">CRITICAL:</strong> <strong className="text-foreground">{Math.round(foodGapHours || insights?.food?.gap_hours || 0)} hours</strong> without food! Your health and focus are at risk.
                           </>
                         ) : (
-                          " Grab a healthy meal at a campus canteen to stay active."
+                          <>
+                            It has been <strong className="text-foreground">{Math.round(foodGapHours || insights?.food?.gap_hours || 0)} hours</strong> since your last meal.
+                          </>
+                        )}
+                        {bestFood ? (
+                          <>
+                            {(foodGapHours >= 12 || (insights?.food?.gap_hours ?? 0) >= 12) ? ' Get a ' : ' Protect your runway with a '}
+                            <strong className="text-foreground">{bestFood.item_name}</strong> for <strong className="text-success font-mono">{rupees(bestFood.price)}</strong> at <strong className="text-foreground">{bestFood.venue_name}</strong>
+                            {(foodGapHours >= 12 || (insights?.food?.gap_hours ?? 0) >= 12) ? ' immediately.' : '.'}
+                          </>
+                        ) : (
+                          (foodGapHours >= 12 || (insights?.food?.gap_hours ?? 0) >= 12) 
+                            ? " Find the nearest campus canteen immediately."
+                            : " Grab a healthy meal at a campus canteen to stay active."
                         )}
                       </p>
                     </div>
@@ -1788,9 +1916,19 @@ function Dashboard() {
                   <button
                     type="button"
                     onClick={() => setShowFoodSheet(true)}
-                    className="shrink-0 bg-warning/10 hover:bg-warning/15 border border-warning/20 text-warning px-3.5 py-1.5 rounded-xl font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                    className={`shrink-0 px-3.5 py-1.5 rounded-xl font-bold uppercase tracking-wider transition-colors cursor-pointer ${
+                      (foodGapHours >= 12 || (insights?.food?.gap_hours ?? 0) >= 12)
+                        ? 'bg-destructive/20 hover:bg-destructive/30 border border-destructive/40 text-destructive animate-pulse'
+                        : (foodGapHours >= 8 || (insights?.food?.gap_hours ?? 0) >= 8)
+                        ? 'bg-warning/10 hover:bg-warning/15 border border-warning/20 text-warning'
+                        : 'bg-purple-500/10 hover:bg-purple-500/15 border border-purple-500/20 text-purple-500'
+                    }`}
                   >
-                    Find Food
+                    {(foodGapHours >= 12 || (insights?.food?.gap_hours ?? 0) >= 12)
+                      ? 'FIND MEAL NOW'
+                      : (foodGapHours >= 8 || (insights?.food?.gap_hours ?? 0) >= 8)
+                      ? 'Find Food'
+                      : 'Browse Menu'}
                   </button>
                 </div>
               )}
@@ -3942,6 +4080,34 @@ function Dashboard() {
           );
         })()}
       </div>
+
+      {/* Floating Critical Meal Alert Button */}
+      {(foodGapHours >= 12 || (insights?.food?.gap_hours ?? 0) >= 12) && (
+        <div className="fixed bottom-6 right-6 z-50 animate-[bounceIn_0.5s_ease-out]">
+          <button
+            onClick={() => setShowFoodSheet(true)}
+            className="group relative bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-full p-4 shadow-2xl shadow-red-500/30 border-2 border-red-400/50 transition-all duration-300 hover:scale-105 active:scale-95 animate-pulse"
+          >
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="h-6 w-6 animate-bounce" />
+              <div className="text-left">
+                <div className="text-sm font-black uppercase tracking-wide">🚨 CRITICAL</div>
+                <div className="text-xs font-bold">FIND MEAL NOW</div>
+              </div>
+            </div>
+            
+            {/* Pulsing ring animation */}
+            <div className="absolute inset-0 rounded-full bg-red-500/30 animate-ping"></div>
+            <div className="absolute inset-0 rounded-full bg-red-500/20 animate-ping" style={{ animationDelay: '0.5s' }}></div>
+            
+            {/* Tooltip */}
+            <div className="absolute bottom-full right-0 mb-3 px-3 py-2 bg-black/90 text-white text-xs font-bold rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+              {Math.round(foodGapHours || insights?.food?.gap_hours || 0)}h without food!
+              <div className="absolute top-full right-4 w-0 h-0 border-l-4 border-l-transparent border-r-4 border-r-transparent border-t-4 border-t-black/90"></div>
+            </div>
+          </button>
+        </div>
+      )}
     </AppShell>
   );
 }

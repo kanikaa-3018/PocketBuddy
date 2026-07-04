@@ -128,6 +128,34 @@ async def get_campus_food(status: Optional[str] = Query(None)):
                 pass
         item["price_stable"] = price_stable
         item["price_change_pct"] = price_change_pct
+        
+        # 3. Source & freshness metadata + price spike alerts (Food Trust Layer)
+        votes = item.get("verification_votes", 1)
+        history = item.get("price_history", [])
+        last_change_str = "recently"
+        if history:
+            try:
+                last_change_t = datetime.datetime.fromisoformat(history[-1]["changed_at"].replace("Z", "+00:00"))
+                last_change_t = last_change_t.replace(tzinfo=None)
+                diff_hours = int((now - last_change_t).total_seconds() / 3600)
+                if diff_hours < 1:
+                    last_change_str = "just now"
+                elif diff_hours == 1:
+                    last_change_str = "1 hour ago"
+                else:
+                    last_change_str = f"{diff_hours} hours ago"
+            except Exception:
+                pass
+
+        if votes >= 3:
+            item["freshness_info"] = f"Verified {last_change_str} via {votes} receipt audits"
+            item["source_freshness"] = "Freshly prepared & source audited"
+        else:
+            item["freshness_info"] = f"Awaiting receipt validation ({votes}/3 scans)"
+            item["source_freshness"] = "Community suggested, pending verify"
+
+        item["price_spike_alert"] = not price_stable and price_change_pct >= 15
+        
         mapped_items.append(item)
 
     return map_docs(mapped_items)
@@ -351,12 +379,15 @@ async def edit_food_item(
     if not item:
         raise HTTPException(status_code=404, detail="Menu item not found.")
 
+    # Any authenticated user can edit, but if they are not trusted (or not the creator),
+    # we reset verification votes to 1 and flag it as pending_verification for review.
     is_creator = item.get("scanned_by") == user_id
     is_trusted = await _is_user_trusted(db, user_id)
-    if not (is_creator or is_trusted):
-        raise HTTPException(status_code=403, detail="Not authorized to edit this menu item.")
-
+    
     updates: dict = {"updated_at": datetime.datetime.utcnow(), "edited_by": user_id}
+    if not (is_creator or is_trusted):
+        updates["status"] = "pending_verification"
+        updates["verification_votes"] = 1
     push_updates: dict = {}
     if req.item_name is not None:
         updates["item_name"] = req.item_name.strip()
