@@ -346,10 +346,58 @@ function PoolDetail() {
   if (!pool)
     return (
       <AppShell>
-        <div className="p-4 space-y-4">
-          <Skeleton className="h-10 w-2/3" />
-          <Skeleton className="h-40 w-full" />
-          <Skeleton className="h-60 w-full" />
+        <div className="animate-[fadeIn_0.2s_ease-out] space-y-6">
+          {/* Header area */}
+          <div className="flex items-center justify-between border-b border-border pb-4 mb-4">
+            <div className="flex items-center gap-3 flex-1">
+              <Skeleton className="h-8 w-8 rounded-full" />
+              <Skeleton className="h-6 w-48" />
+              <Skeleton className="h-5 w-16 rounded-full" />
+            </div>
+            <Skeleton className="h-8 w-20 rounded-lg" />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Left/Main Column - Items List */}
+            <div className="lg:col-span-2 space-y-4">
+              <Card className="p-6 bg-surface border-border">
+                <div className="flex items-center justify-between mb-4">
+                  <Skeleton className="h-5 w-32" />
+                  <Skeleton className="h-5 w-24" />
+                </div>
+                <div className="space-y-3.5">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex items-center justify-between border-b border-border/40 pb-3">
+                      <div className="flex items-center gap-3 flex-1">
+                        <Skeleton className="h-8 w-8 rounded-md" />
+                        <div className="space-y-1.5 flex-1">
+                          <Skeleton className="h-4 w-1/3" />
+                          <Skeleton className="h-3 w-1/4" />
+                        </div>
+                      </div>
+                      <Skeleton className="h-5 w-16" />
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            </div>
+
+            {/* Right Column - Status/Splits */}
+            <div className="space-y-4">
+              <Card className="p-6 bg-surface border-border space-y-4">
+                <Skeleton className="h-5 w-1/2" />
+                <Skeleton className="h-10 w-full rounded-xl" />
+                <Skeleton className="h-12 w-full rounded-xl" />
+              </Card>
+              <Card className="p-6 bg-surface border-border space-y-3">
+                <Skeleton className="h-4 w-1/3" />
+                <div className="space-y-2">
+                  <Skeleton className="h-8 w-full" />
+                  <Skeleton className="h-8 w-full" />
+                </div>
+              </Card>
+            </div>
+          </div>
         </div>
       </AppShell>
     );

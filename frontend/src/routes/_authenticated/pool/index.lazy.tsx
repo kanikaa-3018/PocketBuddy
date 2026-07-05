@@ -8,6 +8,7 @@ import { PlatformIcon } from "@/components/PlatformIcon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -104,17 +105,19 @@ function PoolList() {
   const [tab, setTab] = useState<"active" | "completed" | "cancelled">("active");
   const now = Date.now();
 
-  const { data: profile } = useQuery({
+  const { data: profile, isLoading: profileLoading } = useQuery({
     queryKey: ["profile", user?.id],
     enabled: !!user,
     queryFn: () => getProfile(),
   });
 
-  const { data: pools } = useQuery({
+  const { data: pools, isLoading: poolsLoading } = useQuery({
     queryKey: ["all-pools", profile?.wing_label],
     enabled: !!profile?.wing_label,
     queryFn: () => getCartPools(),
   });
+
+  const isLoading = !pools && (profileLoading || poolsLoading);
 
   const isPoolFullyPaid = (p: any) => {
     if (p.status !== "completed") return false;
@@ -217,7 +220,36 @@ function PoolList() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-[fadeIn_0.2s_ease-out]">
-            {tab === "active" && (
+            {isLoading ? (
+              <>
+                {[1, 2, 3, 4].map((i) => (
+                  <Card key={i} className="p-5 border border-border border-l-4 border-l-muted bg-surface relative overflow-hidden">
+                    <div className="flex flex-col justify-between h-full space-y-4">
+                      <div>
+                        <div className="flex items-center justify-between gap-3 mb-2">
+                          <div className="flex items-center gap-2.5 flex-1">
+                            <Skeleton className="h-6 w-6 rounded-full shrink-0" />
+                            <div className="flex flex-wrap items-center gap-1.5 flex-1">
+                              <Skeleton className="h-5 w-28" />
+                              <Skeleton className="h-4 w-12 rounded-full" />
+                            </div>
+                          </div>
+                          <Skeleton className="h-5 w-16 rounded-full" />
+                        </div>
+                        <div className="mt-4 space-y-2">
+                          <Skeleton className="h-4 w-24" />
+                          <Skeleton className="h-9 w-full rounded-xl" />
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between pt-2.5 border-t border-border/50">
+                        <Skeleton className="h-3 w-16" />
+                        <Skeleton className="h-3 w-20" />
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </>
+            ) : tab === "active" ? (
               <>
                 {activePools.length === 0 && (
                   <div className="col-span-full py-12 text-center border border-dashed border-border rounded-xl bg-surface-raised/40">
@@ -228,9 +260,7 @@ function PoolList() {
                   <PoolCard key={p.id} pool={p} />
                 ))}
               </>
-            )}
-
-            {tab === "completed" && (
+            ) : tab === "completed" ? (
               <>
                 {completedPools.length === 0 && (
                   <div className="col-span-full py-12 text-center border border-dashed border-border rounded-xl bg-surface-raised/40">
@@ -241,9 +271,7 @@ function PoolList() {
                   <PoolCard key={p.id} pool={p} />
                 ))}
               </>
-            )}
-
-            {tab === "cancelled" && (
+            ) : (
               <>
                 {cancelledPools.length === 0 && (
                   <div className="col-span-full py-12 text-center border border-dashed border-border rounded-xl bg-surface-raised/40">
