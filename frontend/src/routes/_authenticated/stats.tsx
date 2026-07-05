@@ -102,7 +102,7 @@ function StatsPage() {
     const truncatedName = name.length > 10 ? name.slice(0, 10) + "…" : name;
     return (
       <text x={x} y={y} fill="var(--foreground)" textAnchor={x > cx ? "start" : "end"}
-        dominantBaseline="central" fontSize={10} fontWeight={700} fontFamily="'DM Sans', sans-serif">
+        dominantBaseline="central" fontSize={10} fontWeight={700} fontFamily="var(--font-sans)">
         {truncatedName}
         <tspan dx={2} fill="var(--muted-foreground)" fontSize={9}>{pct}%</tspan>
       </text>

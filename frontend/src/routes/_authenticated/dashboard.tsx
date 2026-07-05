@@ -44,6 +44,7 @@ import {
   insertCheckinLog,
   identifyMerchant,
   getDashboardInsights,
+  getRunwayForecast,
   getCampusIntel,
   getWingFeed,
   getWellnessInsights,
@@ -166,7 +167,7 @@ function BurnoutGauge({ score }: { score: number }) {
           <path d={fillPath} fill="none" stroke={color} strokeWidth="10" strokeLinecap="round"
             style={{ filter: `drop-shadow(0 0 6px ${color}88)`, transition: "all 1s ease" }} />
         )}
-        <text x={cx} y={cy - 6} textAnchor="middle" fill={color} fontSize="26" fontWeight="900" fontFamily="monospace">{score}</text>
+        <text x={cx} y={cy - 6} textAnchor="middle" fill={color} fontSize="26" fontWeight="900" fontFamily="var(--font-sans)">{score}</text>
         <text x={cx} y={cy + 14} textAnchor="middle" fill="rgba(255,255,255,0.3)" fontSize="9" fontWeight="700" letterSpacing="2">{label}</text>
       </svg>
     </div>
@@ -442,6 +443,189 @@ function SpendingSmartCheck({ calc }: { calc: any }) {
   );
 }
 
+function MealRunwayCheck({ calc, runwayView }: { calc: any; runwayView?: any }) {
+  const [selectedPlan, setSelectedPlan] = useState<null | "delivery" | "routine" | "shared">(null);
+  const routine = runwayView?.foodRoutine ?? {};
+  const safeDailyPaise = runwayView?.safeDailyPaise ?? Math.round((calc?.safeDailyLimit ?? 200) * 100);
+  const foodCapPaise = routine?.recommended_daily_food_cap ?? safeDailyPaise;
+  const deliveryCostPaise = routine?.delivery?.avg_order || 25_000;
+  const routineType = routine?.type ?? "mixed";
+  const routineMeta: Record<string, { label: string; option: string; detail: string }> = {
+    hostel_mess: {
+      label: "Hostel mess / campus meals",
+      option: "Use mess or campus meal",
+      detail: "Best when your mess is prepaid or predictable. It keeps delivery from eating into the safe/day number.",
+    },
+    pg_cooking: {
+      label: "PG cooking / groceries",
+      option: "Cook or heat PG meal",
+      detail: "Use groceries or a prepped PG meal before delivery. This is the strongest lever for students outside hostel mess.",
+    },
+    day_scholar: {
+      label: "Day scholar meals",
+      option: "Packed/home meal + campus snack",
+      detail: "Keep one predictable packed or campus meal so commute snacks do not quietly shrink runway.",
+    },
+    mixed: {
+      label: "Mixed meal routine",
+      option: "Choose routine campus meal",
+      detail: "Pick the repeatable low-cost meal first, then use delivery only when the daily limit can absorb it.",
+    },
+  };
+  const activeRoutine = routineMeta[routineType] ?? routineMeta.mixed;
+  const routineMealCostPaise =
+    routine?.routine_meal_cost ||
+    Math.max(4_000, Math.min(foodCapPaise || 14_000, Math.round((foodCapPaise || 14_000) / 2)));
+  const sharedCostPaise = Math.max(
+    4_000,
+    Math.min(deliveryCostPaise, Math.round((deliveryCostPaise + routineMealCostPaise) / 2))
+  );
+  const plans = [
+    {
+      id: "routine" as const,
+      label: activeRoutine.option,
+      cost: routineMealCostPaise,
+      icon: Utensils,
+      tone: "text-pb-green",
+      border: "border-pb-green/20",
+      bg: "bg-pb-green/5",
+      detail: activeRoutine.detail,
+    },
+    {
+      id: "shared" as const,
+      label: routineType === "pg_cooking" ? "Split groceries with roommate" : "Pool / shared campus order",
+      cost: sharedCostPaise,
+      icon: Users,
+      tone: "text-primary",
+      border: "border-primary/20",
+      bg: "bg-primary/5",
+      detail:
+        routineType === "pg_cooking"
+          ? "A shared grocery run reduces per-meal cost without forcing hostel-mess assumptions."
+          : "Pooling cuts delivery fees and keeps the order closer to your safe food cap.",
+    },
+    {
+      id: "delivery" as const,
+      label: "Individual delivery order",
+      cost: deliveryCostPaise,
+      icon: ShoppingBag,
+      tone: "text-pb-red",
+      border: "border-pb-red/20",
+      bg: "bg-pb-red/5",
+      detail: "Convenient, but this is usually the fastest way food pace starts reducing runway.",
+    },
+  ];
+  const selected = plans.find((plan) => plan.id === selectedPlan);
+  const savedVsDelivery = selected ? Math.max(0, deliveryCostPaise - selected.cost) : 0;
+  const safeUsage = selected && safeDailyPaise > 0 ? Math.round((selected.cost / safeDailyPaise) * 100) : 0;
+  const capGap = selected ? selected.cost - foodCapPaise : 0;
+  const SelectedIcon = selected?.icon;
+
+  if (selected && SelectedIcon) {
+    return (
+      <Card id="card-interactive-runway-check" className={`bg-surface border ${selected.border} p-4 relative overflow-hidden transition-all duration-300`}>
+        <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at top right, rgba(255,107,0,0.04), transparent 65%)" }} />
+        <div className="relative space-y-4">
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline" className={`w-fit ${selected.border} ${selected.bg} ${selected.tone} text-[10px] uppercase tracking-wider font-semibold`}>
+                {activeRoutine.label}
+              </Badge>
+              <Badge variant="outline" className="w-fit border-border bg-surface-raised text-[10px] uppercase tracking-wider font-semibold">
+                {rupees(selected.cost)} today
+              </Badge>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className={`mt-0.5 h-10 w-10 rounded-xl border ${selected.border} ${selected.bg} ${selected.tone} flex items-center justify-center shrink-0`}>
+                <SelectedIcon className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <h4 className="text-sm sm:text-base font-semibold text-foreground">{selected.label}</h4>
+                <p className="mt-1 text-xs sm:text-sm text-muted-foreground leading-relaxed">{selected.detail}</p>
+              </div>
+            </div>
+            <div className="rounded-xl border border-border/70 bg-surface-raised/60 p-3 text-xs leading-relaxed text-muted-foreground">
+              {capGap > 0 ? (
+                <>
+                  This is <span className="font-semibold text-pb-amber">{rupees(capGap)} above</span> your food cap of{" "}
+                  <span className="font-semibold text-foreground">{rupees(foodCapPaise)}</span>. Choose lighter spends for the rest of today.
+                </>
+              ) : (
+                <>
+                  This stays within your food cap of <span className="font-semibold text-foreground">{rupees(foodCapPaise)}</span> and uses{" "}
+                  <span className="font-semibold text-foreground">{safeUsage}%</span> of your safe daily limit.
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t border-border/70 pt-3">
+            <p className="text-xs text-zinc-500 leading-relaxed">
+              {savedVsDelivery > 0
+                ? `Choosing this instead of individual delivery keeps about ${rupees(savedVsDelivery)} inside your runway today.`
+                : "This option is useful only when today's safe/day can absorb the full cost."}
+            </p>
+            <div className="flex flex-wrap gap-2 shrink-0">
+              <Link to="/runway" className="h-8 rounded-lg bg-primary text-primary-foreground px-3 flex items-center justify-center text-[10px] font-bold uppercase tracking-wider hover:bg-primary/90 transition-all">
+                Full Runway
+              </Link>
+              <button onClick={() => setSelectedPlan(null)} className="h-8 rounded-lg bg-surface-raised text-zinc-400 px-3 text-[10px] font-bold uppercase tracking-wider hover:text-zinc-200 transition-all cursor-pointer">
+                Change
+              </button>
+            </div>
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card id="card-interactive-runway-check" className="bg-surface border border-border rounded-2xl p-4 relative overflow-hidden">
+      <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at top right, rgba(255,107,0,0.04), transparent 65%)" }} />
+      <div className="relative flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-5">
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2">
+            <Compass className="h-4.5 w-4.5 text-primary" />
+            <p className="text-xs font-bold tracking-[0.15em] text-zinc-500 uppercase">Meal check</p>
+          </div>
+          <p className="text-xs sm:text-sm text-zinc-300 leading-relaxed font-medium max-w-2xl">
+            Pick the likely meal and see if it fits today.
+          </p>
+        </div>
+        <Badge variant="outline" className="w-fit border-primary/20 bg-primary/10 text-primary text-[10px] uppercase tracking-wider font-semibold">
+          Food cap {rupees(foodCapPaise)}
+        </Badge>
+      </div>
+
+      <div className="relative grid grid-cols-1 md:grid-cols-3 gap-3">
+        {plans.map((plan) => {
+          const Icon = plan.icon;
+          const saved = Math.max(0, deliveryCostPaise - plan.cost);
+          return (
+            <button
+              key={plan.id}
+              onClick={() => setSelectedPlan(plan.id)}
+              className="w-full text-left p-3 rounded-xl border border-border bg-surface-raised/60 hover:bg-surface hover:border-primary/35 transition-all cursor-pointer group"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <Icon className={`h-4 w-4 shrink-0 ${plan.tone}`} />
+                    <span className="text-xs font-semibold text-foreground">{plan.label}</span>
+                  </div>
+                  <p className="mt-2 text-sm font-semibold text-foreground tnum">{rupees(plan.cost)}</p>
+                  {saved > 0 && <p className="text-[10px] font-bold text-pb-green">Saves {rupees(saved)} vs delivery</p>}
+                </div>
+                <ChevronRight className="h-4 w-4 text-zinc-500 group-hover:text-primary transition-transform group-hover:translate-x-0.5 shrink-0" />
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
 function Dashboard() {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -467,6 +651,14 @@ function Dashboard() {
     enabled: !!user,
     staleTime: 60_000,
     queryFn: () => getDashboardInsights(),
+  });
+
+  const { data: runwayForecast } = useQuery({
+    queryKey: ["runway-forecast", user?.id],
+    enabled: !!user,
+    staleTime: 30_000,
+    retry: false,
+    queryFn: () => getRunwayForecast(),
   });
 
   const { data: wellness, isLoading: wellnessLoading, isError: wellnessError } = useQuery({
@@ -542,6 +734,33 @@ function Dashboard() {
 
   // Burnout score is now calculated on the backend via /api/insights/wellness
 
+  const runwayView = useMemo(() => {
+    if (!runwayForecast && !calc) return null;
+    const currentCycle = runwayForecast?.current_cycle;
+    const projection = runwayForecast?.projection;
+    const foodRoutine = runwayForecast?.food_routine;
+    const decision = runwayForecast?.decision_engine;
+    const allowancePaise = currentCycle?.available_funding ?? Math.round((calc?.totalAllowance ?? 0) * 100);
+    const spentPaise = currentCycle?.spent ?? Math.round((calc?.totalSpent ?? 0) * 100);
+    const pct = allowancePaise > 0 ? Math.min(100, Math.round((spentPaise / allowancePaise) * 100)) : calc?.pct ?? 0;
+    return {
+      days: projection?.days_until_broke ?? calc?.runwayDays ?? 0,
+      safeDailyPaise: projection?.safe_daily_spend ?? Math.round((calc?.safeDailyLimit ?? 0) * 100),
+      remainingPaise: currentCycle?.remaining ?? Math.round((calc?.remaining ?? 0) * 100),
+      spentTodayPaise: Math.round((calc?.spentToday ?? 0) * 100),
+      allowancePaise,
+      cycleEnd: currentCycle?.end ? new Date(currentCycle.end) : calc?.cycleEnd,
+      daysLeft: currentCycle?.days_left ?? calc?.daysLeft ?? 0,
+      projectedDailyPaise: projection?.projected_daily_spend ?? 0,
+      shortfallProbability: projection?.shortfall_probability ?? 0,
+      nextAction: decision?.next_best_action,
+      pct,
+      status: runwayForecast?.status ?? "healthy",
+      foodRoutine,
+      decision,
+    };
+  }, [runwayForecast, calc]);
+
   // ── Survive-Until runway timestamp ─────────────────────────────────────
   const surviveUntilMs = useMemo(() => {
     if (!calc || !insights) return 0;
@@ -590,13 +809,20 @@ function Dashboard() {
     return foods[0];
   }, [foods]);
 
-  const runwayColor = calc
-    ? calc.runwayDays >= 15
+  const runwayColor = runwayView
+    ? runwayView.days >= 15
       ? "var(--success)"
-      : calc.runwayDays >= 7
+      : runwayView.days >= 7
         ? "var(--warning)"
         : "var(--destructive)"
     : "var(--primary)";
+  const runwayStatusLabel = runwayView?.status === "shortfall" ? "Shortfall" : runwayView?.status === "watch" ? "Watch" : "Healthy";
+  const runwayStatusClass =
+    runwayView?.status === "shortfall"
+      ? "bg-destructive/10 border-destructive/25 text-destructive"
+      : runwayView?.status === "watch"
+        ? "bg-warning/10 border-warning/25 text-warning"
+        : "bg-success/10 border-success/25 text-success";
 
   // Companion indicator
   const compStatus = useMemo(() => {
@@ -766,7 +992,7 @@ function Dashboard() {
         icon: Wallet,
         accent: "#8C7853",
         title: "Welcome to PocketBuddy",
-        body: "Your AI spending guard is active. Start logging transactions or pair the Android companion to begin tracking automatically.",
+        body: "Your spending tracker is active. Start logging transactions or pair the Android companion to begin tracking automatically.",
       });
       return list;
     }
@@ -780,7 +1006,7 @@ function Dashboard() {
         icon: Utensils,
         accent: "#FC8019",
         title: "Heavy on delivery apps",
-        body: `You've ordered ${delivCount}× via delivery this month vs ${messCount} mess visits. Switching 3 meals/week to mess saves ~₹${Math.round(delivCount * 35)} monthly.`,
+        body: runwayView?.foodRoutine?.action?.detail ?? `You've ordered ${delivCount}× via delivery this month. Keep food near ${rupees(runwayView?.foodRoutine?.recommended_daily_food_cap ?? 0)}/day to protect runway.`,
       });
     }
 
@@ -803,7 +1029,7 @@ function Dashboard() {
         icon: AlertTriangle,
         accent: "#ef4444",
         title: `Exam period — ${insights.exam.days_left}d left`,
-        body: "Your budget matters most right now. Aim for mess meals to keep daily food cost under ₹80. Campus canteens are usually open late.",
+        body: runwayView?.foodRoutine?.action?.detail ?? "Your budget matters most right now. Keep meals predictable and avoid using exam buffer for routine food.",
       });
     }
 
@@ -821,7 +1047,7 @@ function Dashboard() {
 
     // Subscription bleed
     const subBleed = (insights.subscriptions?.monthly_bleed_paise ?? 0) / 100;
-    if (subBleed > 300 && calc && calc.safeDailyLimit < 150) {
+    if (subBleed > 300 && runwayView && runwayView.safeDailyPaise < 15_000) {
       list.push({
         id: "sub_bleed",
         icon: Receipt,
@@ -832,7 +1058,7 @@ function Dashboard() {
     }
 
     return list;
-  }, [insights, calc]);
+  }, [insights, calc, runwayView]);
 
   const visibleNudges = nudges.filter((n) => !dismissedNudges.has(n.id)).slice(0, 2);
 
@@ -974,7 +1200,7 @@ function Dashboard() {
             Dashboard
           </h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="hidden">
           <button
             onClick={() => nav({ to: "/companion" })}
             title={compStatus === "green" ? "Companion syncing" : compStatus === "amber" ? "Companion idle" : "No companion"}
@@ -1189,78 +1415,138 @@ function Dashboard() {
             <div id="card-runway-status" className="bg-surface rounded-2xl border border-border relative overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-accent-bronze via-accent-amber to-accent-copper opacity-80" />
               <div className="p-6 md:p-8">
-                <div className="flex items-center justify-between mb-6">
-                  <p className="text-xs font-bold tracking-[0.2em] text-zinc-500 uppercase">Runway Status</p>
-                  <div className="hidden md:flex items-center gap-3">
-                    <Badge variant="outline" className="bg-white/5 border-border text-foreground font-bold text-xs px-2.5 py-0.5">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-6">
+                  <div>
+                    <p className="text-xs font-bold tracking-[0.2em] text-zinc-500 uppercase">Runway Status</p>
+                    <p className="mt-1 text-xs text-zinc-500 leading-relaxed">
+                      How long your money can last at the current pace.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 sm:justify-end">
+                    {runwayView && (
+                      <Badge variant="outline" className={`${runwayStatusClass} font-semibold text-[10px] uppercase tracking-wider px-2.5 py-0.5`}>
+                        {runwayStatusLabel}
+                      </Badge>
+                    )}
+                    <Badge variant="outline" className="hidden">
                       {profile?.wing_label ?? "—"}
                     </Badge>
                     <button
                       onClick={() => nav({ to: "/companion" })}
                       title="Companion Status"
-                      className="flex items-center justify-center w-6 h-6 rounded-full bg-surface-raised border border-border hover:border-white/15 transition-all"
+                      className="hidden"
                     >
                       <span className={`h-1.5 w-1.5 rounded-full animate-pulse ${compStatus === "green" ? "bg-success" : compStatus === "amber" ? "bg-warning" : "bg-destructive"}`} />
                     </button>
                   </div>
                 </div>
 
-                {!calc ? (
+                {!runwayView ? (
                   <Skeleton className="mt-2 h-20 w-full max-w-xs bg-white/5" />
                 ) : (
                   <>
-                    <div className="flex items-baseline gap-2.5">
-                      <h2 className="text-[56px] md:text-[76px] font-black tracking-tighter text-foreground tnum leading-none" style={{ color: runwayColor }}>
-                        <CountUp to={calc.runwayDays} />
-                      </h2>
-                      <span className="text-[16px] md:text-[20px] font-bold tracking-widest text-zinc-500 uppercase">Days</span>
-                    </div>
-                    <p className="mt-3 max-w-full text-[13px] md:text-sm text-zinc-400 font-medium leading-6 tracking-normal">
-                      Remaining allowance until <span className="text-foreground font-bold">{rupees(calc.totalAllowance * 100)}</span> resets on <span className="text-foreground font-bold">{shortDate(calc.cycleEnd)}</span>
-                    </p>
+                    <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-5 items-stretch">
+                      <div className="min-w-0">
+                        <div className="flex items-baseline gap-2.5">
+                          <h2 className="text-[56px] sm:text-[70px] md:text-[80px] font-bold tracking-tighter text-foreground tnum leading-none" style={{ color: runwayColor }}>
+                            <CountUp to={runwayView.days} />
+                          </h2>
+                          <span className="text-[16px] md:text-[20px] font-bold tracking-widest text-zinc-500 uppercase">Days</span>
+                        </div>
+                        <p className="mt-3 max-w-2xl text-[13px] md:text-sm text-zinc-400 font-medium leading-6 tracking-normal">
+                          You can safely spend <span className="text-foreground font-bold">{rupees(runwayView.safeDailyPaise)}/day</span> until your allowance resets.
+                        </p>
+                        <p className="mt-2 text-[11px] text-zinc-500 font-semibold uppercase tracking-wider">
+                          Reset in {runwayView.daysLeft} days{runwayView.cycleEnd ? ` (${shortDate(runwayView.cycleEnd)})` : ""}
+                        </p>
+                        <p className="hidden">
+                          Reset in {runwayView.daysLeft} days{runwayView.cycleEnd ? ` · ${shortDate(runwayView.cycleEnd)}` : ""}
+                        </p>
+                        <p className="hidden">
+                          {runwayView.daysLeft} days until reset · {Math.round((runwayView.shortfallProbability ?? 0) * 100)}% shortfall risk
+                        </p>
+                      </div>
 
-                    <div className="mt-8 grid grid-cols-3 gap-2 md:gap-6 border-t border-border pt-6">
-                      <div className="flex min-w-0 flex-col gap-1">
-                        <p className="text-xs text-zinc-500 font-bold whitespace-nowrap">Balance</p>
-                        <p className="text-[18px] md:text-[22px] font-black text-foreground tnum">{rupees(calc.remaining * 100)}</p>
-                      </div>
-                      <div className="flex min-w-0 flex-col gap-1 border-l border-border pl-3 md:pl-6">
-                        <p className="text-xs text-zinc-500 font-bold whitespace-nowrap">Safe limit</p>
-                        <p className="text-[18px] md:text-[22px] font-black text-foreground tnum">{rupees(calc.safeDailyLimit * 100)}</p>
-                      </div>
-                      <div className="flex min-w-0 flex-col gap-1 border-l border-border pl-3 md:pl-6">
-                        <p className="text-xs text-zinc-500 font-bold whitespace-nowrap">Today</p>
-                        <p className="text-[18px] md:text-[22px] font-black text-foreground tnum">{rupees(calc.spentToday * 100)}</p>
-                      </div>
-                    </div>
-
-                    <div className="mt-8">
-                      <Progress id="progress-runway" value={calc.pct} className="h-1 bg-surface-raised" />
-                      <div className="mt-3 text-xs text-muted-foreground flex flex-col md:flex-row md:items-center justify-between gap-2 font-medium">
-                        {profile?.companion_paired ? (
-                          <span className="flex items-center gap-1.5 text-zinc-400">
-                            <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
-                            Auto-tracking via {profile.companion_device_name ?? "companion"}
-                          </span>
-                        ) : (
-                          <Link to="/companion" className="text-warning flex items-center gap-1.5 hover:underline">
-                            <span className="w-1.5 h-1.5 bg-warning rounded-full" /> Manual tracking mode
+                      <div className="xl:border-l xl:border-border/70 xl:pl-6 flex flex-col justify-between gap-4">
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary">Next best action</p>
+                          <h3 className="mt-2 text-sm sm:text-base font-semibold text-foreground">
+                            {runwayView.nextAction?.title ?? "Keep your current pace"}
+                          </h3>
+                          <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">
+                            {runwayView.nextAction?.detail ?? "Your current runway can reach reset if today stays inside the safe daily limit."}
+                          </p>
+                        </div>
+                        <div>
+                          <Link to="/runway" className="inline-flex h-8 rounded-lg bg-primary text-primary-foreground px-3 items-center justify-center text-[10px] font-bold uppercase tracking-wider hover:bg-primary/90 transition-all">
+                            Open Runway
                           </Link>
-                        )}
-                        {calc.unpaidPoolDebt > 0 && (
-                          <span className="text-amber-500 flex items-center gap-1.5 font-semibold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                            ⚠️ Includes {rupees(calc.unpaidPoolDebt * 100)} unpaid pool debt
-                          </span>
-                        )}
-                        <span className="font-bold text-foreground">{calc.pct}% Spent</span>
+                        </div>
                       </div>
                     </div>
+
+                    <div className="mt-6 grid grid-cols-2 lg:grid-cols-4 gap-x-5 gap-y-4 border-t border-border pt-5">
+                      <div className="min-w-0">
+                        <p className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wider">Balance</p>
+                        <p className="mt-1 text-[17px] md:text-[20px] font-semibold text-foreground tnum">{rupees(runwayView.remainingPaise)}</p>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[10px] text-primary font-semibold uppercase tracking-wider">Safe/day</p>
+                        <p className="mt-1 text-[17px] md:text-[20px] font-semibold text-foreground tnum">{rupees(runwayView.safeDailyPaise)}</p>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wider">Food pace</p>
+                        <p className="mt-1 text-[17px] md:text-[20px] font-semibold text-foreground tnum">{rupees(runwayView.foodRoutine?.food_daily_pace ?? 0)}</p>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wider">Today</p>
+                        <p className="mt-1 text-[17px] md:text-[20px] font-semibold text-foreground tnum">{rupees(runwayView.spentTodayPaise)}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-5">
+                      <Progress id="progress-runway" value={runwayView.pct} className="h-1 bg-surface-raised" />
+                      <div className="mt-3 flex flex-col gap-2 text-xs text-muted-foreground font-medium sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {profile?.companion_paired ? (
+                            <span className="flex items-center gap-1.5 text-zinc-400">
+                              <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+                              Auto-tracking via {profile.companion_device_name ?? "companion"}
+                            </span>
+                          ) : (
+                            <Link to="/companion" className="text-warning flex items-center gap-1.5 hover:underline">
+                              <span className="w-1.5 h-1.5 bg-warning rounded-full" /> Manual tracking mode
+                            </Link>
+                          )}
+                          {(calc?.unpaidPoolDebt ?? 0) > 0 && (
+                            <span className="inline-flex items-center rounded-md border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-500">
+                              Pool dues included {rupees((calc?.unpaidPoolDebt ?? 0) * 100)}
+                            </span>
+                          )}
+                        </div>
+                        <span className="font-bold text-foreground">{runwayView.pct}% Spent</span>
+                      </div>
+                    </div>
+
+                    {false && runwayView?.decision?.absorbed?.length ? (
+                      <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-2">
+                        {runwayView?.decision?.absorbed?.map((factor: any) => (
+                          <div key={factor.kind} className="rounded-xl border border-border/70 bg-surface-raised/60 p-3 min-w-0">
+                            <p className="text-[10px] font-black uppercase tracking-wider text-zinc-500 truncate">{factor.label}</p>
+                            <p className="mt-1 text-sm font-black text-foreground tnum">
+                              {rupees(factor.daily_amount ?? factor.amount)}
+                              {factor.daily_amount ? <span className="text-[9px] text-zinc-500">/day</span> : null}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                   </>
                 )}
               </div>
             </div>
 
-            {calc && <SpendingSmartCheck calc={calc} />}
+            {runwayView && <MealRunwayCheck calc={calc} runwayView={runwayView} />}
 
             {/* ── Behaviour Analytics Row ─────────────────────────────── */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1305,7 +1591,19 @@ function Dashboard() {
 
             {/* ── Food & Wellness Strip ───────────────────────────────── */}
             <div className="bg-surface border border-border rounded-2xl p-5">
-              <p className="text-xs font-bold tracking-[0.2em] text-zinc-500 uppercase mb-4">Food & Wellness</p>
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-4">
+                <div>
+                  <p className="text-xs font-bold tracking-[0.2em] text-zinc-500 uppercase">Food & Wellness</p>
+                  <p className="mt-1 text-xs text-zinc-500 leading-relaxed">
+                    Meal gaps, delivery, groceries, and subscriptions feed directly into runway.
+                  </p>
+                </div>
+                {runwayView?.foodRoutine?.label && (
+                  <Badge variant="outline" className="w-fit border-border bg-surface-raised text-[10px] uppercase tracking-wider font-black">
+                    {runwayView.foodRoutine.label}
+                  </Badge>
+                )}
+              </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 {/* Food gap */}
                 <div className="flex flex-col gap-1">
@@ -1324,9 +1622,11 @@ function Dashboard() {
                 <div className="flex flex-col gap-1">
                   <p className="text-[10px] text-zinc-600 uppercase tracking-wider font-bold">Delivery</p>
                   <p className="text-[16px] font-black text-foreground">
-                    {insights?.food?.delivery_count_30d ?? "—"}×
+                    {runwayView?.foodRoutine?.delivery?.count ?? insights?.food?.delivery_count_30d ?? "—"}×
                   </p>
-                  <p className="text-xs text-zinc-600">vs {insights?.food?.mess_count_30d ?? "—"} mess visits</p>
+                  <p className="text-xs text-zinc-600">
+                    {runwayView?.foodRoutine ? `${rupees(runwayView.foodRoutine.food_daily_pace ?? 0)}/day food pace` : `vs ${insights?.food?.mess_count_30d ?? "—"} mess visits`}
+                  </p>
                 </div>
 
                 {/* Late night */}
@@ -1351,7 +1651,7 @@ function Dashboard() {
               {/* Mess vs delivery bar */}
               {insights?.food && (insights.food.delivery_count_30d + insights.food.mess_count_30d) > 0 && (
                 <div className="mt-5 pt-4 border-t border-border">
-                  <p className="text-xs text-zinc-500 font-bold uppercase tracking-wider mb-2">Mess vs Delivery ratio (30d)</p>
+                  <p className="text-xs text-zinc-500 font-bold uppercase tracking-wider mb-2">Routine meal vs delivery ratio (30d)</p>
                   <div className="flex h-2 rounded-full overflow-hidden gap-0.5">
                     <div
                       className="bg-success rounded-full transition-all"
@@ -1373,7 +1673,7 @@ function Dashboard() {
             {/* Active Pools */}
             <section id="section-active-pools" className="space-y-4 pt-2">
               <div className="flex items-center justify-between px-1">
-                <h3 className="text-xs font-bold tracking-[0.25em] text-zinc-500 uppercase">Active Wing Pools</h3>
+                <h3 className="text-xs font-bold tracking-[0.25em] text-zinc-500 uppercase">Active Pools</h3>
                 <Link
                   to="/pool"
                   id="btn-new-pool-dash"
@@ -1407,7 +1707,7 @@ function Dashboard() {
                                 <PlatformIcon platform={p.platform} name={p.platform_display_label || p.platform.replace("_", " ")} className="h-5 w-5" />
                                 <div className="flex flex-wrap items-center gap-1.5 min-w-0">
                                   <span className="text-xs font-black uppercase tracking-wider text-foreground truncate max-w-[120px] sm:max-w-none">{p.platform_display_label || p.platform.replace("_", " ")}</span>
-                                  <Badge variant="outline" className="text-muted-foreground bg-white/5 border-border text-[10px] font-bold">{p.wing_label}</Badge>
+                                  <Badge variant="outline" className="hidden">{p.wing_label}</Badge>
                                 </div>
                               </div>
                               <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border border-border bg-background tnum shrink-0 ${minsLeft < 5 ? "text-destructive animate-pulse border-destructive/20 bg-destructive/5" : "text-foreground"}`}>
@@ -1649,15 +1949,15 @@ function Dashboard() {
             )}
 
             {/* Alert Widget */}
-            {calc && (calc.runwayDays < 7 || calc.safeDailyLimit < 150) && (
+            {runwayView && (runwayView.days < 7 || runwayView.safeDailyPaise < 15_000) && (
               <Card id="card-runway-alert" className="border-destructive/30 bg-destructive/5 p-5 relative overflow-hidden">
                 <div className="absolute top-0 left-0 w-[3px] h-full bg-destructive" />
                 <div className="flex items-center gap-2 mb-2">
                   <span className="h-1.5 w-1.5 rounded-full bg-destructive animate-pulse" />
-                  <p className="text-xs font-bold text-destructive tracking-widest uppercase">Runway Warning</p>
+                  <p className="text-xs font-bold text-destructive tracking-widest uppercase">Runway Action</p>
                 </div>
                 <p className="text-xs font-medium text-foreground leading-relaxed">
-                  Daily limit is <span className="text-destructive font-bold">{rupees(calc.safeDailyLimit * 100)}</span>. Skip delivery orders tonight.
+                  Safe limit is <span className="text-destructive font-bold">{rupees(runwayView.safeDailyPaise)}</span>. {runwayView.decision?.next_best_action?.detail ?? runwayView.foodRoutine?.action?.detail ?? "Reduce today's flexible spend to protect the allowance cycle."}
                 </p>
                 {bestFood && (
                   <div className="mt-4 rounded-lg border border-success/20 bg-success/5 p-3.5 space-y-1">

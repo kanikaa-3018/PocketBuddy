@@ -44,9 +44,9 @@
   --color-accent-copper: var(--accent-copper);
   --color-accent-amber: var(--accent-amber);
   /* Fonts */
-  --font-sans: "Inter", "DM Sans", system-ui, sans-serif;
-  --font-display: "Inter", "Space Grotesk", system-ui, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-display: var(--font-sans);
+  --font-mono: var(--font-sans);
 }
 
 :root {
@@ -162,7 +162,7 @@ html.dark { color-scheme: dark; }
     letter-spacing: 0;
   }
 
-  /* Headings use display font */
+  /* Headings intentionally use the same app font as body copy. */
   h1, h2, h3, h4 { font-family: var(--font-display); letter-spacing: 0; }
 
   /* Utility classes from guard */
