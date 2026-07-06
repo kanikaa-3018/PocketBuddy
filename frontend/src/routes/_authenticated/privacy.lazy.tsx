@@ -1,6 +1,6 @@
 import { createLazyFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState, type ReactNode } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
 import { AppShell, MobileMenuButton } from "@/components/AppShell";
 import { Badge } from "@/components/ui/badge";
@@ -12,13 +12,11 @@ import {
   AlertTriangle,
   CheckCircle2,
   ChevronRight,
-  Eye,
-  EyeOff,
-  Info,
+  FileCheck2,
+  KeyRound,
   Lock,
-  PauseCircle,
   RefreshCw,
-  Shield,
+  Server,
   ShieldCheck,
   Smartphone,
   Trash2,
@@ -31,9 +29,10 @@ import {
   getProfile,
   updateProfile,
   getTransactions,
+  getCompanionSyncLogs,
+  getDataConsents,
   clearCompanionLogs,
   deleteAccountData,
-  updateTransaction,
   confirmTransaction,
   submitParserCorrection,
 } from "@/lib/api/db.functions";
@@ -56,6 +55,33 @@ const CATEGORIES = [
   "travel",
   "other",
 ];
+
+type DataConsent = {
+  id?: string;
+  source?: string;
+  status?: "active" | "paused" | "revoked" | string;
+  purpose?: string;
+  data_categories?: string[];
+  device_name?: string;
+  device_id?: string;
+  raw_text_policy?: string;
+  granted_at?: string;
+  updated_at?: string;
+  last_sync_at?: string;
+  revoked_at?: string;
+};
+
+type SyncLog = {
+  id?: string;
+  data_origin?: string;
+  privacy_mode?: string;
+  raw_payload_received?: boolean;
+  parser_version?: string;
+  source_confidence?: string;
+  schema_version?: number;
+  processing_status?: string;
+  created_at?: string;
+};
 
 function PrivacyPage() {
   const { user, logout } = useAuth();
@@ -84,12 +110,56 @@ function PrivacyPage() {
     queryFn: getTransactions,
   });
 
+  const { data: consentData } = useQuery<DataConsent[]>({
+    queryKey: ["data-consents", user?.id],
+    enabled: !!user,
+    queryFn: getDataConsents,
+  });
+
+  const { data: syncLogData } = useQuery<SyncLog[] | { logs?: SyncLog[] }>({
+    queryKey: ["sync-log", user?.id],
+    enabled: !!user,
+    queryFn: getCompanionSyncLogs,
+  });
+
   const txns: any[] = Array.isArray(allTxns) ? allTxns : [];
   const pendingTxns = txns.filter(
     (t) => t.needs_verification === true || t.status === "incomplete"
   );
 
   const syncEnabled = profile?.companion_sync_enabled !== false;
+  const dataConsents = Array.isArray(consentData) ? consentData : [];
+  const androidConsents = dataConsents.filter((c) => c.source === "android_connector");
+  const activeAndroidConsent =
+    androidConsents.find((c) => c.status === "active") ??
+    androidConsents.find((c) => c.status === "paused") ??
+    androidConsents[0];
+  const syncLogs: SyncLog[] = Array.isArray(syncLogData) ? syncLogData : syncLogData?.logs ?? [];
+  const latestSyncLog = syncLogs[0];
+  const onDeviceLogCount = syncLogs.filter(
+    (log) =>
+      log.data_origin === "android_on_device" ||
+      log.privacy_mode === "on_device_only" ||
+      log.raw_payload_received === false
+  ).length;
+  const legacyRawLogCount = syncLogs.filter((log) => log.raw_payload_received === true).length;
+  const sanitizedShare = syncLogs.length ? Math.round((onDeviceLogCount / syncLogs.length) * 100) : null;
+  const connectorTrustLabel = activeAndroidConsent
+    ? humanConsentStatus(activeAndroidConsent.status)
+    : profile?.companion_paired
+      ? syncEnabled
+        ? "Linked"
+        : "Paused"
+      : "Not connected";
+  const rawUploadLabel =
+    latestSyncLog?.raw_payload_received === true
+      ? "Legacy event seen"
+      : latestSyncLog
+        ? "Raw upload off"
+        : "Waiting for first sync";
+  const latestParserLabel =
+    latestSyncLog?.parser_version ||
+    (latestSyncLog?.data_origin === "android_on_device" ? "android-v2" : "Not observed yet");
 
   async function toggleSync() {
     setSavingSync(true);
@@ -97,8 +167,11 @@ function PrivacyPage() {
       await updateProfile({ data: { companion_sync_enabled: !syncEnabled } });
       await refetchProfile();
       qc.invalidateQueries({ queryKey: ["profile"] });
+      qc.invalidateQueries({ queryKey: ["data-consents"] });
       toast.success(
-        !syncEnabled ? "Sync resumed." : "Sync paused — notifications will be logged but not processed."
+        !syncEnabled
+          ? "Instant sync resumed."
+          : "Instant sync paused. New connector events will not become transactions."
       );
     } catch {
       toast.error("Failed to update sync setting.");
@@ -113,6 +186,7 @@ function PrivacyPage() {
     try {
       await clearCompanionLogs();
       qc.invalidateQueries({ queryKey: ["sync-log"] });
+      qc.invalidateQueries({ queryKey: ["data-consents"] });
       toast.success("Sync log history cleared.");
     } catch {
       toast.error("Failed to clear logs.");
@@ -133,6 +207,7 @@ function PrivacyPage() {
         },
       });
       qc.invalidateQueries({ queryKey: ["profile"] });
+      qc.invalidateQueries({ queryKey: ["data-consents"] });
       toast.success("Companion device unpaired.");
     } catch {
       toast.error("Failed to unpair device.");
@@ -226,7 +301,96 @@ function PrivacyPage() {
         <ShieldCheck className="h-5 w-5 text-primary shrink-0" />
       </div>
 
-      <div className="mx-auto max-w-2xl pb-20 space-y-8">
+      <div className="mx-auto max-w-3xl pb-20 space-y-8">
+
+        {/* Trust Layer */}
+        <section className="space-y-3">
+          <p className="text-[10px] font-bold tracking-[0.18em] uppercase text-muted-foreground">
+            Trust Layer
+          </p>
+          <Card className="border-primary/20 bg-primary/5 p-4 sm:p-5">
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4 text-primary shrink-0" />
+                    <p className="text-[14px] font-bold text-foreground">Privacy Trust Layer</p>
+                  </div>
+                  <p className="mt-1 max-w-xl text-[12px] leading-relaxed text-muted-foreground">
+                    PocketBuddy can track payments without bank login, OTP, MPIN, or raw notification upload from the new connector flow.
+                  </p>
+                </div>
+                <Badge variant="outline" className="w-fit border-primary/30 bg-background/60 text-[10px] text-primary">
+                  {connectorTrustLabel}
+                </Badge>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-3">
+                <TrustMetric
+                  icon={<Smartphone className="h-4 w-4" />}
+                  label="Android source"
+                  value={profile?.companion_paired ? "Linked" : "Optional"}
+                  detail={activeAndroidConsent?.device_name || profile?.companion_device_name || "No phone connected"}
+                />
+                <TrustMetric
+                  icon={<Lock className="h-4 w-4" />}
+                  label="Raw alert upload"
+                  value={rawUploadLabel}
+                  detail={
+                    legacyRawLogCount
+                      ? `${legacyRawLogCount} legacy event${legacyRawLogCount === 1 ? "" : "s"} in recent log`
+                      : "New v2 events are structured before upload"
+                  }
+                />
+                <TrustMetric
+                  icon={<FileCheck2 className="h-4 w-4" />}
+                  label="Parser proof"
+                  value={latestParserLabel}
+                  detail={sanitizedShare === null ? "No sync events yet" : `${sanitizedShare}% recent events marked sanitized`}
+                />
+              </div>
+
+              <div className="grid gap-3 lg:grid-cols-[1.15fr_0.85fr]">
+                <div className="rounded-xl border border-border bg-background/70 p-3">
+                  <p className="text-[12px] font-semibold text-foreground">What moves through the system</p>
+                  <div className="mt-3 space-y-2">
+                    <DataFlowRow
+                      icon={<Smartphone className="h-3.5 w-3.5" />}
+                      title="On your phone"
+                      body="Supported UPI/SMS alerts are checked locally and converted into amount, merchant, direction, source app, and reference."
+                    />
+                    <DataFlowRow
+                      icon={<Server className="h-3.5 w-3.5" />}
+                      title="To PocketBuddy"
+                      body="Only structured transaction fields, parser confidence, and a masked preview are stored for review and audit."
+                    />
+                    <DataFlowRow
+                      icon={<KeyRound className="h-3.5 w-3.5" />}
+                      title="Never requested"
+                      body="Bank password, MPIN, OTP, full SMS body in v2, notification inbox access from the web app, or permission to initiate payments."
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-border bg-background/70 p-3">
+                  <p className="text-[12px] font-semibold text-foreground">Trusted sources</p>
+                  <div className="mt-3 space-y-2">
+                    <SourceRow
+                      label="Instant UPI Sync"
+                      status={connectorTrustLabel}
+                      detail={profile?.companion_paired ? "Android connector, on-device parser" : "User-controlled optional connector"}
+                    />
+                    <SourceRow
+                      label="Account Aggregator"
+                      status="Not connected"
+                      detail="No bank account data is requested in this build. Future AA sandbox verification must require separate consent."
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </section>
 
         {/* Data minimization statement */}
         <Card className="border-primary/20 bg-primary/5 p-5 space-y-2">
@@ -254,6 +418,34 @@ function PrivacyPage() {
           </ul>
         </Card>
 
+        {/* Consent Ledger */}
+        <section>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <p className="text-[10px] font-bold tracking-[0.18em] uppercase text-muted-foreground">
+              Consent Ledger
+            </p>
+            <Badge variant="outline" className="text-[10px] text-muted-foreground">
+              {androidConsents.length || 0} source{androidConsents.length === 1 ? "" : "s"}
+            </Badge>
+          </div>
+          <Card className="overflow-hidden">
+            {androidConsents.length === 0 ? (
+              <div className="p-5 text-center">
+                <p className="text-[13px] font-semibold text-foreground">No connector consent recorded yet</p>
+                <p className="mx-auto mt-1 max-w-sm text-[11px] leading-relaxed text-muted-foreground">
+                  Once the Android connector syncs for the first time, its purpose, data fields, and status will appear here.
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                {androidConsents.slice(0, 3).map((consent) => (
+                  <ConsentLedgerRow key={consent.id} consent={consent} />
+                ))}
+              </div>
+            )}
+          </Card>
+        </section>
+
         {/* Sync Controls */}
         <section>
           <p className="text-[10px] font-bold tracking-[0.18em] uppercase text-muted-foreground mb-3">
@@ -274,8 +466,8 @@ function PrivacyPage() {
                   </p>
                   <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">
                     {syncEnabled
-                      ? "Incoming notifications are being processed."
-                      : "Notifications are logged but not processed into transactions."}
+                      ? "Sanitized connector events can become transactions."
+                      : "New connector events are marked paused and not converted into transactions."}
                   </p>
                 </div>
               </div>
@@ -561,5 +753,135 @@ function PrivacyPage() {
         </section>
       </div>
     </AppShell>
+  );
+}
+
+function humanConsentStatus(status?: string) {
+  if (status === "active") return "Active";
+  if (status === "paused") return "Paused";
+  if (status === "revoked") return "Revoked";
+  return "Not connected";
+}
+
+function TrustMetric({
+  icon,
+  label,
+  value,
+  detail,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  detail: string;
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-background/70 p-3">
+      <div className="flex items-center gap-2 text-muted-foreground">
+        {icon}
+        <span className="text-[10px] font-bold uppercase tracking-[0.16em]">{label}</span>
+      </div>
+      <p className="mt-2 truncate text-[13px] font-semibold text-foreground">{value}</p>
+      <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground">{detail}</p>
+    </div>
+  );
+}
+
+function DataFlowRow({
+  icon,
+  title,
+  body,
+}: {
+  icon: ReactNode;
+  title: string;
+  body: string;
+}) {
+  return (
+    <div className="flex gap-2 rounded-lg bg-surface/70 p-2.5">
+      <div className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
+        {icon}
+      </div>
+      <div className="min-w-0">
+        <p className="text-[12px] font-semibold text-foreground">{title}</p>
+        <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">{body}</p>
+      </div>
+    </div>
+  );
+}
+
+function SourceRow({
+  label,
+  status,
+  detail,
+}: {
+  label: string;
+  status: string;
+  detail: string;
+}) {
+  const active = status === "Active" || status === "Linked";
+  const paused = status === "Paused";
+
+  return (
+    <div className="rounded-lg bg-surface/70 p-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[12px] font-semibold text-foreground">{label}</p>
+        <Badge
+          variant="outline"
+          className={`shrink-0 text-[9px] ${
+            active
+              ? "border-green-500/35 text-green-500"
+              : paused
+                ? "border-warning/40 text-warning"
+                : "text-muted-foreground"
+          }`}
+        >
+          {status}
+        </Badge>
+      </div>
+      <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{detail}</p>
+    </div>
+  );
+}
+
+function ConsentLedgerRow({ consent }: { consent: DataConsent }) {
+  const categories = consent.data_categories?.length
+    ? consent.data_categories.map((category) => category.replace(/_/g, " ")).join(", ")
+    : "Structured transaction fields";
+  const status = humanConsentStatus(consent.status);
+  const lastActivity = consent.revoked_at || consent.last_sync_at || consent.updated_at || consent.granted_at;
+
+  return (
+    <div className="p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-[13px] font-semibold text-foreground">
+              {consent.device_name || "PocketBuddy Android Connector"}
+            </p>
+            <Badge variant="outline" className="text-[9px]">
+              {status}
+            </Badge>
+          </div>
+          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+            Purpose: instant payment tracking. Fields: {categories}.
+          </p>
+        </div>
+        <div className="shrink-0 text-left sm:text-right">
+          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+            Raw text policy
+          </p>
+          <p className="mt-0.5 text-[11px] font-semibold text-foreground">
+            {consent.raw_text_policy === "not_required_for_v2" ? "Not required for v2" : consent.raw_text_policy || "Masked only"}
+          </p>
+        </div>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+        <span className="rounded-full border border-border bg-surface px-2 py-1">
+          Source: Android connector
+        </span>
+        <span className="rounded-full border border-border bg-surface px-2 py-1">
+          {lastActivity ? `Last activity ${relativeTime(lastActivity)}` : "No activity yet"}
+        </span>
+      </div>
+    </div>
   );
 }

@@ -1,4 +1,5 @@
 import re
+import datetime
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
@@ -51,6 +52,7 @@ async def get_profile(user_id: str = Depends(get_current_user)):
 async def update_profile(req: ProfileUpdateReq, user_id: str = Depends(get_current_user)):
     db = get_db()
     updates = req.model_dump(exclude_unset=True)
+    now = datetime.datetime.utcnow()
     
     if "phone" in updates:
         phone_val = updates.pop("phone")
@@ -65,6 +67,40 @@ async def update_profile(req: ProfileUpdateReq, user_id: str = Depends(get_curre
         return map_doc(profile)
 
     await db.profiles.update_one({"_id": user_id}, {"$set": updates})
+
+    if "companion_sync_enabled" in updates:
+        await db.data_consents.update_many(
+            {
+                "user_id": user_id,
+                "source": "android_connector",
+                "status": {"$ne": "revoked"},
+            },
+            {
+                "$set": {
+                    "status": "active" if updates["companion_sync_enabled"] else "paused",
+                    "last_user_control_at": now,
+                    "updated_at": now,
+                }
+            },
+        )
+
+    if updates.get("companion_paired") is False:
+        await db.data_consents.update_many(
+            {
+                "user_id": user_id,
+                "source": "android_connector",
+                "status": {"$ne": "revoked"},
+            },
+            {
+                "$set": {
+                    "status": "revoked",
+                    "revoked_at": now,
+                    "last_user_control_at": now,
+                    "updated_at": now,
+                }
+            },
+        )
+
     profile = await db.profiles.find_one({"_id": user_id})
     user = await db.users.find_one({"_id": user_id})
     if user and profile:

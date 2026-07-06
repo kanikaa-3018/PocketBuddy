@@ -1,8 +1,8 @@
 import { createLazyFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
-import { getProfile, updateProfile, getCompanionSyncLogs } from "@/lib/api/db.functions";
+import { getProfile, updateProfile, getCompanionSyncLogs, getDataConsents } from "@/lib/api/db.functions";
 import { AppShell, MobileMenuButton } from "@/components/AppShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,12 +12,17 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  CheckCircle2,
   Copy,
   Download,
   ExternalLink,
+  FileCheck2,
+  KeyRound,
   RefreshCw,
   Save,
+  Server,
   ShieldAlert,
+  ShieldCheck,
   Smartphone,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -29,6 +34,7 @@ export const Route = createLazyFileRoute("/_authenticated/companion")({
 
 type Profile = any;
 type SyncLog = any;
+type DataConsent = any;
 
 const LOCAL_WEBHOOK_URL = "http://127.0.0.1:8000/api/ingest/notification";
 const ANDROID_APK_DOWNLOAD_URL =
@@ -70,7 +76,20 @@ function CompanionPage() {
     refetchInterval: 5000,
   });
 
+  const { data: dataConsents } = useQuery<DataConsent[]>({
+    queryKey: ["data-consents", user?.id],
+    enabled: !!user,
+    queryFn: () => getDataConsents(),
+    refetchInterval: 5000,
+  });
+
   const syncLogs: SyncLog[] = Array.isArray(logs) ? logs : logs?.logs ?? [];
+  const consentRows: DataConsent[] = Array.isArray(dataConsents) ? dataConsents : [];
+  const latestAndroidConsent =
+    consentRows.find((c) => c.source === "android_connector" && c.status === "active") ??
+    consentRows.find((c) => c.source === "android_connector") ??
+    null;
+  const latestSyncLog = syncLogs[0];
   const latestSyncAt = profile?.companion_last_sync ?? syncLogs[0]?.created_at;
   const isConnected = Boolean(profile?.companion_paired);
   const companionWebhookUrl = getCompanionWebhookUrl();
@@ -133,6 +152,7 @@ function CompanionPage() {
       });
       qc.invalidateQueries({ queryKey: ["profile"] });
       qc.invalidateQueries({ queryKey: ["sync-log", user.id] });
+      qc.invalidateQueries({ queryKey: ["data-consents"] });
       toast.success("Device unpaired. Recent sync history is kept.");
     } catch (err: any) {
       toast.error(err.message || "Failed to unpair device");
@@ -239,9 +259,15 @@ function CompanionPage() {
                 UPI apps: {profile.upi_apps_used?.length ? profile.upi_apps_used.join(", ") : "-"}
               </p>
               <p className="mt-2 rounded-md bg-surface px-2.5 py-2 text-[12px] text-muted-foreground">
-                This phone is linked to your account. New supported payment alerts can sync automatically.
+                This phone is linked to your account. New supported payment alerts are parsed locally before sync.
               </p>
             </Card>
+
+            <ConnectorTrustCard
+              isConnected={isConnected}
+              consent={latestAndroidConsent}
+              latestLog={latestSyncLog}
+            />
 
             {/* Automated Setup */}
             <Card className="bg-primary/5 border border-primary/20 p-4 space-y-3">
@@ -323,6 +349,12 @@ function CompanionPage() {
                 </Badge>
               </div>
             </Card>
+
+            <ConnectorTrustCard
+              isConnected={isConnected}
+              consent={latestAndroidConsent}
+              latestLog={latestSyncLog}
+            />
 
             {/* Automated Setup */}
             <Card className="bg-primary/5 border border-primary/20 p-4 space-y-3">
@@ -491,10 +523,111 @@ function AndroidInstallGuideCard() {
   );
 }
 
+function ConnectorTrustCard({
+  isConnected,
+  consent,
+  latestLog,
+}: {
+  isConnected: boolean;
+  consent: DataConsent | null;
+  latestLog?: SyncLog;
+}) {
+  const consentStatus = humanConsentStatus(consent?.status);
+  const rawPayloadLabel =
+    latestLog?.raw_payload_received === true
+      ? "Legacy raw event seen"
+      : latestLog
+        ? "Raw upload off"
+        : "Not observed yet";
+  const parserLabel =
+    latestLog?.parser_version ||
+    (latestLog?.data_origin === "android_on_device" ? "android-v2" : "Awaiting first sync");
+
+  return (
+    <Card className="border-primary/20 bg-primary/5 p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-primary" />
+            <p className="text-[13px] font-bold text-foreground">Privacy-safe connector</p>
+          </div>
+          <p className="mt-1 max-w-xl text-[12px] leading-relaxed text-muted-foreground">
+            The connector is optional. It parses supported payment alerts on the phone and sends only transaction facts plus a masked preview.
+          </p>
+        </div>
+        <Badge variant="outline" className="w-fit border-primary/30 bg-background/60 text-[10px] text-primary">
+          {isConnected ? consentStatus : "Optional"}
+        </Badge>
+      </div>
+
+      <div className="mt-4 grid gap-2 sm:grid-cols-3">
+        <TrustPoint
+          icon={<Smartphone className="h-3.5 w-3.5" />}
+          label="Phone"
+          text="Local UPI/SMS parser"
+        />
+        <TrustPoint
+          icon={<Server className="h-3.5 w-3.5" />}
+          label="Server"
+          text={rawPayloadLabel}
+        />
+        <TrustPoint
+          icon={<FileCheck2 className="h-3.5 w-3.5" />}
+          label="Parser"
+          text={parserLabel}
+        />
+      </div>
+
+      <div className="mt-3 grid gap-2 text-[11px] leading-relaxed text-muted-foreground sm:grid-cols-2">
+        <div className="flex gap-2 rounded-md border border-border bg-background/70 p-2.5">
+          <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" />
+          <span>Uploads amount, merchant, direction, source app, reference, confidence, and masked preview.</span>
+        </div>
+        <div className="flex gap-2 rounded-md border border-border bg-background/70 p-2.5">
+          <KeyRound className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+          <span>Never asks for MPIN, OTP, bank login, or permission to initiate a payment.</span>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function TrustPoint({
+  icon,
+  label,
+  text,
+}: {
+  icon: ReactNode;
+  label: string;
+  text: string;
+}) {
+  return (
+    <div className="rounded-md border border-border bg-background/70 p-2.5">
+      <div className="flex items-center gap-1.5 text-muted-foreground">
+        {icon}
+        <span className="text-[10px] font-bold uppercase tracking-[0.14em]">{label}</span>
+      </div>
+      <p className="mt-1 truncate text-[12px] font-semibold text-foreground">{text}</p>
+    </div>
+  );
+}
+
+function humanConsentStatus(status?: string) {
+  if (status === "active") return "Active";
+  if (status === "paused") return "Paused";
+  if (status === "revoked") return "Revoked";
+  return "Not connected";
+}
+
 function SyncLogDetails({ log }: { log: SyncLog }) {
   const details = [
     ["Status", humanStatus(log.processing_status)],
     ["Received", log.created_at ? absoluteDate(log.created_at) : "-"],
+    ["Data origin", humanDataOrigin(log.data_origin)],
+    ["Privacy mode", log.privacy_mode || "-"],
+    ["Raw payload", humanRawPayload(log.raw_payload_received)],
+    ["Parser version", log.parser_version || "-"],
+    ["Confidence", log.source_confidence || "-"],
     ["Parsed amount", formatParsedAmount(log.parsed_amount)],
     ["Parsed merchant", log.parsed_merchant || "-"],
     ["Transaction reference", log.transaction_reference || log.transaction_id || "-"],
@@ -545,6 +678,18 @@ function humanStatus(status?: string) {
   if (status === "duplicate") return "Duplicate";
   if (status === "failed") return "Failed";
   return "Ignored";
+}
+
+function humanDataOrigin(origin?: string) {
+  if (origin === "android_on_device") return "Android on-device parser";
+  if (origin === "legacy_android_raw_ingest") return "Legacy Android ingest";
+  return "-";
+}
+
+function humanRawPayload(value?: boolean) {
+  if (value === true) return "Yes - legacy event";
+  if (value === false) return "No";
+  return "-";
 }
 
 function StatusBadge({ status }: { status?: string }) {
