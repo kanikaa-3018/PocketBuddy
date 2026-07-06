@@ -91,7 +91,7 @@ function Onboarding() {
     }
   }
 
-  // Step 1 — starts empty (no prefilled demo data)
+  // Step 1 starts empty.
   const [allowance, setAllowance] = useState("");
   const [cycleDay, setCycleDay] = useState("1");
   const [college, setCollege] = useState("");
@@ -608,17 +608,17 @@ function Onboarding() {
         {step === 3 && (
           <div id="onboarding-step-3" className="space-y-6">
             <div className="mb-2">
-              <h2 className="text-[20px] font-black tracking-tight text-foreground uppercase">Auto-Track Expense</h2>
+              <h2 className="text-[20px] font-black tracking-tight text-foreground uppercase">Connect Safely</h2>
               <p className="mt-1.5 text-xs text-muted-foreground">
-                Set up the Android connector once. After that, PocketBuddy can sync supported UPI payment alerts automatically.
+                PocketBuddy is designed around consent-first payment tracking. Bank consent is the verified path; Android sync is optional and gives you local auto-tracking for supported UPI alerts.
               </p>
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               {[
-                { e: "01", l: "Install App" },
-                { e: "02", l: "Paste Config" },
-                { e: "03", l: "Allow Access" },
+                { e: "01", l: "Bank Consent" },
+                { e: "02", l: "On-Device" },
+                { e: "03", l: "Controls" },
               ].map((c) => (
                 <div
                   key={c.l}
@@ -634,16 +634,16 @@ function Onboarding() {
 
             <div className="rounded-lg border border-border bg-surface-raised/40 p-4 space-y-1">
               <p className="text-xs font-bold text-foreground uppercase tracking-wider">
-                What you will do next
+                What this setup means
               </p>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                The next page gives you one copy button. Open the Android app, tap paste, save, and allow notification access. You do not need to type any code manually.
+                You stay in control of every source. Phone sync parses supported payment alerts on your device, sends only structured transaction fields, and can be paused or removed anytime from Privacy Center.
               </p>
             </div>
 
             <div className="rounded-xl border border-border bg-surface-raised p-5">
               <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                Simple setup steps
+                Android auto-sync setup
               </p>
               <ol className="mt-3 space-y-3 text-[12px] leading-relaxed text-muted-foreground">
                 <li className="flex gap-3">
@@ -670,6 +670,12 @@ function Onboarding() {
                   </span>
                   <span>Tap <b className="text-foreground">Open notification access</b> and allow PocketBuddy Connector.</span>
                 </li>
+                <li className="flex gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-black text-primary">
+                    5
+                  </span>
+                  <span>Open <b className="text-foreground">Privacy Center</b> anytime to pause sync, unpair the device, view provenance labels, or review low-confidence entries.</span>
+                </li>
               </ol>
             </div>
 
@@ -681,7 +687,7 @@ function Onboarding() {
                   <p className="text-[13px] font-bold text-foreground">One-Tap Auto Configure</p>
                 </div>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  If you're on Android, tap the button below to instantly launch the connector app and apply all config fields automatically — no copy-paste needed.
+                  If you're on Android, tap the button below to instantly launch the connector app and apply all config fields automatically - no copy-paste needed.
                 </p>
                 {isAndroid ? (
                   <Button
@@ -693,7 +699,7 @@ function Onboarding() {
                   </Button>
                 ) : (
                   <div className="rounded-lg bg-card border border-border p-3 text-[11px] text-muted-foreground leading-normal">
-                    💡 <b>On Desktop?</b> Log in to PocketBuddy on your Android phone's browser, come back to this step, and tap this button to auto-configure.
+                    <b>On desktop?</b> Log in to PocketBuddy on your Android phone's browser, come back to this step, and tap this button to auto-configure.
                   </div>
                 )}
               </div>

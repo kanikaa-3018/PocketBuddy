@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -16,7 +17,6 @@ import {
   KeyRound,
   Lock,
   RefreshCw,
-  Server,
   ShieldCheck,
   Smartphone,
   Trash2,
@@ -191,30 +191,13 @@ function PrivacyPage() {
     androidConsents[0];
   const syncLogs: SyncLog[] = Array.isArray(syncLogData) ? syncLogData : syncLogData?.logs ?? [];
   const latestSyncLog = syncLogs[0];
-  const onDeviceLogCount = syncLogs.filter(
-    (log) =>
-      log.data_origin === "android_on_device" ||
-      log.privacy_mode === "on_device_only" ||
-      log.raw_payload_received === false
-  ).length;
   const legacyRawLogCount = syncLogs.filter((log) => log.raw_payload_received === true).length;
-  const sanitizedShare = syncLogs.length ? Math.round((onDeviceLogCount / syncLogs.length) * 100) : null;
-  const connectorTrustLabel = activeAndroidConsent
-    ? humanConsentStatus(activeAndroidConsent.status)
-    : profile?.companion_paired
-      ? syncEnabled
-        ? "Linked"
-        : "Paused"
-      : "Not connected";
   const rawUploadLabel =
     latestSyncLog?.raw_payload_received === true
       ? "Legacy event seen"
       : latestSyncLog
         ? "Raw upload off"
         : "Waiting for first sync";
-  const latestParserLabel =
-    latestSyncLog?.parser_version ||
-    (latestSyncLog?.data_origin === "android_on_device" ? "android-v2" : "Not observed yet");
   const aaConsents = aaStatus?.consents ?? dataConsents.filter((c) => c.source === "account_aggregator");
   const currentAAConsent =
     aaConsents.find((c) => c.status === "active") ??
@@ -291,7 +274,7 @@ function PrivacyPage() {
   async function handleStartAAConsent() {
     setAaBusyAction("start");
     try {
-      const result = await startAccountAggregatorSandboxConsent({
+      await startAccountAggregatorSandboxConsent({
         data: {
           purpose: "Verify bank transactions for PocketBuddy insights",
           requested_range_days: 30,
@@ -299,9 +282,9 @@ function PrivacyPage() {
         },
       });
       await refreshAA();
-      toast.success(result?.message || "AA sandbox consent started.");
+      toast.success("Bank consent started.");
     } catch (err: any) {
-      toast.error(err.message || "Failed to start AA sandbox consent.");
+      toast.error(err.message || "Failed to start bank consent.");
     } finally {
       setAaBusyAction(null);
     }
@@ -309,19 +292,19 @@ function PrivacyPage() {
 
   async function handleAASandboxAction(action: "approve" | "reject" | "revoke" | "expire" | "fetch_success" | "fetch_failed") {
     if (!currentAAConsent?.id) {
-      toast.error("No AA sandbox consent selected.");
+      toast.error("No bank consent selected.");
       return;
     }
     setAaBusyAction(action);
     try {
-      const result = await simulateAccountAggregatorSandbox({
+      await simulateAccountAggregatorSandbox({
         consentId: currentAAConsent.id,
         data: { action },
       });
       await refreshAA();
-      toast.success(result?.message || "AA sandbox status updated.");
+      toast.success(bankConsentActionToast(action));
     } catch (err: any) {
-      toast.error(err.message || "AA sandbox action failed.");
+      toast.error(err.message || "Bank consent action failed.");
     } finally {
       setAaBusyAction(null);
     }
@@ -418,118 +401,107 @@ function PrivacyPage() {
 
         {/* Trust Layer */}
         <section className="space-y-3">
-          <p className="text-[10px] font-bold tracking-[0.18em] uppercase text-muted-foreground">
-            Trust Layer
-          </p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[10px] font-bold tracking-[0.18em] uppercase text-muted-foreground">
+              Privacy Controls
+            </p>
+            <Badge
+              variant="outline"
+              className={`w-fit text-[10px] ${
+                syncEnabled ? "border-success/35 text-success" : "border-warning/40 text-warning"
+              }`}
+            >
+              {syncEnabled ? "Sync controlled" : "Sync paused"}
+            </Badge>
+          </div>
+
           <Card className="bg-surface-raised p-4 sm:p-5">
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-5">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <ShieldCheck className="h-4 w-4 text-primary shrink-0" />
-                    <p className="text-[14px] font-semibold text-foreground">Privacy Trust Layer</p>
+                <div className="flex min-w-0 gap-3">
+                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-primary/20 bg-primary/10 text-primary">
+                    <ShieldCheck className="h-5 w-5" />
                   </div>
-                  <p className="mt-1 max-w-xl text-[12px] leading-relaxed text-muted-foreground">
-                    PocketBuddy can track payments without bank login, OTP, MPIN, or raw notification upload from the new connector flow.
-                  </p>
+                  <div className="min-w-0">
+                    <p className="text-[15px] font-semibold text-foreground">Your spending data stays under your control.</p>
+                    <p className="mt-1 max-w-2xl text-[12px] leading-relaxed text-muted-foreground">
+                      Bank consent is the primary verified path. Phone auto-sync is optional and only sends structured transaction facts after supported payment alerts are parsed on your device.
+                    </p>
+                  </div>
                 </div>
-                <Badge variant="outline" className="w-fit border-primary/30 bg-background/60 text-[10px] text-primary">
-                  {connectorTrustLabel}
-                </Badge>
+                <Button variant="outline" size="sm" className="w-fit shrink-0 text-xs" onClick={() => nav({ to: "/companion" })}>
+                  Manage sync
+                </Button>
               </div>
 
               <div className="grid gap-2 sm:grid-cols-3">
                 <TrustMetric
+                  icon={<ShieldCheck className="h-4 w-4" />}
+                  label="Bank consent"
+                  value={aaTrustStatus}
+                  detail={currentAAConsent ? "Consent state is recorded here" : "Ready when a bank source is connected"}
+                />
+                <TrustMetric
                   icon={<Smartphone className="h-4 w-4" />}
-                  label="Android source"
-                  value={profile?.companion_paired ? "Linked" : "Optional"}
+                  label="Phone auto-sync"
+                  value={profile?.companion_paired ? "On-device" : "Optional"}
                   detail={activeAndroidConsent?.device_name || profile?.companion_device_name || "No phone connected"}
                 />
                 <TrustMetric
                   icon={<Lock className="h-4 w-4" />}
-                  label="Raw alert upload"
+                  label="Raw text stored"
                   value={rawUploadLabel}
                   detail={
                     legacyRawLogCount
-                      ? `${legacyRawLogCount} legacy event${legacyRawLogCount === 1 ? "" : "s"} in recent log`
-                      : "New v2 events are structured before upload"
+                      ? `${legacyRawLogCount} older masked event${legacyRawLogCount === 1 ? "" : "s"} in recent log`
+                      : "New syncs store structured fields only"
                   }
                 />
-                <TrustMetric
+              </div>
+
+              <Accordion type="single" collapsible className="rounded-xl border border-border bg-background/70">
+                <PrivacyAccordionItem
+                  value="how-tracking-works"
                   icon={<FileCheck2 className="h-4 w-4" />}
-                  label="Parser proof"
-                  value={latestParserLabel}
-                  detail={sanitizedShare === null ? "No sync events yet" : `${sanitizedShare}% recent events marked sanitized`}
-                />
-              </div>
+                  title="How tracking works"
+                  summary="Verified consent first; optional phone sync for supported UPI alerts."
+                >
+                  <ul className="space-y-1.5">
+                    <li>Bank consent is used for verified financial data when a provider is connected.</li>
+                    <li>The Android connector checks supported payment alerts on your phone before anything is sent.</li>
+                    <li>Transactions show clear labels such as Bank verified, On-device, Manual, Reviewed, or Needs review.</li>
+                  </ul>
+                </PrivacyAccordionItem>
 
-              <div className="grid gap-3 lg:grid-cols-[1.15fr_0.85fr]">
-                <div className="rounded-xl border border-border bg-background/70 p-3">
-                  <p className="text-[12px] font-semibold text-foreground">What moves through the system</p>
-                  <div className="mt-3 space-y-2">
-                    <DataFlowRow
-                      icon={<Smartphone className="h-3.5 w-3.5" />}
-                      title="On your phone"
-                      body="Supported UPI/SMS alerts are checked locally and converted into amount, merchant, direction, source app, and reference."
-                    />
-                    <DataFlowRow
-                      icon={<Server className="h-3.5 w-3.5" />}
-                      title="To PocketBuddy"
-                      body="Only structured transaction fields, parser confidence, and a masked preview are stored for review and audit."
-                    />
-                    <DataFlowRow
-                      icon={<KeyRound className="h-3.5 w-3.5" />}
-                      title="Never requested"
-                      body="Bank password, MPIN, OTP, full SMS body in v2, notification inbox access from the web app, or permission to initiate payments."
-                    />
-                  </div>
-                </div>
+                <PrivacyAccordionItem
+                  value="never-asks"
+                  icon={<KeyRound className="h-4 w-4" />}
+                  title="What PocketBuddy never asks for"
+                  summary="No bank password, MPIN, OTP, or payment permission."
+                >
+                  <ul className="space-y-1.5">
+                    <li>No bank login password, MPIN, OTP, or card PIN.</li>
+                    <li>No permission to initiate payments or move money.</li>
+                    <li>No full notification inbox access from the web app, and no raw alert text in the new connector flow.</li>
+                  </ul>
+                </PrivacyAccordionItem>
 
-                <div className="rounded-xl border border-border bg-background/70 p-3">
-                  <p className="text-[12px] font-semibold text-foreground">Trusted sources</p>
-                  <div className="mt-3 space-y-2">
-                    <SourceRow
-                      label="Instant UPI Sync"
-                      status={connectorTrustLabel}
-                      detail={profile?.companion_paired ? "Android connector, on-device parser" : "User-controlled optional connector"}
-                    />
-                    <SourceRow
-                      label="Account Aggregator"
-                      status={aaTrustStatus}
-                      detail={aaStatus?.message || "AA sandbox status has not loaded yet."}
-                    />
-                  </div>
-                </div>
-              </div>
+                <PrivacyAccordionItem
+                  value="controls"
+                  icon={<Lock className="h-4 w-4" />}
+                  title="Your controls"
+                  summary="Pause sync, unpair the phone, review entries, or delete account data."
+                >
+                  <ul className="space-y-1.5">
+                    <li>Pause auto-sync before new phone events are parsed.</li>
+                    <li>Unpairing rotates the setup token so the old connector cannot continue syncing.</li>
+                    <li>Low-confidence entries can be reviewed before they are trusted in your ledger.</li>
+                  </ul>
+                </PrivacyAccordionItem>
+              </Accordion>
             </div>
           </Card>
         </section>
-
-        {/* Data minimization statement */}
-        <Card className="bg-surface-raised p-5 space-y-2">
-          <div className="flex items-center gap-2">
-            <Lock className="h-4 w-4 text-primary shrink-0" />
-            <p className="text-[13px] font-semibold text-foreground">How PocketBuddy handles your data</p>
-          </div>
-          <ul className="space-y-1.5 text-[11px] text-muted-foreground leading-relaxed list-none">
-            <li className="flex items-start gap-2">
-              <CheckCircle2 className="h-3.5 w-3.5 text-success mt-0.5 shrink-0" />
-              New connector events store <b className="text-foreground">structured fields and a masked preview</b>, not raw alert text.
-            </li>
-            <li className="flex items-start gap-2">
-              <CheckCircle2 className="h-3.5 w-3.5 text-success mt-0.5 shrink-0" />
-              Legacy raw payloads are classified separately and stored only as masked previews.
-            </li>
-            <li className="flex items-start gap-2">
-              <CheckCircle2 className="h-3.5 w-3.5 text-success mt-0.5 shrink-0" />
-              Consent, sync state, and parser confidence are visible here.
-            </li>
-            <li className="flex items-start gap-2">
-              <CheckCircle2 className="h-3.5 w-3.5 text-success mt-0.5 shrink-0" />
-              You can pause sync, unpair the connector, clear logs, or delete account data.
-            </li>
-          </ul>
-        </Card>
 
         {/* Consent Ledger */}
         <section>
@@ -559,10 +531,10 @@ function PrivacyPage() {
           </Card>
         </section>
 
-        {/* Account Aggregator Sandbox */}
+        {/* Bank Consent */}
         <section>
           <p className="text-[10px] font-bold tracking-[0.18em] uppercase text-muted-foreground mb-3">
-            Account Aggregator Sandbox
+            Bank Consent
           </p>
           <AccountAggregatorSandboxCard
             aaStatus={aaStatus}
@@ -931,18 +903,13 @@ function AccountAggregatorSandboxCard({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-[14px] font-semibold text-foreground">AA verification sandbox</p>
+              <p className="text-[14px] font-semibold text-foreground">Bank consent setup</p>
               <Badge variant="outline" className={`text-[9px] ${aaStatusClass(runtimeStatus)}`}>
                 {humanAARuntimeStatus(runtimeStatus)}
               </Badge>
-              {aaStatus?.uses_dummy_data && (
-                <Badge variant="secondary" className="text-[9px]">
-                  Sample sandbox data
-                </Badge>
-              )}
             </div>
             <p className="mt-1 max-w-2xl text-[12px] leading-relaxed text-muted-foreground">
-              {aaStatus?.message || "Loading AA sandbox status."}
+              {bankConsentMessage(runtimeStatus, consentStatus)}
             </p>
           </div>
           <Button variant="outline" size="sm" className="w-fit shrink-0" disabled={disabled} onClick={onRefresh}>
@@ -956,7 +923,7 @@ function AccountAggregatorSandboxCard({
             icon={<ShieldCheck className="h-4 w-4" />}
             label="Consent"
             value={humanConsentStatus(consentStatus)}
-            detail={consent?.purpose || "No AA consent requested yet"}
+            detail={consent?.purpose || "No bank consent requested yet"}
           />
           <TrustMetric
             icon={<FileCheck2 className="h-4 w-4" />}
@@ -970,9 +937,9 @@ function AccountAggregatorSandboxCard({
           />
           <TrustMetric
             icon={<Lock className="h-4 w-4" />}
-            label="Live bank data"
-            value={aaStatus?.uses_dummy_data ? "Not used" : "Disabled"}
-            detail="Sandbox records never replace Android/manual transactions"
+            label="Ledger safety"
+            value="Protected"
+            detail="Consent fetches do not overwrite phone or manual transactions"
           />
         </div>
 
@@ -1000,7 +967,7 @@ function AccountAggregatorSandboxCard({
               </p>
             </div>
             <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-              {latestEvent.message || "No event message."}
+              {bankConsentEventMessage(latestEvent.event_type)}
             </p>
           </div>
         )}
@@ -1009,10 +976,10 @@ function AccountAggregatorSandboxCard({
           <div className="mt-4 rounded-lg border border-border bg-surface p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-[12px] font-semibold text-foreground">
-                Latest sandbox fetch
+                Latest consent fetch
               </p>
               <Badge variant="outline" className="text-[9px] text-muted-foreground">
-                {latestSnapshot.record_count || latestSnapshot.records.length} sample records
+                {latestSnapshot.record_count || latestSnapshot.records.length} records
               </Badge>
             </div>
             <div className="mt-2 space-y-1.5">
@@ -1020,7 +987,7 @@ function AccountAggregatorSandboxCard({
                 <div key={`${record.transaction_reference || index}`} className="flex items-center justify-between gap-3 rounded-md bg-background/70 px-2.5 py-2">
                   <div className="min-w-0">
                     <p className="truncate text-[12px] font-semibold text-foreground">
-                      {record.merchant || "Sandbox transaction"}
+                      {record.merchant || "Verified transaction"}
                     </p>
                     <p className="text-[10px] text-muted-foreground">
                       {record.direction || "DEBIT"} · {record.masked_account_ref || "masked account"}
@@ -1038,19 +1005,19 @@ function AccountAggregatorSandboxCard({
         <div className="mt-4 flex flex-wrap gap-2">
           {!aaStatus?.can_start_sandbox && (
             <Button disabled variant="outline" size="sm" className="text-xs">
-              Enable AA sandbox in env
+              Bank consent unavailable
             </Button>
           )}
           {canStart && (
             <Button disabled={disabled} size="sm" className="text-xs" onClick={onStart}>
               {busyAction === "start" ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
-              Start sandbox consent
+              Start bank consent
             </Button>
           )}
           {canApprove && (
             <>
               <Button disabled={disabled} size="sm" className="text-xs" onClick={() => onAction("approve")}>
-                Approve sandbox consent
+                Approve consent
               </Button>
               <Button disabled={disabled} variant="outline" size="sm" className="text-xs" onClick={() => onAction("reject")}>
                 Reject
@@ -1061,7 +1028,7 @@ function AccountAggregatorSandboxCard({
             <>
               <Button disabled={disabled} size="sm" className="text-xs" onClick={() => onAction("fetch_success")}>
                 {busyAction === "fetch_success" ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <FileCheck2 className="h-3.5 w-3.5" />}
-                Fetch sandbox data
+                Fetch consent data
               </Button>
               <Button disabled={disabled} variant="outline" size="sm" className="text-xs" onClick={() => onAction("revoke")}>
                 Revoke
@@ -1073,7 +1040,7 @@ function AccountAggregatorSandboxCard({
         {canUseLocalSandbox && consent?.id && (
           <details className="mt-3 rounded-lg border border-border bg-surface p-3">
             <summary className="cursor-pointer text-[11px] font-semibold text-muted-foreground">
-              Sandbox edge-case controls
+              Advanced consent states
             </summary>
             <div className="mt-3 flex flex-wrap gap-2">
               <Button disabled={disabled || consentStatus === "revoked"} variant="outline" size="sm" className="text-xs" onClick={() => onAction("expire")}>
@@ -1084,7 +1051,7 @@ function AccountAggregatorSandboxCard({
               </Button>
             </div>
             <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-              These controls are local sandbox-only. They show rejected, expired, revoked, and failed-fetch states without touching real bank data.
+              Use these states to verify how the app handles expired consent, revocation, rejection, and fetch failure.
             </p>
           </details>
         )}
@@ -1099,18 +1066,71 @@ function humanAAStatus(aaStatus?: AAStatus, consent?: DataConsent) {
   if (consent?.status === "revoked") return "Revoked";
   if (consent?.status === "rejected") return "Rejected";
   if (consent?.status === "expired") return "Expired";
-  if (aaStatus?.status === "sandbox_ready") return "Sandbox ready";
+  if (aaStatus?.status === "sandbox_ready") return "Ready";
   if (aaStatus?.status === "misconfigured") return "Needs config";
   if (aaStatus?.status === "provider_configured") return "Provider configured";
   return "Not connected";
 }
 
 function humanAARuntimeStatus(status?: string) {
-  if (status === "sandbox_ready") return "Sandbox ready";
+  if (status === "sandbox_ready") return "Ready";
   if (status === "misconfigured") return "Needs config";
   if (status === "provider_configured") return "Provider configured";
   if (status === "not_configured") return "Disabled";
   return "Loading";
+}
+
+function bankConsentMessage(runtimeStatus?: string, consentStatus?: string) {
+  if (runtimeStatus === "misconfigured") {
+    return "Bank consent needs configuration before it can be used.";
+  }
+  if (runtimeStatus === "not_configured") {
+    return "Bank consent is optional and can be enabled when you want verified bank-source tracking.";
+  }
+  if (consentStatus === "active") {
+    return "Consent is active. You can fetch consented records, revoke access, or review the activity here.";
+  }
+  if (consentStatus === "pending") {
+    return "Consent is waiting for approval. Nothing is fetched until approval is complete.";
+  }
+  if (consentStatus === "revoked") {
+    return "Consent was revoked. PocketBuddy will not fetch new records from this source.";
+  }
+  if (consentStatus === "rejected") {
+    return "Consent was rejected. You can start a new request when needed.";
+  }
+  if (consentStatus === "expired") {
+    return "Consent expired. Start a new request to continue verified tracking.";
+  }
+  if (runtimeStatus === "provider_configured" || runtimeStatus === "sandbox_ready") {
+    return "Start consent to connect verified bank-source tracking.";
+  }
+  return "Checking bank consent status.";
+}
+
+function bankConsentActionToast(action: AASandboxAction) {
+  if (action === "approve") return "Consent approved.";
+  if (action === "reject") return "Consent rejected.";
+  if (action === "revoke") return "Consent revoked.";
+  if (action === "expire") return "Consent expired.";
+  if (action === "fetch_success") return "Consent data fetched.";
+  if (action === "fetch_failed") return "Consent fetch marked failed.";
+  return "Bank consent updated.";
+}
+
+function bankConsentEventMessage(eventType?: string) {
+  if (eventType === "consent_reused") return "An existing active consent was reused.";
+  if (eventType === "consent_requested") return "A consent request was created and is waiting for approval.";
+  if (eventType === "consent_approved") return "Consent was approved and is ready for a data fetch.";
+  if (eventType === "consent_rejected") return "Consent was rejected.";
+  if (eventType === "consent_revoked") return "Consent was revoked.";
+  if (eventType === "consent_expired") return "Consent expired.";
+  if (eventType === "fi_fetch_success" || eventType === "fi_fetch_completed") return "Consented records were fetched and kept separate from your live ledger.";
+  if (eventType === "fi_fetch_failed") return "The consented data fetch failed and no records were imported.";
+  if (eventType === "consent_callback") return "A consent callback was received.";
+  if (eventType === "fi_callback") return "A financial information callback was received.";
+  if (eventType === "orphan_consent_callback" || eventType === "orphan_fi_callback") return "A callback could not be linked to an active consent.";
+  return "Bank consent activity was updated.";
 }
 
 function aaStatusClass(status?: string) {
@@ -1126,6 +1146,39 @@ function formatAAEvent(value?: string) {
 function formatPaise(value?: number) {
   if (value === null || value === undefined || !Number.isFinite(Number(value))) return "—";
   return `₹${new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(Math.round(Number(value) / 100))}`;
+}
+
+function PrivacyAccordionItem({
+  value,
+  icon,
+  title,
+  summary,
+  children,
+}: {
+  value: string;
+  icon: ReactNode;
+  title: string;
+  summary: string;
+  children: ReactNode;
+}) {
+  return (
+    <AccordionItem value={value} className="border-border px-3 last:border-b-0 sm:px-4">
+      <AccordionTrigger className="py-3 hover:no-underline">
+        <div className="flex min-w-0 items-center gap-3 pr-3">
+          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+            {icon}
+          </div>
+          <div className="min-w-0 text-left">
+            <p className="text-[12px] font-semibold text-foreground">{title}</p>
+            <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{summary}</p>
+          </div>
+        </div>
+      </AccordionTrigger>
+      <AccordionContent className="pb-3 pl-11 text-[11px] leading-relaxed text-muted-foreground">
+        {children}
+      </AccordionContent>
+    </AccordionItem>
+  );
 }
 
 function TrustMetric({
@@ -1151,28 +1204,6 @@ function TrustMetric({
   );
 }
 
-function DataFlowRow({
-  icon,
-  title,
-  body,
-}: {
-  icon: ReactNode;
-  title: string;
-  body: string;
-}) {
-  return (
-    <div className="flex gap-2 rounded-lg bg-surface/70 p-2.5">
-      <div className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
-        {icon}
-      </div>
-      <div className="min-w-0">
-        <p className="text-[12px] font-semibold text-foreground">{title}</p>
-        <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">{body}</p>
-      </div>
-    </div>
-  );
-}
-
 function SourceRow({
   label,
   status,
@@ -1182,7 +1213,7 @@ function SourceRow({
   status: string;
   detail: string;
 }) {
-  const active = status === "Active" || status === "Linked";
+  const active = ["Active", "Linked", "Visible", "Armed"].includes(status);
   const paused = status === "Paused";
 
   return (
