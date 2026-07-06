@@ -914,7 +914,13 @@ async def log_parser_correction(
     await db.parser_corrections.insert_one(correction_doc)
 
     # Apply the correction to the transaction itself
-    update_fields = {"needs_verification": False, "user_corrected": True}
+    update_fields = {
+        "needs_verification": False,
+        "user_corrected": True,
+        "verification_status": "user_reviewed",
+        "parsing_confidence": "high",
+        "user_confirmed_at": now,
+    }
     if req.corrected_amount is not None:
         update_fields["amount"] = req.corrected_amount
     if req.corrected_merchant is not None:

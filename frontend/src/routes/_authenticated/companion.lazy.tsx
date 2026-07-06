@@ -539,7 +539,7 @@ function AndroidInstallGuideCard() {
       <div className="mt-3 flex gap-2 rounded-md border border-warning/30 bg-warning/10 p-3 text-[12px] leading-relaxed text-muted-foreground">
         <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
         <p>
-          Google Play Protect can warn because this APK is installed outside the Play Store. If it blocks installation on a demo phone, open Play Store &gt; Play Protect &gt; Settings, temporarily disable app scanning, install PocketBuddy, then turn scanning back on.
+          Google Play Protect can warn because this APK is installed outside the Play Store. If it blocks installation, open Play Store &gt; Play Protect &gt; Settings, temporarily disable app scanning, install PocketBuddy, then turn scanning back on.
         </p>
       </div>
     </Card>

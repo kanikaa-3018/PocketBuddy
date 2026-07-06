@@ -44,6 +44,106 @@ function getCatBadgeStyles(cat?: string): string {
 }
 
 type ViewTab = "daily" | "calendar" | "monthly" | "total";
+type TrustTone = "success" | "warning" | "muted" | "primary";
+type TrustBadge = { label: string; tone: TrustTone; title: string };
+
+function transactionTrustBadges(txn: any): TrustBadge[] {
+  const badges: TrustBadge[] = [];
+  const source = String(txn.source || "").toLowerCase();
+  const isCompanion = source.startsWith("companion");
+  const needsReview = txn.needs_verification === true || txn.verification_status === "needs_review";
+  const bankVerified = txn.verification_status === "aa_verified" || txn.data_origin === "account_aggregator";
+  const userReviewed = Boolean(txn.user_confirmed_at || txn.user_corrected || txn.verification_status === "user_reviewed");
+  const onDevice =
+    txn.data_origin === "android_on_device" ||
+    txn.privacy_mode === "on_device_only" ||
+    (isCompanion && txn.raw_payload_received === false);
+  const legacyMasked = txn.raw_payload_received === true || txn.data_origin === "legacy_android_raw_ingest";
+
+  if (bankVerified) {
+    badges.push({
+      label: "Bank verified",
+      tone: "success",
+      title: "Matched through an Account Aggregator data source.",
+    });
+  } else if (needsReview) {
+    badges.push({
+      label: "Needs review",
+      tone: "warning",
+      title: "Parsed with lower confidence. Confirm or correct this entry.",
+    });
+  } else if (userReviewed) {
+    badges.push({
+      label: "Reviewed",
+      tone: "success",
+      title: "Confirmed or corrected by the user.",
+    });
+  }
+
+  if (onDevice) {
+    badges.push({
+      label: "On-device",
+      tone: "primary",
+      title: "Parsed on the Android phone. Raw notification text was not uploaded.",
+    });
+  } else if (legacyMasked) {
+    badges.push({
+      label: "Masked legacy",
+      tone: "warning",
+      title: "Legacy connector path. Only a masked preview is retained.",
+    });
+  } else if (source === "manual" || txn.data_origin === "user_entered") {
+    badges.push({
+      label: "Manual",
+      tone: "muted",
+      title: "Entered by the user.",
+    });
+  } else if (source) {
+    badges.push({
+      label: "App entry",
+      tone: "muted",
+      title: "Created inside PocketBuddy.",
+    });
+  }
+
+  if (!needsReview && isCompanion && txn.parsing_confidence === "high") {
+    badges.push({
+      label: "High confidence",
+      tone: "success",
+      title: "Amount and merchant were parsed with high confidence.",
+    });
+  }
+
+  return badges.slice(0, 3);
+}
+
+function trustBadgeClass(tone: TrustTone) {
+  if (tone === "success") return "border-success/25 bg-success/10 text-success";
+  if (tone === "warning") return "border-warning/30 bg-warning/10 text-warning";
+  if (tone === "primary") return "border-primary/25 bg-primary/10 text-primary";
+  return "border-border bg-surface-raised/60 text-muted-foreground";
+}
+
+function trustLabelForCSV(txn: any) {
+  const labels = transactionTrustBadges(txn).map((badge) => badge.label);
+  return labels.length ? labels.join(" | ") : "Unlabeled";
+}
+
+function transactionTrustDetail(txn: any) {
+  if (txn.needs_verification || txn.verification_status === "needs_review") {
+    return "Review this entry before relying on it.";
+  }
+  if (txn.data_origin === "android_on_device" || txn.privacy_mode === "on_device_only") {
+    return "Raw alert text stayed on the phone.";
+  }
+  if (txn.raw_payload_received === true || txn.data_origin === "legacy_android_raw_ingest") {
+    return "Legacy alert was stored as masked preview only.";
+  }
+  if (txn.source === "manual" || txn.data_origin === "user_entered") {
+    return "Added manually by you.";
+  }
+  return "Created inside PocketBuddy.";
+}
 
 function TxnsPage() {
   const { user } = useAuth();
@@ -98,11 +198,11 @@ function TxnsPage() {
   // CSV export
   function exportCSV() {
     if (!stats?.daily_groups) return;
-    const rows: string[] = ["Date,Description,Category,Amount (paise),Source,Type"];
+    const rows: string[] = ["Date,Description,Category,Amount (paise),Source,Trust,Type"];
     for (const day of stats.daily_groups) {
       for (const t of day.transactions) {
         const desc = (t.mapped_merchant_name || t.raw_merchant_string || "").replace(/,/g, ";");
-        rows.push(`${day.date},"${desc}",${t.category || "other"},${t.amount},${t.source},${t.is_income ? "income" : "expense"}`);
+        rows.push(`${day.date},"${desc}",${t.category || "other"},${t.amount},${t.source},"${trustLabelForCSV(t)}",${t.is_income ? "income" : "expense"}`);
       }
     }
     const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8;" });
@@ -383,31 +483,30 @@ function DailyView({
           {/* Transactions */}
           <div className="divide-y divide-border/30">
             {group.transactions.map((t: any) => {
-              const isCompanion = (t.source || "").startsWith("companion");
+              const trustBadges = transactionTrustBadges(t);
               return (
                 <div key={t.id} className="flex items-center gap-3 px-4 py-3 hover:bg-surface-raised/40 transition-colors">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-1.5 mb-1 flex-wrap">
                       <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${getCatBadgeStyles(t.category)}`}>
                         {t.category || "other"}
                       </span>
+                      {trustBadges.map((badge) => (
+                        <span
+                          key={`${t.id}-${badge.label}`}
+                          title={badge.title}
+                          className={`text-[9px] font-bold uppercase tracking-[0.08em] px-2 py-0.5 rounded-full border ${trustBadgeClass(badge.tone)}`}
+                        >
+                          {badge.label}
+                        </span>
+                      ))}
                     </div>
                     <p className="text-xs font-bold text-foreground truncate">
                       {t.mapped_merchant_name ?? t.raw_merchant_string}
                     </p>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className="text-[10px] md:text-xs text-muted-foreground">
-                        {isCompanion ? "Companion" : "Manual"}
-                      </span>
-                      {t.needs_verification && (
-                        <>
-                          <span className="text-[10px] md:text-xs text-zinc-600 font-bold">•</span>
-                          <span className="text-[9px] md:text-xs font-black text-warning bg-warning/10 border border-warning/20 px-1.5 py-0.5 rounded uppercase tracking-wider">
-                            Verify Parser
-                          </span>
-                        </>
-                      )}
-                    </div>
+                    <p className="mt-0.5 truncate text-[10px] md:text-xs text-muted-foreground">
+                      {transactionTrustDetail(t)}
+                    </p>
                   </div>
                   <div className="text-right shrink-0 flex items-center gap-2">
                     <span className={`text-xs font-black tnum ${t.is_income ? "text-[#5DADE2]" : "text-[#FF6B4A]"}`}>
@@ -558,10 +657,10 @@ function MonthlyView({
                 <div className="flex flex-col items-end border-l border-border/40 pl-3">
                   <span className="text-[8px] font-bold uppercase tracking-wider text-muted-foreground">Balance</span>
                   <p className={`text-xs tnum font-black ${
-                    m.net > 0 
-                      ? "text-[#16A34A]" 
-                      : m.net < 0 
-                        ? "text-[#FF6B4A]" 
+                    m.net > 0
+                      ? "text-[#16A34A]"
+                      : m.net < 0
+                        ? "text-[#FF6B4A]"
                         : "text-muted-foreground"
                   }`}>
                     {hasData ? (m.net > 0 ? "+" : "") + rupees(m.net) : "₹0"}
@@ -588,10 +687,10 @@ function MonthlyView({
                       <div className="flex flex-col items-end border-l border-border/30 pl-2.5">
                         <span className="text-[7px] font-bold uppercase tracking-wider text-muted-foreground">Balance</span>
                         <span className={`text-[10px] tnum font-bold ${
-                          w.net > 0 
-                            ? "text-[#16A34A]" 
-                            : w.net < 0 
-                              ? "text-[#FF6B4A]" 
+                          w.net > 0
+                            ? "text-[#16A34A]"
+                            : w.net < 0
+                              ? "text-[#FF6B4A]"
                               : "text-muted-foreground"
                         }`}>
                           {(w.net > 0 ? "+" : "") + rupees(w.net)}
@@ -745,7 +844,7 @@ function EditTxnForm({ txn, categories, onClose }: { txn: any; categories: { v: 
       <DialogHeader>
         <DialogTitle>Edit Transaction</DialogTitle>
       </DialogHeader>
-      
+
       <div className="space-y-4 py-4">
         <div className="space-y-1">
           <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Original Reference</label>

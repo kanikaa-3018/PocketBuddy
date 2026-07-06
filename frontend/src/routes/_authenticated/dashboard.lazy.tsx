@@ -71,6 +71,29 @@ type Sub = any;
 type Pool = any;
 type PoolItem = any;
 
+function transactionTrustLabel(txn: any) {
+  if (txn.verification_status === "aa_verified" || txn.data_origin === "account_aggregator") return "Bank verified";
+  if (txn.needs_verification || txn.verification_status === "needs_review") return "Needs review";
+  if (txn.user_confirmed_at || txn.user_corrected || txn.verification_status === "user_reviewed") return "Reviewed";
+  if (
+    txn.data_origin === "android_on_device" ||
+    txn.privacy_mode === "on_device_only" ||
+    ((txn.source || "").startsWith("companion") && txn.raw_payload_received === false)
+  ) {
+    return "On-device";
+  }
+  if (txn.raw_payload_received === true || txn.data_origin === "legacy_android_raw_ingest") return "Masked legacy";
+  if (txn.source === "manual" || txn.data_origin === "user_entered") return "Manual";
+  return null;
+}
+
+function transactionTrustClass(label: string | null) {
+  if (label === "Needs review") return "text-warning bg-warning/10 border-warning/20";
+  if (label === "Reviewed" || label === "Bank verified") return "text-success bg-success/10 border-success/20";
+  if (label === "On-device") return "text-primary bg-primary/10 border-primary/20";
+  return "text-zinc-500 bg-white/5 border-border";
+}
+
 const isPoolFullyPaid = (p: any) => {
   if (p.status !== "completed") return false;
   const breakdown = p.split_breakdown ?? {};
@@ -1127,7 +1150,7 @@ function Dashboard() {
       response = "wellness_ate";
       stress_note = "User tapped wellness check-in: I ate";
       toastMsg = "Great, logged! Keep fueling through the week 💪";
-      
+
       try {
         await insertTransaction({
           data: {
@@ -1239,13 +1262,13 @@ function Dashboard() {
             {/* Student Wellness Index Card */}
             <div id="card-wellness-index" className="bg-surface rounded-2xl border border-border relative overflow-hidden transition-all duration-300 hover:border-white/10">
               <div className="absolute top-0 left-0 w-full h-[2px]" style={{
-                background: wellness?.status === "steady" 
-                  ? "linear-gradient(to right, #10b981, #34d399)" 
-                  : wellness?.status === "watch" 
-                    ? "linear-gradient(to right, #f59e0b, #fbbf24)" 
+                background: wellness?.status === "steady"
+                  ? "linear-gradient(to right, #10b981, #34d399)"
+                  : wellness?.status === "watch"
+                    ? "linear-gradient(to right, #f59e0b, #fbbf24)"
                     : "linear-gradient(to right, #ef4444, #f87171)"
               }} />
-              
+
               {wellnessLoading ? (
                 <div className="p-4 md:p-5 space-y-3">
                   <Skeleton className="h-5 w-1/4" />
@@ -1272,7 +1295,7 @@ function Dashboard() {
                   </div>
                 </div>
               ) : (wellness?.status === "steady" && !isWellnessExpanded) ? (
-                <div 
+                <div
                   className="p-4 flex items-center justify-between gap-3 cursor-pointer select-none hover:bg-white/[0.02] transition-colors"
                   onClick={() => setIsWellnessExpanded(true)}
                 >
@@ -1307,7 +1330,7 @@ function Dashboard() {
                         <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest font-mono">/ 100 Wellness Score</span>
                       </div>
                     </div>
-                    
+
                     <div className="flex items-center gap-2">
                       <Badge variant="outline" className="font-bold text-xs px-2.5 py-1 tracking-wider uppercase" style={{
                         borderColor: wellness.status === "steady" ? "rgba(22,163,74,0.3)" : wellness.status === "watch" ? "rgba(217,119,6,0.3)" : "rgba(220,38,38,0.3)",
@@ -1316,7 +1339,7 @@ function Dashboard() {
                       }}>
                         {wellness.status === "steady" ? "STEADY" : wellness.status === "watch" ? "WATCH" : "STRESSED"}
                       </Badge>
-                      
+
                       {wellness?.status === "steady" && (
                         <button
                           onClick={(e) => {
@@ -1333,30 +1356,30 @@ function Dashboard() {
                   </div>
 
                   <p className="text-xs md:text-sm text-zinc-300 font-medium leading-relaxed mb-4">
-                    {wellness.status === "stressed" 
-                      ? "We noticed a stack of stressful signals today. Remember, your runway and meals don't define you. Taking it one step at a time is enough. You can do this." 
+                    {wellness.status === "stressed"
+                      ? "We noticed a stack of stressful signals today. Remember, your runway and meals don't define you. Taking it one step at a time is enough. You can do this."
                       : wellness.message}
                   </p>
 
                   <div className="border-t border-border/40 pt-3 mt-1 mb-3">
                     <p className="text-xs font-bold tracking-widest text-zinc-500 uppercase mb-2.5 font-mono">Contributing Signals</p>
-                    
+
                     <div className="flex flex-wrap gap-2">
                       {wellness.signals?.map((sig: any) => (
                         <div key={sig.key} className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-surface-raised/20 text-xs font-medium" style={{
-                          borderColor: sig.severity === "stressed" 
-                            ? "rgba(239,68,68,0.25)" 
-                            : sig.severity === "watch" 
-                              ? "rgba(245,158,11,0.25)" 
+                          borderColor: sig.severity === "stressed"
+                            ? "rgba(239,68,68,0.25)"
+                            : sig.severity === "watch"
+                              ? "rgba(245,158,11,0.25)"
                               : "var(--border)"
                         }} title={sig.detail}>
                           <span className="text-zinc-400">{sig.label}:</span>
                           <span className="font-bold text-foreground">{sig.value}</span>
                           <span className="w-2 h-2 rounded-full shrink-0" style={{
-                            background: sig.severity === "stressed" 
-                              ? "var(--pb-red)" 
-                              : sig.severity === "watch" 
-                                ? "var(--pb-amber)" 
+                            background: sig.severity === "stressed"
+                              ? "var(--pb-red)"
+                              : sig.severity === "watch"
+                                ? "var(--pb-amber)"
                                 : "var(--pb-green)"
                           }} />
                         </div>
@@ -1399,16 +1422,16 @@ function Dashboard() {
                         {/* Column 1: Check-in Form */}
                         <form onSubmit={handleRedCheckinSubmit} className="space-y-2.5">
                           <p className="text-xs font-bold tracking-widest text-zinc-500 uppercase pl-0.5 font-mono">Submit Feedback Check-in</p>
-                          <textarea 
-                            value={redCheckinText} 
-                            onChange={(e) => setRedCheckinText(e.target.value)} 
-                            placeholder="How are you feeling today? Write down any notes, feelings or stress points..." 
-                            className="w-full min-h-[96px] bg-background/50 border border-border rounded-xl p-3 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary/40 resize-none text-foreground placeholder:text-muted-foreground/50 leading-relaxed transition-all" 
-                            disabled={redCheckinSubmitting} 
+                          <textarea
+                            value={redCheckinText}
+                            onChange={(e) => setRedCheckinText(e.target.value)}
+                            placeholder="How are you feeling today? Write down any notes, feelings or stress points..."
+                            className="w-full min-h-[96px] bg-background/50 border border-border rounded-xl p-3 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary/40 resize-none text-foreground placeholder:text-muted-foreground/50 leading-relaxed transition-all"
+                            disabled={redCheckinSubmitting}
                           />
-                          <button 
-                            type="submit" 
-                            disabled={redCheckinSubmitting || !redCheckinText.trim()} 
+                          <button
+                            type="submit"
+                            disabled={redCheckinSubmitting || !redCheckinText.trim()}
                             className="w-full min-h-[38px] rounded-xl bg-primary text-primary-foreground text-xs font-bold uppercase tracking-wider transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none cursor-pointer flex items-center justify-center gap-2"
                           >
                             {redCheckinSubmitting ? "Submitting..." : "Submit Check-in"}
@@ -1732,7 +1755,7 @@ function Dashboard() {
                     (p) => (p.status === "open" && new Date(p.expires_at).getTime() > Date.now()) ||
                            (p.status === "completed" && !isPoolFullyPaid(p))
                   );
-                  
+
                   if (activeDashboardPools.length === 0) {
                     return (
                       <div className="col-span-full py-10 text-center border border-dashed border-border rounded-2xl bg-surface-raised/40">
@@ -1741,7 +1764,7 @@ function Dashboard() {
                       </div>
                     );
                   }
-                  
+
                   return activeDashboardPools.map((p) => {
                     const total = p.status === "completed"
                       ? (p.items ?? []).filter((it: any) => it.is_purchased).reduce((s: number, i: any) => s + i.estimated_price, 0)
@@ -1750,7 +1773,7 @@ function Dashboard() {
                     const perPerson = (p.items ?? []).length
                       ? Math.round(p.delivery_fee / new Set((p.items ?? []).map((i: any) => i.added_by_name)).size)
                       : 0;
-                    
+
                     const rSummary = p.status === "completed" ? (() => {
                       const breakdown = p.split_breakdown ?? {};
                       let unpaidCount = 0;
@@ -1790,7 +1813,7 @@ function Dashboard() {
                               </span>
                             </div>
                             <p className="text-xs text-muted-foreground">Host: <span className="font-semibold text-foreground capitalize">{p.created_by_name || "—"}</span></p>
-                            
+
                             {rSummary && (
                               <div className="mt-3">
                                 {user && p.host_id === user.id ? (
@@ -1874,7 +1897,7 @@ function Dashboard() {
                     NETTED ACTIVE
                   </span>
                 </div>
-                
+
                 <div className="space-y-4">
                   {/* Nishant owes others (you_owe) */}
                   {nettedBalances.balances?.you_owe?.length > 0 && (
@@ -2127,19 +2150,19 @@ function Dashboard() {
                       </div>
                     </div>
                   )}
-                  
+
                   <div className="divide-y divide-border/60">
                     {collisions.map((c, idx) => {
                       const isNetflix = (c.service_name ?? c.name).toLowerCase().includes("netflix");
                       const isSpotify = (c.service_name ?? c.name).toLowerCase().includes("spotify");
                       const isYoutube = (c.service_name ?? c.name).toLowerCase().includes("youtube");
-                      
-                      const brandColorClass = isNetflix 
-                        ? "text-red-500 bg-red-500/10 border-red-500/20" 
-                        : isSpotify 
-                        ? "text-green-500 bg-green-500/10 border-green-500/20" 
-                        : isYoutube 
-                        ? "text-red-500 bg-red-500/10 border-red-500/20" 
+
+                      const brandColorClass = isNetflix
+                        ? "text-red-500 bg-red-500/10 border-red-500/20"
+                        : isSpotify
+                        ? "text-green-500 bg-green-500/10 border-green-500/20"
+                        : isYoutube
+                        ? "text-red-500 bg-red-500/10 border-red-500/20"
                         : "text-primary bg-primary/10 border-primary/20";
 
                       return (
@@ -2163,7 +2186,7 @@ function Dashboard() {
                               <span>{rupees(c.amount)}</span>
                             </p>
                           </div>
-                          
+
                           <div className="flex items-center justify-between text-xs text-zinc-500">
                             <div className="flex items-center gap-1.5 font-semibold">
                               <Calendar className="h-3.5 w-3.5" />
@@ -2202,7 +2225,9 @@ function Dashboard() {
                   <p className="py-8 text-center text-xs text-zinc-500 font-semibold uppercase tracking-wider">No transactions logged</p>
                 ) : (
                   <div className="divide-y divide-border">
-                    {recent.map((t, i) => (
+                    {recent.map((t, i) => {
+                      const trustLabel = transactionTrustLabel(t);
+                      return (
                       <div
                         key={t.id}
                         className="flex items-center justify-between p-3.5 hover:bg-surface-raised transition-colors duration-150"
@@ -2216,19 +2241,10 @@ function Dashboard() {
                             {t.category && (
                               <span className="text-[10px] md:text-xs font-black tracking-widest text-zinc-500 uppercase">{t.category}</span>
                             )}
-                            {t.source !== "manual" && (
-                              <>
-                                <span className="text-[10px] md:text-xs text-zinc-600 font-bold">•</span>
-                                <span className="text-[10px] md:text-xs font-black text-zinc-500 uppercase tracking-wider">{t.source.split("_")[1]}</span>
-                              </>
-                            )}
-                            {t.needs_verification && (
-                              <>
-                                <span className="text-[10px] md:text-xs text-zinc-600 font-bold">•</span>
-                                <span className="text-[9px] md:text-xs font-black text-warning bg-warning/10 border border-warning/20 px-1.5 py-0.5 rounded uppercase tracking-wider">
-                                  Verify Parser
-                                </span>
-                              </>
+                            {trustLabel && (
+                              <span className={`text-[9px] md:text-[10px] font-black uppercase tracking-wider border px-1.5 py-0.5 rounded ${transactionTrustClass(trustLabel)}`}>
+                                {trustLabel}
+                              </span>
                             )}
                             {!t.is_mapped && (
                               <button
@@ -2253,7 +2269,8 @@ function Dashboard() {
                           <p className="text-[10px] md:text-xs text-zinc-500 font-semibold mt-0.5">{relativeTime(t.created_at)}</p>
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
                 <div className="p-3">
@@ -2798,7 +2815,7 @@ function EditTxnForm({ txn, onClose }: { txn: Txn; onClose: () => void }) {
       <DialogHeader>
         <DialogTitle>Edit Transaction</DialogTitle>
       </DialogHeader>
-      
+
       <div className="space-y-4 py-4">
         <div className="space-y-1">
           <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Original Reference</label>

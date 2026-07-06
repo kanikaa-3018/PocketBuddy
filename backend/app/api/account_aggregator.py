@@ -73,7 +73,7 @@ def aa_runtime_state() -> dict:
             "uses_dummy_data": True,
             "can_start_sandbox": True,
             "can_receive_callbacks": bool(settings.AA_CALLBACK_SECRET),
-            "message": "Local AA sandbox is enabled. It uses dummy data only and does not verify live bank transactions.",
+            "message": "Local AA sandbox is enabled. It uses sample sandbox data only and does not verify live bank transactions.",
             "required_env": [],
         }
 
@@ -101,7 +101,7 @@ def ensure_local_sandbox_enabled() -> None:
     if aa_provider() != LOCAL_SANDBOX_PROVIDER:
         raise HTTPException(
             status_code=501,
-            detail="Only the local AA dummy-data sandbox lifecycle is available in this build.",
+            detail="Only the local AA sample-data sandbox lifecycle is available in this build.",
         )
 
 
@@ -283,7 +283,7 @@ async def start_sandbox_consent(req: AASandboxConsentReq, user_id: str = Depends
         consent_id=consent_id,
         event_type="consent_requested",
         status="pending",
-        message="AA sandbox consent request created. Sandbox uses dummy data only.",
+        message="AA sandbox consent request created. Sandbox uses sample data only.",
         metadata={"provider": "local_sandbox", "requested_range_days": req.requested_range_days},
     )
     return {
@@ -397,13 +397,13 @@ async def simulate_sandbox_consent(
             consent_id=consent_id,
             event_type="fi_fetch_completed",
             status="completed",
-            message="AA sandbox financial information fetched. Records are dummy sandbox data and were not inserted as live transactions.",
+            message="AA sandbox financial information fetched. Records are sample sandbox data and were not inserted as live transactions.",
             metadata={"record_count": len(records), "sandbox_dummy_data": True},
         )
         fresh = await db.data_consents.find_one({"_id": consent_id})
         return {
             "status": "completed",
-            "message": "Sandbox financial information fetched. Dummy records are stored separately from live transactions.",
+            "message": "Sandbox financial information fetched. Sample records are stored separately from live transactions.",
             "consent": map_doc(fresh),
             "snapshot": map_doc(snapshot),
         }

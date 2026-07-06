@@ -937,7 +937,7 @@ function AccountAggregatorSandboxCard({
               </Badge>
               {aaStatus?.uses_dummy_data && (
                 <Badge variant="secondary" className="text-[9px]">
-                  Dummy data only
+                  Sample sandbox data
                 </Badge>
               )}
             </div>
@@ -1012,7 +1012,7 @@ function AccountAggregatorSandboxCard({
                 Latest sandbox fetch
               </p>
               <Badge variant="outline" className="text-[9px] text-muted-foreground">
-                {latestSnapshot.record_count || latestSnapshot.records.length} dummy records
+                {latestSnapshot.record_count || latestSnapshot.records.length} sample records
               </Badge>
             </div>
             <div className="mt-2 space-y-1.5">
@@ -1084,7 +1084,7 @@ function AccountAggregatorSandboxCard({
               </Button>
             </div>
             <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-              These controls are local sandbox-only. They help demo rejected, expired, revoked, and failed-fetch states without touching real bank data.
+              These controls are local sandbox-only. They show rejected, expired, revoked, and failed-fetch states without touching real bank data.
             </p>
           </details>
         )}
