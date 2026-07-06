@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 os.environ["JWT_SECRET"] = "test-secret-for-privacy-contracts-minimum-32-bytes"
 os.environ.setdefault("MONGO_URI", "mongodb://localhost:27017")
 
-from app.api.account_aggregator import aa_runtime_state, build_sandbox_records
+from app.api.account_aggregator import aa_runtime_state, build_sandbox_accounts, build_sandbox_records
 from app.api.auth import create_session_token
 from app.api.webhook import (
     build_android_consent_id,
@@ -62,6 +62,18 @@ class PrivacyContractTests(unittest.TestCase):
         self.assertEqual(len(records), 3)
         self.assertTrue(all(record["transaction_reference"].startswith("AA-SBX-") for record in records))
         self.assertTrue(all(record["masked_account_ref"].startswith("XXXX") for record in records))
+
+    def test_local_aa_sandbox_supports_multiple_masked_accounts(self):
+        accounts = build_sandbox_accounts("sbi", "State Bank of India")
+        selected = accounts[:2]
+        records = build_sandbox_records(datetime.datetime(2026, 7, 7, 12, 0, 0), selected)
+
+        self.assertEqual(len(accounts), 3)
+        self.assertEqual(len(records), 6)
+        self.assertEqual(
+            {record["masked_account_ref"] for record in records},
+            {account["masked_account_ref"] for account in selected},
+        )
 
     def test_provider_sandbox_reports_missing_required_credentials(self):
         settings.AA_SANDBOX_ENABLED = True

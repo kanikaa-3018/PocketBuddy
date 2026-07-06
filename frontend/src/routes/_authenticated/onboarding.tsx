@@ -108,6 +108,7 @@ function Onboarding() {
           bank_code: payload.bankCode,
           bank_name: payload.bankName,
           bank_short_name: payload.bankShortName,
+          selected_accounts: payload.selectedAccounts,
         },
       });
       await updateProfile({

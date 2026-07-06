@@ -136,6 +136,14 @@ AA_INSTITUTION_DOMAINS = {
 }
 
 
+class AASandboxSelectedAccount(BaseModel):
+    account_ref: str = Field(max_length=80)
+    masked_account_ref: str = Field(max_length=24)
+    account_type: str = Field(default="Savings account", max_length=60)
+    fi_type: str = Field(default="DEPOSIT", max_length=30)
+    nickname: Optional[str] = Field(default=None, max_length=80)
+
+
 class AASandboxConsentReq(BaseModel):
     aa_handle: Optional[str] = Field(default=None, max_length=120)
     bank_code: Optional[str] = Field(default=None, max_length=60)
@@ -144,6 +152,7 @@ class AASandboxConsentReq(BaseModel):
     purpose: str = Field(default=DEFAULT_AA_PURPOSE, max_length=180)
     requested_range_days: int = Field(default=30, ge=1, le=365)
     fi_types: list[str] = Field(default_factory=lambda: ["DEPOSIT"])
+    selected_accounts: list[AASandboxSelectedAccount] = Field(default_factory=list)
 
 
 class AASandboxSimulationReq(BaseModel):
@@ -302,6 +311,57 @@ def build_consent_id(user_id: str) -> str:
     return f"aa:{user_id}:{uuid.uuid4()}"
 
 
+def sandbox_account_suffix(seed: str, index: int) -> str:
+    digest = uuid.uuid5(uuid.NAMESPACE_DNS, f"pocketbuddy-aa:{seed}:{index}").int
+    return f"{1000 + digest % 9000}"
+
+
+def build_sandbox_accounts(bank_code: Optional[str], bank_name: Optional[str] = None) -> list[dict]:
+    seed = (bank_code or bank_name or "bank").strip().lower() or "bank"
+    bank_prefix = "".join(ch for ch in seed.upper() if ch.isalnum())[:10] or "BANK"
+    templates = [
+        ("primary", "Primary savings", "Savings account", "DEPOSIT"),
+        ("spending", "Campus spending", "Savings account", "DEPOSIT"),
+        ("deposit", "Term deposit", "Term deposit", "DEPOSIT"),
+    ]
+    accounts = []
+    for index, (kind, nickname, account_type, fi_type) in enumerate(templates, start=1):
+        suffix = sandbox_account_suffix(seed, index)
+        accounts.append(
+            {
+                "account_ref": f"AA-SBX-{bank_prefix}-{kind.upper()}-{suffix}",
+                "masked_account_ref": f"XXXX{suffix}",
+                "account_type": account_type,
+                "fi_type": fi_type,
+                "nickname": nickname,
+            }
+        )
+    return accounts
+
+
+def resolve_selected_sandbox_accounts(req: AASandboxConsentReq) -> list[dict]:
+    discovered = build_sandbox_accounts(req.bank_code, req.bank_name)
+    discovered_by_ref = {account["account_ref"]: account for account in discovered}
+    requested_refs = [account.account_ref for account in req.selected_accounts[:8]]
+
+    if not requested_refs:
+        return discovered[:1]
+
+    selected = []
+    seen = set()
+    for account_ref in requested_refs:
+        if account_ref in seen:
+            continue
+        account = discovered_by_ref.get(account_ref)
+        if account:
+            selected.append(account)
+            seen.add(account_ref)
+
+    if not selected:
+        raise HTTPException(status_code=400, detail="Select at least one discovered bank account.")
+    return selected
+
+
 async def find_user_aa_consent(db, user_id: str, consent_id: str) -> dict:
     consent = await db.data_consents.find_one(
         {"_id": consent_id, "user_id": user_id, "source": AA_SOURCE}
@@ -311,34 +371,31 @@ async def find_user_aa_consent(db, user_id: str, consent_id: str) -> dict:
     return consent
 
 
-def build_sandbox_records(now: datetime.datetime) -> list[dict]:
+def build_sandbox_records(now: datetime.datetime, accounts: Optional[list[dict]] = None) -> list[dict]:
+    selected_accounts = accounts or build_sandbox_accounts(None)[:1]
     base_ref = uuid.uuid4().hex[:8].upper()
-    return [
-        {
-            "posted_at": (now - datetime.timedelta(days=3)).isoformat() + "Z",
-            "direction": "DEBIT",
-            "amount_paise": 7200,
-            "merchant": "Campus Canteen",
-            "transaction_reference": f"AA-SBX-{base_ref}-001",
-            "masked_account_ref": "XXXX2042",
-        },
-        {
-            "posted_at": (now - datetime.timedelta(days=2)).isoformat() + "Z",
-            "direction": "DEBIT",
-            "amount_paise": 12500,
-            "merchant": "Metro Card Recharge",
-            "transaction_reference": f"AA-SBX-{base_ref}-002",
-            "masked_account_ref": "XXXX2042",
-        },
-        {
-            "posted_at": (now - datetime.timedelta(days=1)).isoformat() + "Z",
-            "direction": "CREDIT",
-            "amount_paise": 250000,
-            "merchant": "Allowance Credit",
-            "transaction_reference": f"AA-SBX-{base_ref}-003",
-            "masked_account_ref": "XXXX2042",
-        },
+    templates = [
+        [("DEBIT", 7200, "Campus Canteen"), ("DEBIT", 12500, "Metro Card Recharge"), ("CREDIT", 250000, "Allowance Credit")],
+        [("DEBIT", 4200, "Library Print Counter"), ("DEBIT", 9800, "Hostel Mess Top-up"), ("DEBIT", 6000, "UPI Transfer")],
+        [("CREDIT", 6400, "Deposit Interest"), ("DEBIT", 50000, "Term Deposit Sweep"), ("CREDIT", 50000, "Term Deposit Credit")],
     ]
+    records = []
+    for account_index, account in enumerate(selected_accounts[:8]):
+        account_templates = templates[account_index % len(templates)]
+        for txn_index, (direction, amount_paise, merchant) in enumerate(account_templates, start=1):
+            records.append(
+                {
+                    "posted_at": (now - datetime.timedelta(days=(len(account_templates) - txn_index + 1))).isoformat() + "Z",
+                    "direction": direction,
+                    "amount_paise": amount_paise,
+                    "merchant": merchant,
+                    "transaction_reference": f"AA-SBX-{base_ref}-{account_index + 1:02d}{txn_index:02d}",
+                    "masked_account_ref": account.get("masked_account_ref") or "XXXX0000",
+                    "account_ref": account.get("account_ref"),
+                    "account_type": account.get("account_type") or "Deposit account",
+                }
+            )
+    return records
 
 
 def map_aa_status(status: Optional[str]) -> str:
@@ -413,6 +470,22 @@ async def get_aa_institutions(q: str = Query(default="", max_length=80), user_id
     }
 
 
+@router.get("/sandbox/accounts")
+async def discover_sandbox_accounts(
+    bank_code: str = Query(max_length=60),
+    bank_name: Optional[str] = Query(default=None, max_length=120),
+    user_id: str = Depends(get_current_user),
+):
+    ensure_local_sandbox_enabled()
+    return {
+        "status": "discovered",
+        "bank_code": bank_code,
+        "bank_name": bank_name,
+        "accounts": build_sandbox_accounts(bank_code, bank_name),
+        "message": "Masked accounts discovered for consent selection.",
+    }
+
+
 @router.post("/sandbox/consents")
 async def start_sandbox_consent(req: AASandboxConsentReq, user_id: str = Depends(get_current_user)):
     ensure_local_sandbox_enabled()
@@ -444,6 +517,7 @@ async def start_sandbox_consent(req: AASandboxConsentReq, user_id: str = Depends
 
     consent_id = build_consent_id(user_id)
     consent_handle = str(uuid.uuid4())
+    selected_accounts = resolve_selected_sandbox_accounts(req)
     consent = {
         "_id": consent_id,
         "user_id": user_id,
@@ -461,6 +535,9 @@ async def start_sandbox_consent(req: AASandboxConsentReq, user_id: str = Depends
         "data_categories": AA_DATA_CATEGORIES,
         "fi_types": req.fi_types or ["DEPOSIT"],
         "requested_range_days": req.requested_range_days,
+        "selected_accounts": selected_accounts,
+        "account_count": len(selected_accounts),
+        "masked_account_refs": [account["masked_account_ref"] for account in selected_accounts],
         "aa_handle": req.aa_handle,
         "uses_sandbox_data": True,
         "raw_text_policy": "not_applicable_encrypted_fi",
@@ -483,6 +560,8 @@ async def start_sandbox_consent(req: AASandboxConsentReq, user_id: str = Depends
             "bank_code": req.bank_code,
             "bank_name": req.bank_name,
             "bank_short_name": req.bank_short_name,
+            "account_count": len(selected_accounts),
+            "masked_account_refs": [account["masked_account_ref"] for account in selected_accounts],
         },
     )
     return {
@@ -569,7 +648,11 @@ async def simulate_sandbox_consent(
     else:
         if current_status != "active":
             raise HTTPException(status_code=409, detail="Financial information fetch requires active consent")
-        records = build_sandbox_records(now)
+        selected_accounts = consent.get("selected_accounts") or build_sandbox_accounts(
+            consent.get("financial_institution_code"),
+            consent.get("financial_institution_name"),
+        )[:1]
+        records = build_sandbox_records(now, selected_accounts)
         snapshot = {
             "_id": str(uuid.uuid4()),
             "user_id": user_id,
@@ -577,6 +660,8 @@ async def simulate_sandbox_consent(
             "source": AA_SOURCE,
             "provider": "local_sandbox",
             "sandbox_data": True,
+            "accounts": selected_accounts,
+            "account_count": len(selected_accounts),
             "record_count": len(records),
             "records": records,
             "created_at": now,
@@ -587,6 +672,7 @@ async def simulate_sandbox_consent(
             "last_fetch_at": now,
             "last_sync_at": now,
             "fetched_records_count": len(records),
+            "account_count": len(selected_accounts),
             "updated_at": now,
         }
         await db.data_consents.update_one({"_id": consent_id}, {"$set": update})

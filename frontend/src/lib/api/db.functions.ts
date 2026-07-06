@@ -195,6 +195,18 @@ export async function getAccountAggregatorInstitutions(q = "") {
   return apiRequest(`/api/account-aggregator/institutions${qs}`);
 }
 
+export async function discoverAccountAggregatorSandboxAccounts({
+  bankCode,
+  bankName,
+}: {
+  bankCode: string;
+  bankName?: string;
+}) {
+  const params = new URLSearchParams({ bank_code: bankCode });
+  if (bankName) params.set("bank_name", bankName);
+  return apiRequest(`/api/account-aggregator/sandbox/accounts?${params.toString()}`);
+}
+
 export async function startAccountAggregatorSandboxConsent({ data }: { data?: any } = {}) {
   return apiRequest("/api/account-aggregator/sandbox/consents", {
     method: "POST",

@@ -20,7 +20,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { getAccountAggregatorInstitutions } from "@/lib/api/db.functions";
+import {
+  discoverAccountAggregatorSandboxAccounts,
+  getAccountAggregatorInstitutions,
+} from "@/lib/api/db.functions";
 
 const RANGE_OPTIONS = [
   { value: 30, label: "30 days", hint: "Recent spending" },
@@ -34,6 +37,15 @@ export type BankConsentPayload = {
   bankShortName?: string;
   requestedRangeDays: number;
   aaHandle?: string;
+  selectedAccounts: BankConsentAccount[];
+};
+
+export type BankConsentAccount = {
+  account_ref: string;
+  masked_account_ref: string;
+  account_type: string;
+  fi_type: string;
+  nickname?: string;
 };
 
 type AAInstitution = {
@@ -55,6 +67,14 @@ type AAInstitutionResponse = {
   institutions?: AAInstitution[];
 };
 
+type AAAccountDiscoveryResponse = {
+  status?: string;
+  bank_code?: string;
+  bank_name?: string;
+  message?: string;
+  accounts?: BankConsentAccount[];
+};
+
 type BankConsentDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -68,7 +88,7 @@ type ConsentStep = "bank" | "review" | "confirm";
 
 const CONSENT_STEPS: Array<{ key: ConsentStep; label: string }> = [
   { key: "bank", label: "Institution" },
-  { key: "review", label: "Consent" },
+  { key: "review", label: "Accounts" },
   { key: "confirm", label: "Confirm" },
 ];
 
@@ -85,6 +105,7 @@ export function BankConsentDialog({
   const [aaHandle, setAaHandle] = useState("");
   const [search, setSearch] = useState("");
   const [step, setStep] = useState<ConsentStep>("bank");
+  const [selectedAccountRefs, setSelectedAccountRefs] = useState<string[]>([]);
   const hasExistingConsent = Boolean(existingBankName && ["active", "pending"].includes(existingConsentStatus || ""));
 
   const { data: institutionData, isLoading, isError } = useQuery<AAInstitutionResponse>({
@@ -110,12 +131,36 @@ export function BankConsentDialog({
     filteredInstitutions[0] ??
     institutions[0];
 
+  const { data: accountData, isLoading: accountsLoading, isError: accountsError } = useQuery<AAAccountDiscoveryResponse>({
+    queryKey: ["aa-sandbox-accounts", selectedBank?.id, selectedBank?.name],
+    enabled: open && !hasExistingConsent && Boolean(selectedBank?.id),
+    queryFn: () =>
+      discoverAccountAggregatorSandboxAccounts({
+        bankCode: selectedBank!.id,
+        bankName: selectedBank!.name,
+      }),
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const discoveredAccounts = accountData?.accounts ?? [];
+  const selectedAccounts = discoveredAccounts.filter((account) => selectedAccountRefs.includes(account.account_ref));
+
   useEffect(() => {
     if (open) {
       setStep("bank");
       setSearch("");
     }
   }, [open]);
+
+  useEffect(() => {
+    setSelectedAccountRefs([]);
+  }, [selectedBank?.id]);
+
+  useEffect(() => {
+    if (accountData?.bank_code === selectedBank?.id && accountData.accounts?.length) {
+      setSelectedAccountRefs([accountData.accounts[0].account_ref]);
+    }
+  }, [accountData?.bank_code, accountData?.accounts, selectedBank?.id]);
 
   function submitConsent() {
     if (!selectedBank) return;
@@ -125,6 +170,7 @@ export function BankConsentDialog({
       bankShortName: selectedBank.short_name,
       requestedRangeDays,
       aaHandle: aaHandle.trim() || undefined,
+      selectedAccounts,
     });
   }
 
@@ -136,6 +182,7 @@ export function BankConsentDialog({
       return;
     }
     if (step === "review") {
+      if (!selectedAccounts.length) return;
       setStep("confirm");
       return;
     }
@@ -149,6 +196,16 @@ export function BankConsentDialog({
 
   const selectedBankLabel = selectedBank?.name || "Select a bank";
   const registryCount = institutionData?.total_count || institutions.length || 0;
+  const canContinue = Boolean(selectedBank) && (step !== "review" || selectedAccounts.length > 0);
+
+  function toggleAccount(accountRef: string) {
+    setSelectedAccountRefs((current) => {
+      if (current.includes(accountRef)) {
+        return current.filter((ref) => ref !== accountRef);
+      }
+      return [...current, accountRef];
+    });
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -251,6 +308,14 @@ export function BankConsentDialog({
                 <section className="mt-4 space-y-4">
                   <SelectedInstitutionCard institution={selectedBank} />
 
+                  <AccountSelectionCard
+                    accounts={discoveredAccounts}
+                    selectedAccountRefs={selectedAccountRefs}
+                    loading={accountsLoading}
+                    error={accountsError}
+                    onToggle={toggleAccount}
+                  />
+
                   <div className="rounded-xl border border-border bg-surface p-4">
                     <div className="flex items-start gap-3">
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-surface-raised text-primary">
@@ -267,6 +332,7 @@ export function BankConsentDialog({
                     <div className="mt-4 divide-y divide-border rounded-xl border border-border bg-background">
                       <ConsentFact label="Requested by" value="PocketBuddy" detail="Used for budgeting, runway and transaction verification." />
                       <ConsentFact label="Data type" value="Deposit account transactions" detail="Read-only financial information; no credentials are collected." />
+                      <ConsentFact label="Accounts" value={`${selectedAccounts.length || 0} selected`} detail="Only selected masked accounts are included in this consent." />
                       <ConsentFact label="Control" value="Approve, reject or revoke" detail="No bank data is fetched until consent is approved." />
                     </div>
                   </div>
@@ -305,6 +371,11 @@ export function BankConsentDialog({
                     <h3 className="text-sm font-semibold text-foreground">Confirm request</h3>
                     <div className="mt-3 divide-y divide-border rounded-xl border border-border bg-background">
                       <ConsentFact label="Institution" value={selectedBankLabel} detail="The bank selected for this consent request." />
+                      <ConsentFact
+                        label="Accounts"
+                        value={selectedAccounts.map((account) => account.masked_account_ref).join(", ") || "No account selected"}
+                        detail="If a bank has multiple accounts, PocketBuddy uses only the accounts selected here."
+                      />
                       <ConsentFact label="Range" value={`${requestedRangeDays} days`} detail="Only this transaction history range is requested." />
                       <ConsentFact label="Access" value="Read-only and revocable" detail="PocketBuddy cannot move money or access credentials." />
                     </div>
@@ -362,7 +433,7 @@ export function BankConsentDialog({
                   Back
                 </Button>
               )}
-              <Button className="h-10 text-sm font-semibold" disabled={busy || !selectedBank} onClick={goNext}>
+              <Button className="h-10 text-sm font-semibold" disabled={busy || !canContinue} onClick={goNext}>
                 {busy ? "Starting consent..." : step === "confirm" ? "Continue" : "Next"}
               </Button>
             </>
@@ -459,9 +530,9 @@ function InstitutionRow({
         <span className="block truncate text-sm font-semibold text-foreground">{institution.name}</span>
         <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
           <span>{institution.type || "Bank"}</span>
-          <span aria-hidden="true">·</span>
+          <span aria-hidden="true">|</span>
           <span>{institution.regulator || "RBI"}</span>
-          <span aria-hidden="true">·</span>
+          <span aria-hidden="true">|</span>
           <span>{institution.status || "Available"}</span>
         </span>
       </span>
@@ -487,11 +558,96 @@ function SelectedInstitutionCard({ institution }: { institution?: AAInstitution 
         <div className="min-w-0">
           <p className="text-sm font-semibold text-foreground">{institution.name}</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {institution.type || "Bank"} · {institution.regulator || "RBI"} · {institution.status || "Available"}
+            {institution.type || "Bank"} | {institution.regulator || "RBI"} | {institution.status || "Available"}
           </p>
         </div>
       </div>
     </div>
+  );
+}
+
+function AccountSelectionCard({
+  accounts,
+  selectedAccountRefs,
+  loading,
+  error,
+  onToggle,
+}: {
+  accounts: BankConsentAccount[];
+  selectedAccountRefs: string[];
+  loading: boolean;
+  error: boolean;
+  onToggle: (accountRef: string) => void;
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-surface p-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">Select accounts to share</h3>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            Banks can return more than one masked account. Select only the accounts needed for PocketBuddy insights.
+          </p>
+        </div>
+        <Badge variant="outline" className="w-fit border-border bg-background text-xs text-muted-foreground">
+          {selectedAccountRefs.length} selected
+        </Badge>
+      </div>
+
+      <div className="mt-3 space-y-2">
+        {loading ? (
+          <RegistryState icon={<Clock3 className="h-4 w-4" />} title="Discovering accounts" body="Fetching masked accounts for the selected institution." />
+        ) : error ? (
+          <RegistryState icon={<AlertCircle className="h-4 w-4" />} title="Account discovery unavailable" body="Try again or choose another institution." />
+        ) : accounts.length === 0 ? (
+          <RegistryState icon={<AlertCircle className="h-4 w-4" />} title="No accounts discovered" body="No consent will be created until at least one account is selected." />
+        ) : (
+          accounts.map((account) => (
+            <DiscoveredAccountRow
+              key={account.account_ref}
+              account={account}
+              selected={selectedAccountRefs.includes(account.account_ref)}
+              onToggle={() => onToggle(account.account_ref)}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DiscoveredAccountRow({
+  account,
+  selected,
+  onToggle,
+}: {
+  account: BankConsentAccount;
+  selected: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className={`flex w-full items-start gap-3 rounded-xl border p-3 text-left transition-colors ${
+        selected
+          ? "border-primary/45 bg-primary/10"
+          : "border-border bg-background hover:border-primary/25"
+      }`}
+    >
+      <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${
+        selected ? "border-primary bg-primary text-primary-foreground" : "border-border bg-surface"
+      }`}>
+        {selected ? <CheckCircle2 className="h-3.5 w-3.5" /> : null}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-foreground">
+          {account.nickname || account.account_type || "Deposit account"}
+        </span>
+        <span className="mt-0.5 block text-xs text-muted-foreground">
+          {account.masked_account_ref} | {account.account_type || "Deposit account"} | {account.fi_type || "DEPOSIT"}
+        </span>
+      </span>
+    </button>
   );
 }
 
@@ -506,13 +662,13 @@ function InstitutionMark({ institution, size = "md" }: { institution: AAInstitut
 
 function institutionEmoji(institution: AAInstitution) {
   const text = `${institution.name} ${institution.type || ""}`.toLowerCase();
-  if (text.includes("post")) return "📮";
-  if (text.includes("payments")) return "💳";
-  if (text.includes("small finance")) return "🌾";
-  if (text.includes("co-operative") || text.includes("cooperative") || text.includes("coop")) return "🤝";
-  if (text.includes("foreign") || text.includes("standard chartered") || text.includes("hsbc") || text.includes("dbs") || text.includes("deutsche")) return "🌐";
-  if (text.includes("bank")) return "🏦";
-  return "🏛️";
+  if (text.includes("post")) return "\uD83D\uDCEE";
+  if (text.includes("payments")) return "\uD83D\uDCB3";
+  if (text.includes("small finance")) return "\uD83C\uDF3E";
+  if (text.includes("co-operative") || text.includes("cooperative") || text.includes("coop")) return "\uD83E\uDD1D";
+  if (text.includes("foreign") || text.includes("standard chartered") || text.includes("hsbc") || text.includes("dbs") || text.includes("deutsche")) return "\uD83C\uDF10";
+  if (text.includes("bank")) return "\uD83C\uDFE6";
+  return "\uD83C\uDFDB\uFE0F";
 }
 
 function RegistryState({ icon, title, body }: { icon: ReactNode; title: string; body: string }) {

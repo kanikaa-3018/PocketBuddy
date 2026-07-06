@@ -73,6 +73,15 @@ type DataConsent = {
   trust_framework?: string;
   purpose?: string;
   data_categories?: string[];
+  selected_accounts?: Array<{
+    account_ref?: string;
+    masked_account_ref?: string;
+    account_type?: string;
+    fi_type?: string;
+    nickname?: string;
+  }>;
+  account_count?: number;
+  masked_account_refs?: string[];
   device_name?: string;
   device_id?: string;
   raw_text_policy?: string;
@@ -110,8 +119,17 @@ type AAEvent = {
 
 type AASnapshot = {
   id?: string;
+  consent_id?: string;
   record_count?: number;
   sandbox_data?: boolean;
+  accounts?: Array<{
+    account_ref?: string;
+    masked_account_ref?: string;
+    account_type?: string;
+    fi_type?: string;
+    nickname?: string;
+  }>;
+  account_count?: number;
   created_at?: string;
   records?: Array<{
     direction?: string;
@@ -119,6 +137,8 @@ type AASnapshot = {
     merchant?: string;
     posted_at?: string;
     masked_account_ref?: string;
+    account_ref?: string;
+    account_type?: string;
     transaction_reference?: string;
   }>;
 };
@@ -308,6 +328,7 @@ function PrivacyPage() {
           bank_code: payload?.bankCode,
           bank_name: payload?.bankName,
           bank_short_name: payload?.bankShortName,
+          selected_accounts: payload?.selectedAccounts ?? [],
         },
       });
       await refreshAA();
@@ -1084,14 +1105,25 @@ function AccountAggregatorSandboxCard({
   const canFetch = canUseLocalSandbox && consentStatus === "active";
   const disabled = Boolean(busyAction) || runtimeStatus === "loading";
   const hasActiveConsent = consentStatus === "active";
-  const latestSnapshot = hasActiveConsent ? snapshots[0] : undefined;
+  const consentSnapshots = consent?.id ? snapshots.filter((snapshot) => snapshot.consent_id === consent.id) : [];
+  const latestSnapshot = hasActiveConsent ? consentSnapshots[0] : undefined;
   const records = hasActiveConsent ? latestSnapshot?.records ?? [] : [];
   const visibleRecords = showAllRecords ? records : records.slice(0, 4);
   const visibleEvents = showAllActivity ? events : events.slice(0, 4);
   const fetchedRecordCount = hasActiveConsent ? latestSnapshot?.record_count || records.length || consent?.fetched_records_count || 0 : 0;
   const institutionName = consent?.financial_institution_name || consent?.provider_label || "No bank connected";
   const institutionShortName = consent?.financial_institution_short_name || consent?.financial_institution_code || "AA";
-  const maskedAccountRef = records.find((record) => record.masked_account_ref)?.masked_account_ref || "Masked account";
+  const selectedAccounts = consent?.selected_accounts?.length ? consent.selected_accounts : latestSnapshot?.accounts ?? [];
+  const maskedAccountRefs =
+    selectedAccounts
+      .map((account) => account.masked_account_ref)
+      .filter(Boolean)
+      .join(", ") ||
+    consent?.masked_account_refs?.join(", ") ||
+    records.find((record) => record.masked_account_ref)?.masked_account_ref ||
+    "Masked account";
+  const accountCount = selectedAccounts.length || consent?.account_count || latestSnapshot?.account_count || 0;
+  const accountSummary = accountCount > 1 ? `${accountCount} selected accounts` : maskedAccountRefs;
   const scope = consent?.data_categories?.length
     ? consent.data_categories.map((category) => category.replace(/_/g, " ")).join(", ")
     : "Deposit account transactions";
@@ -1133,7 +1165,7 @@ function AccountAggregatorSandboxCard({
                 <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary">Connected institution</p>
                 <p className="mt-2 truncate text-[18px] font-semibold text-foreground">{institutionName}</p>
                 <p className="mt-1 text-[12px] text-muted-foreground">
-                  {consent ? maskedAccountRef : "Connect a bank to enable verified tracking"}
+                  {consent ? accountSummary : "Connect a bank to enable verified tracking"}
                 </p>
               </div>
               <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-primary/20 bg-background/70 text-[12px] font-bold text-primary">
@@ -1150,6 +1182,7 @@ function AccountAggregatorSandboxCard({
 
           <div className="grid gap-2">
             <CompactConsentFact label="Purpose" value={consent?.purpose || "Verified transaction tracking"} />
+            <CompactConsentFact label="Accounts" value={consent ? maskedAccountRefs : "No account selected"} />
             <CompactConsentFact label="Scope" value={scope} />
             <CompactConsentFact label="Last activity" value={lastActivity ? relativeTime(lastActivity) : "No activity yet"} />
           </div>
