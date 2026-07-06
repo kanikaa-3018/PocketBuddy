@@ -110,12 +110,12 @@ function SidebarBody({ onNavigate, isMobile = false }: { onNavigate?: () => void
             {/* Floating coin */}
             <circle cx="50" cy="52" r="14" fill="url(#coinGradAppShell)" stroke="#FF6B00" strokeWidth="1.5" filter="url(#coinShadowAppShell)" />
             
-            {/* Standard Rupee symbol inside coin */}
-            <path d="M44 47H56" stroke="#0F1219" strokeWidth="1.8" strokeLinecap="round" />
-            <path d="M44 50H53" stroke="#0F1219" strokeWidth="1.8" strokeLinecap="round" />
-            <path d="M49 47V53" stroke="#0F1219" strokeWidth="1.8" strokeLinecap="round" />
-            <path d="M49 47A 3 3 0 0 1 49 53" stroke="#0F1219" strokeWidth="1.8" strokeLinecap="round" />
-            <path d="M49 53L54 59" stroke="#0F1219" strokeWidth="1.8" strokeLinecap="round" />
+            {/* Mathematically perfect Rupee symbol inside coin */}
+            <path d="M43 45H57" stroke="#0F1219" strokeWidth="1.8" strokeLinecap="round" />
+            <path d="M43 51H53" stroke="#0F1219" strokeWidth="1.8" strokeLinecap="round" />
+            <path d="M48 45V51" stroke="#0F1219" strokeWidth="1.8" strokeLinecap="round" />
+            <path d="M48 45A 3 3 0 0 1 48 51" stroke="#0F1219" strokeWidth="1.8" strokeLinecap="round" />
+            <path d="M48 51L54 58" stroke="#0F1219" strokeWidth="1.8" strokeLinecap="round" />
           </svg>
           {!collapsed && (
             <div className="min-w-0">
