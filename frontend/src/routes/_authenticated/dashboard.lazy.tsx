@@ -1339,20 +1339,20 @@ function Dashboard() {
                   </p>
 
                   <div className="border-t border-border/40 pt-3 mt-1 mb-3">
-                    <p className="text-[10px] font-bold tracking-widest text-zinc-500 uppercase mb-2 font-mono">Contributing Signals</p>
+                    <p className="text-xs font-bold tracking-widest text-zinc-500 uppercase mb-2.5 font-mono">Contributing Signals</p>
                     
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="flex flex-wrap gap-2">
                       {wellness.signals?.map((sig: any) => (
-                        <div key={sig.key} className="flex items-center gap-1.5 px-2 py-0.5 rounded-md border bg-surface-raised/20 text-[10px] font-medium" style={{
+                        <div key={sig.key} className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-surface-raised/20 text-xs font-medium" style={{
                           borderColor: sig.severity === "stressed" 
-                            ? "rgba(239,68,68,0.15)" 
+                            ? "rgba(239,68,68,0.25)" 
                             : sig.severity === "watch" 
-                              ? "rgba(245,158,11,0.15)" 
+                              ? "rgba(245,158,11,0.25)" 
                               : "var(--border)"
                         }} title={sig.detail}>
-                          <span className="text-zinc-500">{sig.label}:</span>
-                          <span className="font-semibold text-foreground">{sig.value}</span>
-                          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{
+                          <span className="text-zinc-400">{sig.label}:</span>
+                          <span className="font-bold text-foreground">{sig.value}</span>
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{
                             background: sig.severity === "stressed" 
                               ? "var(--pb-red)" 
                               : sig.severity === "watch" 
