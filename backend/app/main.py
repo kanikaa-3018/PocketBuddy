@@ -4,6 +4,7 @@ import uvicorn
 from app.core.config import settings
 
 from app.api import (
+    account_aggregator,
     auth,
     campus_food,
     catalog,
@@ -38,6 +39,7 @@ app.include_router(subscriptions.router, prefix="/api/subscriptions", tags=["sub
 app.include_router(pools.router, prefix="/api/cart-pools", tags=["pools"])
 app.include_router(checkins.router, prefix="/api/checkins", tags=["checkins"])
 app.include_router(companion.router, prefix="/api/companion", tags=["companion"])
+app.include_router(account_aggregator.router, prefix="/api/account-aggregator", tags=["account-aggregator"])
 app.include_router(rag.router, prefix="/api/rag", tags=["rag"])
 app.include_router(campus_food.router, prefix="/api/campus-food", tags=["campus-food"])
 app.include_router(seed.router, prefix="/api/seed", tags=["seed"])

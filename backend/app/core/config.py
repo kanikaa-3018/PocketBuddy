@@ -31,4 +31,14 @@ class Settings(BaseSettings):
 
     # Frontend base URL (change to deployed URL in production)
     FRONTEND_BASE_URL: str = "http://localhost:5173"
+
+    # Account Aggregator sandbox integration. Disabled by default so the app
+    # never pretends to verify live bank data without explicit configuration.
+    AA_SANDBOX_ENABLED: bool = False
+    AA_SANDBOX_PROVIDER: str = "local"
+    AA_SANDBOX_BASE_URL: str = ""
+    AA_CLIENT_ID: str = ""
+    AA_CLIENT_SECRET: str = ""
+    AA_FIU_ID: str = ""
+    AA_CALLBACK_SECRET: str = ""
 settings = Settings()

@@ -31,6 +31,9 @@ import {
   getTransactions,
   getCompanionSyncLogs,
   getDataConsents,
+  getAccountAggregatorStatus,
+  startAccountAggregatorSandboxConsent,
+  simulateAccountAggregatorSandbox,
   clearCompanionLogs,
   deleteAccountData,
   confirmTransaction,
@@ -60,11 +63,17 @@ type DataConsent = {
   id?: string;
   source?: string;
   status?: "active" | "paused" | "revoked" | string;
+  provider?: string;
+  provider_label?: string;
   purpose?: string;
   data_categories?: string[];
   device_name?: string;
   device_id?: string;
   raw_text_policy?: string;
+  uses_dummy_data?: boolean;
+  fetch_status?: string;
+  fetched_records_count?: number;
+  last_fetch_at?: string;
   granted_at?: string;
   updated_at?: string;
   last_sync_at?: string;
@@ -83,6 +92,45 @@ type SyncLog = {
   created_at?: string;
 };
 
+type AAEvent = {
+  id?: string;
+  event_type?: string;
+  status?: string;
+  message?: string;
+  created_at?: string;
+  consent_id?: string;
+  metadata?: Record<string, unknown>;
+};
+
+type AASnapshot = {
+  id?: string;
+  record_count?: number;
+  sandbox_dummy_data?: boolean;
+  created_at?: string;
+  records?: Array<{
+    direction?: string;
+    amount_paise?: number;
+    merchant?: string;
+    posted_at?: string;
+    masked_account_ref?: string;
+    transaction_reference?: string;
+  }>;
+};
+
+type AAStatus = {
+  status?: string;
+  provider?: string;
+  mode?: string;
+  uses_dummy_data?: boolean;
+  can_start_sandbox?: boolean;
+  can_receive_callbacks?: boolean;
+  message?: string;
+  required_env?: string[];
+  consents?: DataConsent[];
+  events?: AAEvent[];
+  snapshots?: AASnapshot[];
+};
+
 function PrivacyPage() {
   const { user, logout } = useAuth();
   const nav = useNavigate();
@@ -97,6 +145,7 @@ function PrivacyPage() {
   const [clearingLogs, setClearingLogs] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [savingSync, setSavingSync] = useState(false);
+  const [aaBusyAction, setAaBusyAction] = useState<string | null>(null);
 
   const { data: profile, refetch: refetchProfile } = useQuery({
     queryKey: ["profile", user?.id],
@@ -120,6 +169,12 @@ function PrivacyPage() {
     queryKey: ["sync-log", user?.id],
     enabled: !!user,
     queryFn: getCompanionSyncLogs,
+  });
+
+  const { data: aaStatus, refetch: refetchAAStatus } = useQuery<AAStatus>({
+    queryKey: ["aa-status", user?.id],
+    enabled: !!user,
+    queryFn: getAccountAggregatorStatus,
   });
 
   const txns: any[] = Array.isArray(allTxns) ? allTxns : [];
@@ -160,6 +215,14 @@ function PrivacyPage() {
   const latestParserLabel =
     latestSyncLog?.parser_version ||
     (latestSyncLog?.data_origin === "android_on_device" ? "android-v2" : "Not observed yet");
+  const aaConsents = aaStatus?.consents ?? dataConsents.filter((c) => c.source === "account_aggregator");
+  const currentAAConsent =
+    aaConsents.find((c) => c.status === "active") ??
+    aaConsents.find((c) => c.status === "pending") ??
+    aaConsents[0];
+  const latestAAEvent = aaStatus?.events?.[0];
+  const latestAASnapshot = aaStatus?.snapshots?.[0];
+  const aaTrustStatus = humanAAStatus(aaStatus, currentAAConsent);
 
   async function toggleSync() {
     setSavingSync(true);
@@ -211,6 +274,56 @@ function PrivacyPage() {
       toast.success("Companion device unpaired.");
     } catch {
       toast.error("Failed to unpair device.");
+    }
+  }
+
+  async function refreshAA() {
+    const previousBusyAction = aaBusyAction;
+    if (!previousBusyAction) setAaBusyAction("refresh");
+    try {
+      await refetchAAStatus();
+      qc.invalidateQueries({ queryKey: ["data-consents"] });
+    } finally {
+      if (!previousBusyAction) setAaBusyAction(null);
+    }
+  }
+
+  async function handleStartAAConsent() {
+    setAaBusyAction("start");
+    try {
+      const result = await startAccountAggregatorSandboxConsent({
+        data: {
+          purpose: "Verify bank transactions for PocketBuddy insights",
+          requested_range_days: 30,
+          fi_types: ["DEPOSIT"],
+        },
+      });
+      await refreshAA();
+      toast.success(result?.message || "AA sandbox consent started.");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to start AA sandbox consent.");
+    } finally {
+      setAaBusyAction(null);
+    }
+  }
+
+  async function handleAASandboxAction(action: "approve" | "reject" | "revoke" | "expire" | "fetch_success" | "fetch_failed") {
+    if (!currentAAConsent?.id) {
+      toast.error("No AA sandbox consent selected.");
+      return;
+    }
+    setAaBusyAction(action);
+    try {
+      const result = await simulateAccountAggregatorSandbox({
+        consentId: currentAAConsent.id,
+        data: { action },
+      });
+      await refreshAA();
+      toast.success(result?.message || "AA sandbox status updated.");
+    } catch (err: any) {
+      toast.error(err.message || "AA sandbox action failed.");
+    } finally {
+      setAaBusyAction(null);
     }
   }
 
@@ -382,8 +495,8 @@ function PrivacyPage() {
                     />
                     <SourceRow
                       label="Account Aggregator"
-                      status="Not connected"
-                      detail="No bank account data is requested in this build. Future AA sandbox verification must require separate consent."
+                      status={aaTrustStatus}
+                      detail={aaStatus?.message || "AA sandbox status has not loaded yet."}
                     />
                   </div>
                 </div>
@@ -444,6 +557,23 @@ function PrivacyPage() {
               </div>
             )}
           </Card>
+        </section>
+
+        {/* Account Aggregator Sandbox */}
+        <section>
+          <p className="text-[10px] font-bold tracking-[0.18em] uppercase text-muted-foreground mb-3">
+            Account Aggregator Sandbox
+          </p>
+          <AccountAggregatorSandboxCard
+            aaStatus={aaStatus}
+            consent={currentAAConsent}
+            latestEvent={latestAAEvent}
+            latestSnapshot={latestAASnapshot}
+            busyAction={aaBusyAction}
+            onStart={handleStartAAConsent}
+            onAction={handleAASandboxAction}
+            onRefresh={refreshAA}
+          />
         </section>
 
         {/* Sync Controls */}
@@ -760,7 +890,242 @@ function humanConsentStatus(status?: string) {
   if (status === "active") return "Active";
   if (status === "paused") return "Paused";
   if (status === "revoked") return "Revoked";
+  if (status === "pending") return "Pending";
+  if (status === "rejected") return "Rejected";
+  if (status === "expired") return "Expired";
   return "Not connected";
+}
+
+type AASandboxAction = "approve" | "reject" | "revoke" | "expire" | "fetch_success" | "fetch_failed";
+
+function AccountAggregatorSandboxCard({
+  aaStatus,
+  consent,
+  latestEvent,
+  latestSnapshot,
+  busyAction,
+  onStart,
+  onAction,
+  onRefresh,
+}: {
+  aaStatus?: AAStatus;
+  consent?: DataConsent;
+  latestEvent?: AAEvent;
+  latestSnapshot?: AASnapshot;
+  busyAction: string | null;
+  onStart: () => void;
+  onAction: (action: AASandboxAction) => void;
+  onRefresh: () => void;
+}) {
+  const runtimeStatus = aaStatus?.status || "loading";
+  const consentStatus = consent?.status || "none";
+  const canUseLocalSandbox = Boolean(aaStatus?.can_start_sandbox);
+  const canStart = canUseLocalSandbox && !["pending", "active"].includes(consentStatus);
+  const canApprove = canUseLocalSandbox && consentStatus === "pending";
+  const canFetch = canUseLocalSandbox && consentStatus === "active";
+  const disabled = Boolean(busyAction) || runtimeStatus === "loading";
+
+  return (
+    <Card className="overflow-hidden">
+      <div className="p-4 sm:p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-[14px] font-bold text-foreground">AA verification sandbox</p>
+              <Badge variant="outline" className={`text-[9px] ${aaStatusClass(runtimeStatus)}`}>
+                {humanAARuntimeStatus(runtimeStatus)}
+              </Badge>
+              {aaStatus?.uses_dummy_data && (
+                <Badge variant="secondary" className="text-[9px]">
+                  Dummy data only
+                </Badge>
+              )}
+            </div>
+            <p className="mt-1 max-w-2xl text-[12px] leading-relaxed text-muted-foreground">
+              {aaStatus?.message || "Loading AA sandbox status."}
+            </p>
+          </div>
+          <Button variant="outline" size="sm" className="w-fit shrink-0" disabled={disabled} onClick={onRefresh}>
+            <RefreshCw className={`h-3.5 w-3.5 ${busyAction === "refresh" ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
+        </div>
+
+        <div className="mt-4 grid gap-2 sm:grid-cols-3">
+          <TrustMetric
+            icon={<ShieldCheck className="h-4 w-4" />}
+            label="Consent"
+            value={humanConsentStatus(consentStatus)}
+            detail={consent?.purpose || "No AA consent requested yet"}
+          />
+          <TrustMetric
+            icon={<FileCheck2 className="h-4 w-4" />}
+            label="Fetch"
+            value={consent?.fetch_status || "not started"}
+            detail={
+              consent?.last_fetch_at
+                ? `Last fetch ${relativeTime(consent.last_fetch_at)}`
+                : "Financial data fetch needs active consent"
+            }
+          />
+          <TrustMetric
+            icon={<Lock className="h-4 w-4" />}
+            label="Live bank data"
+            value={aaStatus?.uses_dummy_data ? "Not used" : "Disabled"}
+            detail="Sandbox records never replace Android/manual transactions"
+          />
+        </div>
+
+        {aaStatus?.required_env?.length ? (
+          <div className="mt-4 rounded-lg border border-warning/30 bg-warning/10 p-3">
+            <p className="text-[12px] font-semibold text-foreground">Missing configuration</p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {aaStatus.required_env.map((key) => (
+                <span key={key} className="rounded-full border border-warning/30 bg-background/70 px-2 py-1 text-[10px] text-warning">
+                  {key}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {latestEvent && (
+          <div className="mt-4 rounded-lg border border-border bg-surface p-3">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-[12px] font-semibold text-foreground">
+                Latest event: {formatAAEvent(latestEvent.event_type)}
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                {latestEvent.created_at ? relativeTime(latestEvent.created_at) : ""}
+              </p>
+            </div>
+            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+              {latestEvent.message || "No event message."}
+            </p>
+          </div>
+        )}
+
+        {latestSnapshot?.records?.length ? (
+          <div className="mt-4 rounded-lg border border-border bg-surface p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[12px] font-semibold text-foreground">
+                Latest sandbox fetch
+              </p>
+              <Badge variant="outline" className="text-[9px] text-muted-foreground">
+                {latestSnapshot.record_count || latestSnapshot.records.length} dummy records
+              </Badge>
+            </div>
+            <div className="mt-2 space-y-1.5">
+              {latestSnapshot.records.slice(0, 3).map((record, index) => (
+                <div key={`${record.transaction_reference || index}`} className="flex items-center justify-between gap-3 rounded-md bg-background/70 px-2.5 py-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-[12px] font-semibold text-foreground">
+                      {record.merchant || "Sandbox transaction"}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {record.direction || "DEBIT"} · {record.masked_account_ref || "masked account"}
+                    </p>
+                  </div>
+                  <p className="shrink-0 text-[12px] font-semibold text-foreground">
+                    {formatPaise(record.amount_paise)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          {!aaStatus?.can_start_sandbox && (
+            <Button disabled variant="outline" size="sm" className="text-xs">
+              Enable AA sandbox in env
+            </Button>
+          )}
+          {canStart && (
+            <Button disabled={disabled} size="sm" className="text-xs" onClick={onStart}>
+              {busyAction === "start" ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+              Start sandbox consent
+            </Button>
+          )}
+          {canApprove && (
+            <>
+              <Button disabled={disabled} size="sm" className="text-xs" onClick={() => onAction("approve")}>
+                Approve sandbox consent
+              </Button>
+              <Button disabled={disabled} variant="outline" size="sm" className="text-xs" onClick={() => onAction("reject")}>
+                Reject
+              </Button>
+            </>
+          )}
+          {canFetch && (
+            <>
+              <Button disabled={disabled} size="sm" className="text-xs" onClick={() => onAction("fetch_success")}>
+                {busyAction === "fetch_success" ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <FileCheck2 className="h-3.5 w-3.5" />}
+                Fetch sandbox data
+              </Button>
+              <Button disabled={disabled} variant="outline" size="sm" className="text-xs" onClick={() => onAction("revoke")}>
+                Revoke
+              </Button>
+            </>
+          )}
+        </div>
+
+        {canUseLocalSandbox && consent?.id && (
+          <details className="mt-3 rounded-lg border border-border bg-surface p-3">
+            <summary className="cursor-pointer text-[11px] font-semibold text-muted-foreground">
+              Sandbox edge-case controls
+            </summary>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button disabled={disabled || consentStatus === "revoked"} variant="outline" size="sm" className="text-xs" onClick={() => onAction("expire")}>
+                Expire consent
+              </Button>
+              <Button disabled={disabled || consentStatus !== "active"} variant="outline" size="sm" className="text-xs" onClick={() => onAction("fetch_failed")}>
+                Simulate fetch failure
+              </Button>
+            </div>
+            <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+              These controls are local sandbox-only. They help demo rejected, expired, revoked, and failed-fetch states without touching real bank data.
+            </p>
+          </details>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function humanAAStatus(aaStatus?: AAStatus, consent?: DataConsent) {
+  if (consent?.status === "active") return "Active";
+  if (consent?.status === "pending") return "Pending";
+  if (consent?.status === "revoked") return "Revoked";
+  if (consent?.status === "rejected") return "Rejected";
+  if (consent?.status === "expired") return "Expired";
+  if (aaStatus?.status === "sandbox_ready") return "Sandbox ready";
+  if (aaStatus?.status === "misconfigured") return "Needs config";
+  if (aaStatus?.status === "provider_configured") return "Provider configured";
+  return "Not connected";
+}
+
+function humanAARuntimeStatus(status?: string) {
+  if (status === "sandbox_ready") return "Sandbox ready";
+  if (status === "misconfigured") return "Needs config";
+  if (status === "provider_configured") return "Provider configured";
+  if (status === "not_configured") return "Disabled";
+  return "Loading";
+}
+
+function aaStatusClass(status?: string) {
+  if (status === "sandbox_ready" || status === "provider_configured") return "border-green-500/35 text-green-500";
+  if (status === "misconfigured") return "border-warning/40 text-warning";
+  return "text-muted-foreground";
+}
+
+function formatAAEvent(value?: string) {
+  return value ? value.replace(/_/g, " ") : "event";
+}
+
+function formatPaise(value?: number) {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) return "—";
+  return `₹${new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(Math.round(Number(value) / 100))}`;
 }
 
 function TrustMetric({

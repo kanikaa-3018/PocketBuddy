@@ -186,6 +186,30 @@ export async function getDataConsents() {
   return apiRequest("/api/companion/consents");
 }
 
+export async function getAccountAggregatorStatus() {
+  return apiRequest("/api/account-aggregator/status");
+}
+
+export async function startAccountAggregatorSandboxConsent({ data }: { data?: any } = {}) {
+  return apiRequest("/api/account-aggregator/sandbox/consents", {
+    method: "POST",
+    body: JSON.stringify(data ?? {}),
+  });
+}
+
+export async function simulateAccountAggregatorSandbox({
+  consentId,
+  data,
+}: {
+  consentId: string;
+  data: { action: "approve" | "reject" | "revoke" | "expire" | "fetch_success" | "fetch_failed"; reason?: string };
+}) {
+  return apiRequest(`/api/account-aggregator/sandbox/consents/${encodeURIComponent(consentId)}/simulate`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
 export async function getDashboardInsights() {
   return apiRequest("/api/insights");
 }
@@ -357,4 +381,3 @@ export async function deleteAccountData() {
 export async function confirmTransaction({ id }: { id: string }) {
   return apiRequest(`/api/transactions/${id}/confirm`, { method: "POST" });
 }
-

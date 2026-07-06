@@ -119,6 +119,8 @@ async def delete_account(user_id: str = Depends(get_current_user)):
     await db.subscriptions.delete_many({"user_id": user_id})
     await db.companion_sync_log.delete_many({"user_id": user_id})
     await db.data_consents.delete_many({"user_id": user_id})
+    await db.aa_sync_events.delete_many({"user_id": user_id})
+    await db.aa_financial_snapshots.delete_many({"user_id": user_id})
     await db.parser_corrections.delete_many({"user_id": user_id})
     await db.checkin_logs.delete_many({"user_id": user_id})
     await db.travel_savings.delete_many({"user_id": user_id})

@@ -73,6 +73,33 @@ $ADB = "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"
 & $ADB -s <device-id> reverse tcp:8000 tcp:8000
 ```
 
+## Account Aggregator Sandbox
+
+AA sandbox support is disabled by default and must be explicitly enabled:
+
+```env
+AA_SANDBOX_ENABLED=false
+AA_SANDBOX_PROVIDER=local
+AA_CALLBACK_SECRET=
+```
+
+Set `AA_SANDBOX_ENABLED=true` with `AA_SANDBOX_PROVIDER=local` to use PocketBuddy's built-in dummy-data consent lifecycle for demos. This local sandbox never fetches live bank data and stores dummy AA records separately from real transactions.
+
+Authenticated frontend routes use:
+
+```http
+GET  /api/account-aggregator/status
+POST /api/account-aggregator/sandbox/consents
+POST /api/account-aggregator/sandbox/consents/{consent_id}/simulate
+```
+
+Provider callback placeholders are also available for sandbox wiring when `AA_CALLBACK_SECRET` is configured:
+
+```http
+POST /api/account-aggregator/Consent/Notification
+POST /api/account-aggregator/FI/Notification
+```
+
 ## Campus Food And RAG
 
 The frontend dashboard reads:
