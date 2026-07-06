@@ -63,6 +63,44 @@ DEFAULT_AA_INSTITUTIONS = [
     {"id": "nsdl-payments", "name": "NSDL Payments Bank", "short_name": "NSDL", "type": "Payments Bank", "regulator": "RBI", "status": "Live"},
 ]
 
+AA_INSTITUTION_DOMAINS = {
+    "sbi": "sbi.co.in",
+    "hdfc": "hdfcbank.com",
+    "icici": "icicibank.com",
+    "axis": "axisbank.com",
+    "kotak": "kotak.com",
+    "pnb": "pnbindia.in",
+    "bob": "bankofbaroda.in",
+    "canara": "canarabank.com",
+    "union-bank": "unionbankofindia.co.in",
+    "indian-bank": "indianbank.in",
+    "bank-of-india": "bankofindia.co.in",
+    "central-bank": "centralbankofindia.co.in",
+    "idfc-first": "idfcfirstbank.com",
+    "yes-bank": "yesbank.in",
+    "indusind": "indusind.com",
+    "federal": "federalbank.co.in",
+    "rbl": "rblbank.com",
+    "bandhan": "bandhanbank.com",
+    "idbi": "idbibank.in",
+    "bank-of-maharashtra": "bankofmaharashtra.in",
+    "uco": "ucobank.com",
+    "iob": "iob.in",
+    "south-indian": "southindianbank.com",
+    "city-union": "cityunionbank.com",
+    "karur-vysya": "kvb.co.in",
+    "karnataka": "karnatakabank.com",
+    "dcb": "dcbbank.com",
+    "csb": "csb.co.in",
+    "tmb": "tmb.in",
+    "j-and-k": "jkbank.com",
+    "equitas": "equitasbank.com",
+    "au-small-finance": "aubank.in",
+    "ujjivan": "ujjivansfb.in",
+    "airtel-payments": "airtel.in/bank",
+    "nsdl-payments": "nsdlbank.com",
+}
+
 
 class AASandboxConsentReq(BaseModel):
     aa_handle: Optional[str] = Field(default=None, max_length=120)
@@ -103,6 +141,10 @@ def normalize_institution(row: dict) -> dict:
         institution_id = name.lower().replace("&", "and").replace(".", "").replace(" ", "-")
     if not short_name and name:
         short_name = "".join(part[0] for part in name.replace("&", " ").split()[:4]).upper()
+    domain = str(row.get("domain") or AA_INSTITUTION_DOMAINS.get(institution_id, "")).strip()
+    logo_url = row.get("logo_url") or row.get("logoUrl")
+    if not logo_url and domain:
+        logo_url = f"https://www.google.com/s2/favicons?sz=64&domain={domain}"
     return {
         "id": institution_id,
         "name": name,
@@ -110,7 +152,8 @@ def normalize_institution(row: dict) -> dict:
         "type": row.get("type") or row.get("category") or "Bank",
         "regulator": row.get("regulator") or "RBI",
         "status": row.get("status") or row.get("stage") or "Available",
-        "logo_url": row.get("logo_url") or row.get("logoUrl"),
+        "domain": domain,
+        "logo_url": logo_url,
     }
 
 
@@ -139,7 +182,7 @@ def aa_institution_registry() -> tuple[list[dict], str, str]:
     if external:
         institutions, registry_url = external
         return institutions, "Configured AA institution registry", registry_url
-    return DEFAULT_AA_INSTITUTIONS, "AA institution registry snapshot", AA_REGISTRY_REFERENCE_URL
+    return [normalize_institution(row) for row in DEFAULT_AA_INSTITUTIONS], "Sahamati AA ecosystem reference", AA_REGISTRY_REFERENCE_URL
 
 
 def aa_runtime_state() -> dict:

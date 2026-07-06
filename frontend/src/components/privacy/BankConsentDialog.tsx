@@ -9,6 +9,7 @@ import {
   Database,
   Landmark,
   LockKeyhole,
+  Network,
   Search,
   ShieldCheck,
 } from "lucide-react";
@@ -46,6 +47,7 @@ type AAInstitution = {
   type?: string;
   regulator?: string;
   status?: string;
+  domain?: string;
   logo_url?: string;
 };
 
@@ -128,71 +130,123 @@ export function BankConsentDialog({
               Connect your bank securely
             </DialogTitle>
             <DialogDescription className="text-[12px] leading-relaxed text-muted-foreground">
-              PocketBuddy uses the Account Aggregator consent model: you choose the bank, review what data is shared, and can revoke access anytime.
+              Choose the institution, review what is shared, and continue only when the consent details look right.
             </DialogDescription>
           </DialogHeader>
         </div>
 
         <div className="space-y-5 px-5 py-5 sm:px-6">
-          <div className="grid gap-2 sm:grid-cols-3">
-            <TrustPill icon={<ShieldCheck className="h-4 w-4" />} title="RBI framework" body="Consent-based financial data sharing" />
-            <TrustPill icon={<LockKeyhole className="h-4 w-4" />} title="No credentials" body="No password, OTP, MPIN, or payment access" />
-            <TrustPill icon={<BadgeCheck className="h-4 w-4" />} title="User controlled" body="Approve, review, revoke, or retry" />
+          <div className="rounded-2xl border border-border bg-background/70 p-4">
+            <div className="flex items-center gap-2">
+              <Network className="h-4 w-4 text-primary" />
+              <p className="text-[12px] font-semibold text-foreground">Account Aggregator ecosystem</p>
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_1fr_auto_1fr] sm:items-center">
+              <EcosystemNode title="PocketBuddy" subtitle="FIU requesting data" />
+              <EcosystemArrow />
+              <EcosystemNode title="AA consent" subtitle="Approve or reject" highlighted />
+              <EcosystemArrow />
+              <EcosystemNode title={selectedBank?.short_name || selectedBank?.name || "Your bank"} subtitle="FIP holding account data" />
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              <TrustPill icon={<ShieldCheck className="h-4 w-4" />} title="RBI framework" body="Consent-based sharing" />
+              <TrustPill icon={<LockKeyhole className="h-4 w-4" />} title="No credentials" body="No OTP, MPIN, or payment access" />
+              <TrustPill icon={<BadgeCheck className="h-4 w-4" />} title="Revocable" body="Stop future fetches anytime" />
+            </div>
           </div>
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-[12px] font-semibold text-foreground">Choose your bank</p>
-              <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                {institutionData?.source || "AA institution registry"}
-              </span>
+          <div className="rounded-2xl border border-border bg-surface-raised/60 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-[12px] font-semibold text-foreground">Financial institution</p>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                  Search the AA institution registry and choose the bank that holds your account.
+                </p>
+              </div>
+              <Badge variant="outline" className="w-fit text-[9px] text-muted-foreground">
+                {filteredInstitutions.length} shown
+              </Badge>
             </div>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search bank or financial institution"
-                className="h-10 pl-9 text-[12px]"
-              />
+
+            <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_0.82fr]">
+              <div className="space-y-2">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Search bank name, short code, or type"
+                    className="h-10 rounded-xl border-border bg-background pl-9 text-[12px]"
+                  />
+                </div>
+                <div className="max-h-72 space-y-1.5 overflow-y-auto rounded-xl border border-border bg-background/80 p-1.5">
+                  {isLoading ? (
+                    <RegistryState icon={<Clock3 className="h-4 w-4" />} title="Loading institution registry" body="Fetching supported Account Aggregator institutions." />
+                  ) : isError ? (
+                    <RegistryState icon={<AlertCircle className="h-4 w-4" />} title="Registry unavailable" body="Institution registry could not be loaded. Try again after checking backend connectivity." />
+                  ) : filteredInstitutions.length === 0 ? (
+                    <RegistryState icon={<Search className="h-4 w-4" />} title="No institution found" body="Try searching by full bank name, short name, or institution type." />
+                  ) : (
+                    filteredInstitutions.map((institution) => {
+                      const selected = institution.id === (selectedBank?.id || selectedBankId);
+                      return (
+                        <button
+                          key={institution.id}
+                          type="button"
+                          onClick={() => setSelectedBankId(institution.id)}
+                          className={`flex w-full items-center gap-3 rounded-lg border px-2.5 py-2.5 text-left transition-colors ${
+                            selected
+                              ? "border-primary/45 bg-primary/10"
+                              : "border-transparent bg-surface/70 hover:border-primary/25 hover:bg-surface-raised"
+                          }`}
+                        >
+                          <InstitutionIcon institution={institution} />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-[12px] font-semibold text-foreground">{institution.name}</span>
+                            <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                              {institution.type || "Bank"} / {institution.regulator || "RBI"} / {institution.status || "Available"}
+                            </span>
+                          </span>
+                          {selected ? <CheckCircle2 className="ml-auto h-4 w-4 shrink-0 text-primary" /> : null}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-border bg-background/80 p-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+                  Selected institution
+                </p>
+                {selectedBank ? (
+                  <div className="mt-3">
+                    <div className="flex items-start gap-3">
+                      <InstitutionIcon institution={selectedBank} size="lg" />
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-semibold leading-snug text-foreground">{selectedBank.name}</p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          {selectedBank.type || "Bank"} / {selectedBank.regulator || "RBI"} / {selectedBank.status || "Available"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-3 rounded-lg bg-surface p-2.5">
+                      <p className="text-[11px] leading-relaxed text-muted-foreground">
+                        PocketBuddy will request read-only transaction data from this institution through the AA consent flow.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
+                    Select an institution to continue.
+                  </p>
+                )}
+              </div>
             </div>
-            <div className="max-h-64 space-y-2 overflow-y-auto rounded-xl border border-border bg-background/70 p-2">
-              {isLoading ? (
-                <RegistryState icon={<Clock3 className="h-4 w-4" />} title="Loading institution registry" body="Fetching supported Account Aggregator institutions." />
-              ) : isError ? (
-                <RegistryState icon={<AlertCircle className="h-4 w-4" />} title="Registry unavailable" body="Institution registry could not be loaded. Try again after checking backend connectivity." />
-              ) : filteredInstitutions.length === 0 ? (
-                <RegistryState icon={<Search className="h-4 w-4" />} title="No institution found" body="Try searching by full bank name, short name, or institution type." />
-              ) : (
-                filteredInstitutions.map((institution) => {
-                  const selected = institution.id === (selectedBank?.id || selectedBankId);
-                  return (
-                    <button
-                      key={institution.id}
-                      type="button"
-                      onClick={() => setSelectedBankId(institution.id)}
-                      className={`flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors ${
-                        selected
-                          ? "border-primary/45 bg-primary/10"
-                          : "border-transparent bg-surface/70 hover:border-primary/25 hover:bg-surface-raised"
-                      }`}
-                    >
-                      <InstitutionIcon institution={institution} />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[12px] font-semibold text-foreground">{institution.name}</span>
-                        <span className="mt-0.5 block text-[10px] text-muted-foreground">
-                          {institution.type || "Bank"} · {institution.regulator || "RBI"} · {institution.status || "Available"}
-                        </span>
-                      </span>
-                      {selected ? <CheckCircle2 className="ml-auto h-4 w-4 shrink-0 text-primary" /> : null}
-                    </button>
-                  );
-                })
-              )}
-            </div>
-            <p className="text-[10px] leading-relaxed text-muted-foreground">
+
+            <p className="mt-3 text-[10px] leading-relaxed text-muted-foreground">
               Source: {institutionData?.source || "AA institution registry"}
-              {institutionData?.source_url ? ` · ${institutionData.source_url}` : ""}
+              {institutionData?.source_url ? ` / ${institutionData.source_url}` : ""}
             </p>
           </div>
 
@@ -281,20 +335,34 @@ export function BankConsentDialog({
   );
 }
 
-function InstitutionIcon({ institution }: { institution: AAInstitution }) {
+function InstitutionIcon({ institution, size = "md" }: { institution: AAInstitution; size?: "md" | "lg" }) {
   const label = (institution.short_name || institution.name.slice(0, 3)).toUpperCase();
+  const sizeClass = size === "lg" ? "h-12 w-12" : "h-10 w-10";
   if (institution.logo_url) {
     return (
-      <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-lg border border-border bg-white">
+      <span className={`grid ${sizeClass} shrink-0 place-items-center overflow-hidden rounded-xl border border-border bg-white`}>
         <img src={institution.logo_url} alt="" className="h-full w-full object-contain p-1.5" />
       </span>
     );
   }
   return (
-    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-border bg-surface-raised text-[10px] font-black text-foreground">
+    <span className={`grid ${sizeClass} shrink-0 place-items-center rounded-xl border border-border bg-surface-raised text-[10px] font-black text-foreground`}>
       {label.slice(0, 4)}
     </span>
   );
+}
+
+function EcosystemNode({ title, subtitle, highlighted = false }: { title: string; subtitle: string; highlighted?: boolean }) {
+  return (
+    <div className={`rounded-xl border p-3 ${highlighted ? "border-primary/35 bg-primary/10" : "border-border bg-surface/70"}`}>
+      <p className="truncate text-[12px] font-semibold text-foreground">{title}</p>
+      <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">{subtitle}</p>
+    </div>
+  );
+}
+
+function EcosystemArrow() {
+  return <div className="hidden h-px w-6 bg-border sm:block" />;
 }
 
 function RegistryState({ icon, title, body }: { icon: ReactNode; title: string; body: string }) {
@@ -311,7 +379,7 @@ function RegistryState({ icon, title, body }: { icon: ReactNode; title: string; 
 
 function TrustPill({ icon, title, body }: { icon: ReactNode; title: string; body: string }) {
   return (
-    <div className="rounded-xl border border-border bg-background/70 p-3">
+    <div className="rounded-xl border border-border bg-surface/70 p-3">
       <div className="flex items-center gap-2 text-primary">
         {icon}
         <p className="text-[11px] font-semibold text-foreground">{title}</p>
