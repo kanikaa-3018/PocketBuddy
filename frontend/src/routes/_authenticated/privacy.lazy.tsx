@@ -17,6 +17,7 @@ import {
   FileCheck2,
   KeyRound,
   Lock,
+  Landmark,
   RefreshCw,
   ShieldCheck,
   Smartphone,
@@ -210,8 +211,8 @@ function PrivacyPage() {
     aaConsents.find((c) => c.status === "pending") ??
     aaConsents[0];
   const consentLedgerRows = [...aaConsents, ...androidConsents];
-  const latestAAEvent = aaStatus?.events?.[0];
-  const latestAASnapshot = aaStatus?.snapshots?.[0];
+  const aaEvents = aaStatus?.events ?? [];
+  const aaSnapshots = aaStatus?.snapshots ?? [];
   const aaTrustStatus = humanAAStatus(aaStatus, currentAAConsent);
   const bankConsentCanStart = Boolean(aaStatus?.can_start_sandbox) && !["pending", "active"].includes(currentAAConsent?.status || "");
   const bankConsentPrimaryAction =
@@ -325,6 +326,9 @@ function PrivacyPage() {
   async function handleAASandboxAction(action: "approve" | "reject" | "revoke" | "expire" | "fetch_success" | "fetch_failed") {
     if (!currentAAConsent?.id) {
       toast.error("No bank consent selected.");
+      return;
+    }
+    if (action === "revoke" && !confirm("Revoke bank consent? PocketBuddy will stop new bank-source fetches for this consent.")) {
       return;
     }
     setAaBusyAction(action);
@@ -617,8 +621,8 @@ function PrivacyPage() {
           <AccountAggregatorSandboxCard
             aaStatus={aaStatus}
             consent={currentAAConsent}
-            latestEvent={latestAAEvent}
-            latestSnapshot={latestAASnapshot}
+            events={aaEvents}
+            snapshots={aaSnapshots}
             busyAction={aaBusyAction}
             onStart={() => setBankConsentDialogOpen(true)}
             onAction={handleAASandboxAction}
@@ -632,7 +636,82 @@ function PrivacyPage() {
             Sync Controls
           </p>
           <Card className="overflow-hidden">
-            {/* Pause Sync */}
+            {/* Bank Consent Controls */}
+            <div className="flex flex-col gap-3 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-start gap-3">
+                <Landmark className="mt-0.5 h-4.5 w-4.5 shrink-0 text-primary" />
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-[13px] font-semibold text-foreground">Bank consent</p>
+                    <Badge variant="outline" className={`text-[9px] ${consentStatusClass(currentAAConsent?.status)}`}>
+                      {aaTrustStatus}
+                    </Badge>
+                  </div>
+                  <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                    {currentAAConsent
+                      ? `${currentAAConsent.financial_institution_name || currentAAConsent.provider_label || "Connected institution"} · ${currentAAConsent.fetch_status || "fetch not started"}`
+                      : "Read-only verified bank-source tracking. No bank password or OTP is collected."}
+                  </p>
+                </div>
+              </div>
+              <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
+                {currentAAConsent?.status === "active" ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 flex-1 text-xs sm:flex-none"
+                      disabled={Boolean(aaBusyAction) || !aaStatus?.can_start_sandbox}
+                      onClick={() => handleAASandboxAction("fetch_success")}
+                    >
+                      {aaBusyAction === "fetch_success" ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <FileCheck2 className="h-3.5 w-3.5" />}
+                      Refresh bank data
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 flex-1 border-destructive/30 text-xs text-destructive hover:bg-destructive/10 sm:flex-none"
+                      disabled={Boolean(aaBusyAction) || !aaStatus?.can_start_sandbox}
+                      onClick={() => handleAASandboxAction("revoke")}
+                    >
+                      Revoke
+                    </Button>
+                  </>
+                ) : currentAAConsent?.status === "pending" ? (
+                  <>
+                    <Button
+                      size="sm"
+                      className="h-8 flex-1 text-xs sm:flex-none"
+                      disabled={Boolean(aaBusyAction) || !aaStatus?.can_start_sandbox}
+                      onClick={() => handleAASandboxAction("approve")}
+                    >
+                      Approve consent
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 flex-1 text-xs sm:flex-none"
+                      disabled={Boolean(aaBusyAction) || !aaStatus?.can_start_sandbox}
+                      onClick={() => handleAASandboxAction("reject")}
+                    >
+                      Reject
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    size="sm"
+                    className="h-8 w-full text-xs sm:w-auto"
+                    variant={bankConsentCanStart ? "default" : "outline"}
+                    disabled={Boolean(aaBusyAction) || !bankConsentCanStart}
+                    onClick={() => setBankConsentDialogOpen(true)}
+                  >
+                    Connect bank
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Pause Phone Sync */}
             <div className="flex items-center justify-between gap-4 p-4 border-b border-border">
               <div className="flex items-center gap-3 min-w-0">
                 {syncEnabled ? (
@@ -642,7 +721,7 @@ function PrivacyPage() {
                 )}
                 <div className="min-w-0">
                   <p className="text-[13px] font-semibold text-foreground">
-                    {syncEnabled ? "Sync Active" : "Sync Paused"}
+                    {syncEnabled ? "Phone sync active" : "Phone sync paused"}
                   </p>
                   <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">
                     {syncEnabled
@@ -953,13 +1032,29 @@ function humanConsentStatus(status?: string) {
   return "Not connected";
 }
 
+function consentStatusClass(status?: string) {
+  if (status === "active") return "border-success/35 text-success";
+  if (status === "pending") return "border-warning/40 text-warning";
+  if (status === "revoked" || status === "rejected" || status === "expired") return "border-destructive/30 text-destructive";
+  return "text-muted-foreground";
+}
+
+function CompactConsentFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-border bg-background/70 p-3">
+      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
+      <p className="mt-1 line-clamp-2 text-[12px] font-semibold leading-snug text-foreground">{value}</p>
+    </div>
+  );
+}
+
 type AASandboxAction = "approve" | "reject" | "revoke" | "expire" | "fetch_success" | "fetch_failed";
 
 function AccountAggregatorSandboxCard({
   aaStatus,
   consent,
-  latestEvent,
-  latestSnapshot,
+  events,
+  snapshots,
   busyAction,
   onStart,
   onAction,
@@ -967,13 +1062,15 @@ function AccountAggregatorSandboxCard({
 }: {
   aaStatus?: AAStatus;
   consent?: DataConsent;
-  latestEvent?: AAEvent;
-  latestSnapshot?: AASnapshot;
+  events: AAEvent[];
+  snapshots: AASnapshot[];
   busyAction: string | null;
   onStart: () => void;
   onAction: (action: AASandboxAction) => void;
   onRefresh: () => void;
 }) {
+  const [showAllRecords, setShowAllRecords] = useState(false);
+  const [showAllActivity, setShowAllActivity] = useState(false);
   const runtimeStatus = aaStatus?.status || "loading";
   const consentStatus = consent?.status || "none";
   const canUseLocalSandbox = Boolean(aaStatus?.can_start_sandbox);
@@ -981,51 +1078,75 @@ function AccountAggregatorSandboxCard({
   const canApprove = canUseLocalSandbox && consentStatus === "pending";
   const canFetch = canUseLocalSandbox && consentStatus === "active";
   const disabled = Boolean(busyAction) || runtimeStatus === "loading";
+  const latestSnapshot = snapshots[0];
+  const records = latestSnapshot?.records ?? [];
+  const visibleRecords = showAllRecords ? records : records.slice(0, 4);
+  const visibleEvents = showAllActivity ? events : events.slice(0, 4);
+  const fetchedRecordCount = latestSnapshot?.record_count || records.length || consent?.fetched_records_count || 0;
+  const institutionName = consent?.financial_institution_name || consent?.provider_label || "No bank connected";
+  const institutionShortName = consent?.financial_institution_short_name || consent?.financial_institution_code || "AA";
+  const maskedAccountRef = records.find((record) => record.masked_account_ref)?.masked_account_ref || "Masked account";
+  const scope = consent?.data_categories?.length
+    ? consent.data_categories.map((category) => category.replace(/_/g, " ")).join(", ")
+    : "Deposit account transactions";
+  const lastActivity = consent?.last_fetch_at || events[0]?.created_at || consent?.updated_at || consent?.granted_at;
 
   return (
-    <Card className="overflow-hidden">
-      <div className="p-4 sm:p-5">
+    <Card className="overflow-hidden bg-surface-raised">
+      <div className="border-b border-border p-4 sm:p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-[14px] font-semibold text-foreground">Bank consent setup</p>
-              <Badge variant="outline" className={`text-[9px] ${aaStatusClass(runtimeStatus)}`}>
-                {humanAARuntimeStatus(runtimeStatus)}
-              </Badge>
+          <div className="flex min-w-0 gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-primary/20 bg-primary/10 text-primary">
+              <Landmark className="h-5 w-5" />
             </div>
-            <p className="mt-1 max-w-2xl text-[12px] leading-relaxed text-muted-foreground">
-              {bankConsentMessage(runtimeStatus, consentStatus)}
-            </p>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-[14px] font-semibold text-foreground">Bank consent</p>
+                <Badge variant="outline" className={`text-[9px] ${consentStatusClass(consentStatus)}`}>
+                  {humanConsentStatus(consentStatus)}
+                </Badge>
+                <Badge variant="outline" className={`text-[9px] ${aaStatusClass(runtimeStatus)}`}>
+                  {humanAARuntimeStatus(runtimeStatus)}
+                </Badge>
+              </div>
+              <p className="mt-1 max-w-2xl text-[12px] leading-relaxed text-muted-foreground">
+                {bankConsentMessage(runtimeStatus, consentStatus)}
+              </p>
+            </div>
           </div>
-          <Button variant="outline" size="sm" className="w-fit shrink-0" disabled={disabled} onClick={onRefresh}>
+          <Button variant="outline" size="sm" className="h-8 w-full shrink-0 text-xs sm:w-fit" disabled={disabled} onClick={onRefresh}>
             <RefreshCw className={`h-3.5 w-3.5 ${busyAction === "refresh" ? "animate-spin" : ""}`} />
             Refresh
           </Button>
         </div>
 
-        <div className="mt-4 grid gap-2 sm:grid-cols-3">
-          <TrustMetric
-            icon={<ShieldCheck className="h-4 w-4" />}
-            label="Consent"
-            value={humanConsentStatus(consentStatus)}
-            detail={consent?.purpose || "No bank consent requested yet"}
-          />
-          <TrustMetric
-            icon={<FileCheck2 className="h-4 w-4" />}
-            label="Fetch"
-            value={consent?.fetch_status || "not started"}
-            detail={
-              consent?.last_fetch_at
-                ? `Last fetch ${relativeTime(consent.last_fetch_at)}`
-                : "Financial data fetch needs active consent"
-            }
-          />
-          <TrustMetric
-            icon={<Lock className="h-4 w-4" />}
-            label="Ledger safety"
-            value="Protected"
-            detail="Consent fetches do not overwrite phone or manual transactions"
-          />
+        <div className="mt-4 grid gap-3 lg:grid-cols-[1.25fr_0.75fr]">
+          <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary">Connected institution</p>
+                <p className="mt-2 truncate text-[18px] font-semibold text-foreground">{institutionName}</p>
+                <p className="mt-1 text-[12px] text-muted-foreground">
+                  {consent ? maskedAccountRef : "Connect a bank to enable verified tracking"}
+                </p>
+              </div>
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-primary/20 bg-background/70 text-[12px] font-bold text-primary">
+                {institutionShortName.slice(0, 3).toUpperCase()}
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Badge variant="outline" className="border-success/30 bg-background/70 text-[10px] text-success">Read-only</Badge>
+              <Badge variant="outline" className="border-primary/25 bg-background/70 text-[10px] text-primary">Account Aggregator</Badge>
+              <Badge variant="outline" className="bg-background/70 text-[10px] text-muted-foreground">Revocable</Badge>
+              <Badge variant="outline" className="bg-background/70 text-[10px] text-muted-foreground">No bank password</Badge>
+            </div>
+          </div>
+
+          <div className="grid gap-2">
+            <CompactConsentFact label="Purpose" value={consent?.purpose || "Verified transaction tracking"} />
+            <CompactConsentFact label="Scope" value={scope} />
+            <CompactConsentFact label="Last activity" value={lastActivity ? relativeTime(lastActivity) : "No activity yet"} />
+          </div>
         </div>
 
         {aaStatus?.required_env?.length ? (
@@ -1041,53 +1162,7 @@ function AccountAggregatorSandboxCard({
           </div>
         ) : null}
 
-        {latestEvent && (
-          <div className="mt-4 rounded-lg border border-border bg-surface p-3">
-            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-[12px] font-semibold text-foreground">
-                Latest event: {formatAAEvent(latestEvent.event_type)}
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                {latestEvent.created_at ? relativeTime(latestEvent.created_at) : ""}
-              </p>
-            </div>
-            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-              {bankConsentEventMessage(latestEvent.event_type)}
-            </p>
-          </div>
-        )}
-
-        {latestSnapshot?.records?.length ? (
-          <div className="mt-4 rounded-lg border border-border bg-surface p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-[12px] font-semibold text-foreground">
-                Latest consent fetch
-              </p>
-              <Badge variant="outline" className="text-[9px] text-muted-foreground">
-                {latestSnapshot.record_count || latestSnapshot.records.length} records
-              </Badge>
-            </div>
-            <div className="mt-2 space-y-1.5">
-              {latestSnapshot.records.slice(0, 3).map((record, index) => (
-                <div key={`${record.transaction_reference || index}`} className="flex items-center justify-between gap-3 rounded-md bg-background/70 px-2.5 py-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-[12px] font-semibold text-foreground">
-                      {record.merchant || "Verified transaction"}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground">
-                      {record.direction || "DEBIT"} · {record.masked_account_ref || "masked account"}
-                    </p>
-                  </div>
-                  <p className="shrink-0 text-[12px] font-semibold text-foreground">
-                    {formatPaise(record.amount_paise)}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="mt-4 flex flex-wrap gap-2 rounded-xl border border-border bg-background/70 p-3">
           {!aaStatus?.can_start_sandbox && (
             <Button disabled variant="outline" size="sm" className="text-xs">
               Bank consent unavailable
@@ -1096,7 +1171,7 @@ function AccountAggregatorSandboxCard({
           {canStart && (
             <Button disabled={disabled} size="sm" className="text-xs" onClick={onStart}>
               {busyAction === "start" ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
-              Start bank consent
+              Connect bank
             </Button>
           )}
           {canApprove && (
@@ -1113,13 +1188,95 @@ function AccountAggregatorSandboxCard({
             <>
               <Button disabled={disabled} size="sm" className="text-xs" onClick={() => onAction("fetch_success")}>
                 {busyAction === "fetch_success" ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <FileCheck2 className="h-3.5 w-3.5" />}
-                Fetch consent data
+                Refresh bank data
               </Button>
-              <Button disabled={disabled} variant="outline" size="sm" className="text-xs" onClick={() => onAction("revoke")}>
+              <Button disabled={disabled} variant="outline" size="sm" className="border-destructive/30 text-xs text-destructive hover:bg-destructive/10" onClick={() => onAction("revoke")}>
                 Revoke
               </Button>
             </>
           )}
+        </div>
+
+        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+          <div className="rounded-xl border border-border bg-background/70 p-3">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <p className="text-[13px] font-semibold text-foreground">Recent bank records</p>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                  Preview from the latest consented fetch. Full bank data stays behind consent.
+                </p>
+              </div>
+              <Badge variant="outline" className="text-[9px] text-muted-foreground">
+                {fetchedRecordCount} records
+              </Badge>
+            </div>
+
+            {records.length ? (
+              <div className={`mt-3 space-y-1.5 ${showAllRecords ? "max-h-72 overflow-y-auto pr-1" : ""}`}>
+                {visibleRecords.map((record, index) => (
+                  <div key={`${record.transaction_reference || index}`} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface px-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="truncate text-[12px] font-semibold text-foreground">
+                        {record.merchant || "Verified transaction"}
+                      </p>
+                      <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                        {record.direction || "DEBIT"} · {record.masked_account_ref || "masked account"}
+                      </p>
+                    </div>
+                    <p className="shrink-0 text-[12px] font-semibold text-foreground">
+                      {formatPaise(record.amount_paise)}
+                    </p>
+                  </div>
+                ))}
+                {records.length > 4 && (
+                  <Button variant="ghost" size="sm" className="h-8 w-full text-xs" onClick={() => setShowAllRecords((open) => !open)}>
+                    {showAllRecords ? "Show less" : `View ${records.length - 4} more`}
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <EmptySourceState text={consentStatus === "active" ? "No records fetched yet. Use Refresh bank data when you want to verify recent transactions." : "Bank records appear here only after active consent and a successful fetch."} />
+            )}
+          </div>
+
+          <div className="rounded-xl border border-border bg-background/70 p-3">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <p className="text-[13px] font-semibold text-foreground">Consent activity</p>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                  Requests, approvals, fetches and revocations stay visible.
+                </p>
+              </div>
+              <Badge variant="outline" className="text-[9px] text-muted-foreground">
+                {events.length} events
+              </Badge>
+            </div>
+
+            {events.length ? (
+              <div className={`mt-3 space-y-2 ${showAllActivity ? "max-h-72 overflow-y-auto pr-1" : ""}`}>
+                {visibleEvents.map((event, index) => (
+                  <div key={event.id || `${event.event_type}-${index}`} className="rounded-lg border border-border bg-surface p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="truncate text-[12px] font-semibold text-foreground">{formatAAEvent(event.event_type)}</p>
+                      <p className="shrink-0 text-[10px] text-muted-foreground">
+                        {event.created_at ? relativeTime(event.created_at) : ""}
+                      </p>
+                    </div>
+                    <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                      {bankConsentEventMessage(event.event_type)}
+                    </p>
+                  </div>
+                ))}
+                {events.length > 4 && (
+                  <Button variant="ghost" size="sm" className="h-8 w-full text-xs" onClick={() => setShowAllActivity((open) => !open)}>
+                    {showAllActivity ? "Show less" : `View ${events.length - 4} more`}
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <EmptySourceState text="No bank consent activity yet." />
+            )}
+          </div>
         </div>
 
         {canUseLocalSandbox && consent?.id && (
@@ -1132,11 +1289,11 @@ function AccountAggregatorSandboxCard({
                 Expire consent
               </Button>
               <Button disabled={disabled || consentStatus !== "active"} variant="outline" size="sm" className="text-xs" onClick={() => onAction("fetch_failed")}>
-                Simulate fetch failure
+                Mark fetch failed
               </Button>
             </div>
             <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-              Use these states to verify how the app handles expired consent, revocation, rejection, and fetch failure.
+              Use only when validating expiry and failure handling for this consent flow.
             </p>
           </details>
         )}
