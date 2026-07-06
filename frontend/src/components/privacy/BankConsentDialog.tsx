@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
+  AlertCircle,
   BadgeCheck,
   Building2,
   CheckCircle2,
@@ -7,6 +9,7 @@ import {
   Database,
   Landmark,
   LockKeyhole,
+  Search,
   ShieldCheck,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -20,15 +23,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-
-const BANK_OPTIONS = [
-  { id: "sbi", name: "State Bank of India", short: "SBI" },
-  { id: "hdfc", name: "HDFC Bank", short: "HDFC" },
-  { id: "icici", name: "ICICI Bank", short: "ICICI" },
-  { id: "axis", name: "Axis Bank", short: "AXIS" },
-  { id: "kotak", name: "Kotak Mahindra Bank", short: "KOTAK" },
-  { id: "pnb", name: "Punjab National Bank", short: "PNB" },
-];
+import { getAccountAggregatorInstitutions } from "@/lib/api/db.functions";
 
 const RANGE_OPTIONS = [
   { value: 30, label: "30 days" },
@@ -39,8 +34,25 @@ const RANGE_OPTIONS = [
 export type BankConsentPayload = {
   bankCode: string;
   bankName: string;
+  bankShortName?: string;
   requestedRangeDays: number;
   aaHandle?: string;
+};
+
+type AAInstitution = {
+  id: string;
+  name: string;
+  short_name?: string;
+  type?: string;
+  regulator?: string;
+  status?: string;
+  logo_url?: string;
+};
+
+type AAInstitutionResponse = {
+  source?: string;
+  source_url?: string;
+  institutions?: AAInstitution[];
 };
 
 type BankConsentDialogProps = {
@@ -56,16 +68,41 @@ export function BankConsentDialog({
   onConfirm,
   busy = false,
 }: BankConsentDialogProps) {
-  const [selectedBankId, setSelectedBankId] = useState(BANK_OPTIONS[0].id);
+  const [selectedBankId, setSelectedBankId] = useState("");
   const [requestedRangeDays, setRequestedRangeDays] = useState(30);
   const [aaHandle, setAaHandle] = useState("");
+  const [search, setSearch] = useState("");
 
-  const selectedBank = BANK_OPTIONS.find((bank) => bank.id === selectedBankId) ?? BANK_OPTIONS[0];
+  const { data: institutionData, isLoading, isError } = useQuery<AAInstitutionResponse>({
+    queryKey: ["aa-institutions"],
+    enabled: open,
+    queryFn: () => getAccountAggregatorInstitutions(),
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const institutions = institutionData?.institutions ?? [];
+  const filteredInstitutions = institutions
+    .filter((institution) => {
+      const q = search.trim().toLowerCase();
+      if (!q) return true;
+      return (
+        institution.name.toLowerCase().includes(q) ||
+        (institution.short_name || "").toLowerCase().includes(q) ||
+        (institution.type || "").toLowerCase().includes(q)
+      );
+    })
+    .slice(0, 24);
+  const selectedBank =
+    institutions.find((institution) => institution.id === selectedBankId) ??
+    filteredInstitutions[0] ??
+    institutions[0];
 
   function submitConsent() {
+    if (!selectedBank) return;
     onConfirm({
       bankCode: selectedBank.id,
       bankName: selectedBank.name,
+      bankShortName: selectedBank.short_name,
       requestedRangeDays,
       aaHandle: aaHandle.trim() || undefined,
     });
@@ -107,35 +144,56 @@ export function BankConsentDialog({
             <div className="flex items-center justify-between gap-3">
               <p className="text-[12px] font-semibold text-foreground">Choose your bank</p>
               <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                Step 1 of 3
+                {institutionData?.source || "AA institution registry"}
               </span>
             </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {BANK_OPTIONS.map((bank) => {
-                const selected = bank.id === selectedBankId;
-                return (
-                  <button
-                    key={bank.id}
-                    type="button"
-                    onClick={() => setSelectedBankId(bank.id)}
-                    className={`flex items-center gap-3 rounded-xl border p-3 text-left transition-colors ${
-                      selected
-                        ? "border-primary/45 bg-primary/10"
-                        : "border-border bg-background/70 hover:border-primary/25 hover:bg-surface-raised"
-                    }`}
-                  >
-                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-border bg-surface-raised text-[10px] font-black text-foreground">
-                      {bank.short}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate text-[12px] font-semibold text-foreground">{bank.name}</span>
-                      <span className="mt-0.5 block text-[10px] text-muted-foreground">Savings / current account</span>
-                    </span>
-                    {selected ? <CheckCircle2 className="ml-auto h-4 w-4 shrink-0 text-primary" /> : null}
-                  </button>
-                );
-              })}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search bank or financial institution"
+                className="h-10 pl-9 text-[12px]"
+              />
             </div>
+            <div className="max-h-64 space-y-2 overflow-y-auto rounded-xl border border-border bg-background/70 p-2">
+              {isLoading ? (
+                <RegistryState icon={<Clock3 className="h-4 w-4" />} title="Loading institution registry" body="Fetching supported Account Aggregator institutions." />
+              ) : isError ? (
+                <RegistryState icon={<AlertCircle className="h-4 w-4" />} title="Registry unavailable" body="Institution registry could not be loaded. Try again after checking backend connectivity." />
+              ) : filteredInstitutions.length === 0 ? (
+                <RegistryState icon={<Search className="h-4 w-4" />} title="No institution found" body="Try searching by full bank name, short name, or institution type." />
+              ) : (
+                filteredInstitutions.map((institution) => {
+                  const selected = institution.id === (selectedBank?.id || selectedBankId);
+                  return (
+                    <button
+                      key={institution.id}
+                      type="button"
+                      onClick={() => setSelectedBankId(institution.id)}
+                      className={`flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors ${
+                        selected
+                          ? "border-primary/45 bg-primary/10"
+                          : "border-transparent bg-surface/70 hover:border-primary/25 hover:bg-surface-raised"
+                      }`}
+                    >
+                      <InstitutionIcon institution={institution} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[12px] font-semibold text-foreground">{institution.name}</span>
+                        <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                          {institution.type || "Bank"} · {institution.regulator || "RBI"} · {institution.status || "Available"}
+                        </span>
+                      </span>
+                      {selected ? <CheckCircle2 className="ml-auto h-4 w-4 shrink-0 text-primary" /> : null}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+            <p className="text-[10px] leading-relaxed text-muted-foreground">
+              Source: {institutionData?.source || "AA institution registry"}
+              {institutionData?.source_url ? ` · ${institutionData.source_url}` : ""}
+            </p>
           </div>
 
           <div className="rounded-xl border border-border bg-background/70 p-4">
@@ -154,7 +212,7 @@ export function BankConsentDialog({
                   <ConsentFact label="Purpose" value="Verify transactions for budgeting and runway insights" />
                   <ConsentFact label="Data type" value="Deposit account transactions only" />
                   <ConsentFact label="Access" value="Read-only; PocketBuddy cannot move money" />
-                  <ConsentFact label="Bank selected" value={selectedBank.name} />
+                  <ConsentFact label="Bank selected" value={selectedBank?.name || "Select a bank above"} />
                 </div>
 
                 <div className="mt-4 space-y-2">
@@ -214,12 +272,40 @@ export function BankConsentDialog({
           <Button variant="outline" className="h-9 text-xs" disabled={busy} onClick={() => onOpenChange(false)}>
             Do this later
           </Button>
-          <Button className="h-9 text-xs" disabled={busy} onClick={submitConsent}>
+          <Button className="h-9 text-xs" disabled={busy || !selectedBank} onClick={submitConsent}>
             {busy ? "Starting consent..." : "Continue to consent"}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function InstitutionIcon({ institution }: { institution: AAInstitution }) {
+  const label = (institution.short_name || institution.name.slice(0, 3)).toUpperCase();
+  if (institution.logo_url) {
+    return (
+      <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-lg border border-border bg-white">
+        <img src={institution.logo_url} alt="" className="h-full w-full object-contain p-1.5" />
+      </span>
+    );
+  }
+  return (
+    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-border bg-surface-raised text-[10px] font-black text-foreground">
+      {label.slice(0, 4)}
+    </span>
+  );
+}
+
+function RegistryState({ icon, title, body }: { icon: ReactNode; title: string; body: string }) {
+  return (
+    <div className="flex items-start gap-3 rounded-lg bg-surface/70 p-3">
+      <div className="mt-0.5 text-muted-foreground">{icon}</div>
+      <div>
+        <p className="text-[12px] font-semibold text-foreground">{title}</p>
+        <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">{body}</p>
+      </div>
+    </div>
   );
 }
 

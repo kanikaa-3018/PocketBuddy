@@ -68,6 +68,7 @@ type DataConsent = {
   provider_label?: string;
   financial_institution_code?: string;
   financial_institution_name?: string;
+  financial_institution_short_name?: string;
   trust_framework?: string;
   purpose?: string;
   data_categories?: string[];
@@ -307,6 +308,7 @@ function PrivacyPage() {
           aa_handle: payload?.aaHandle || null,
           bank_code: payload?.bankCode,
           bank_name: payload?.bankName,
+          bank_short_name: payload?.bankShortName,
         },
       });
       await refreshAA();
@@ -551,32 +553,60 @@ function PrivacyPage() {
           </Card>
         </section>
 
-        {/* Consent Ledger */}
-        <section>
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <p className="text-[10px] font-bold tracking-[0.18em] uppercase text-muted-foreground">
-              Consent Ledger
-            </p>
-            <Badge variant="outline" className="text-[10px] text-muted-foreground">
-              {consentLedgerRows.length || 0} source{consentLedgerRows.length === 1 ? "" : "s"}
+        {/* Data Sources */}
+        <section className="space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-bold tracking-[0.18em] uppercase text-muted-foreground">
+                Data Sources
+              </p>
+              <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                These are separate ways PocketBuddy can learn about transactions. Bank consent is verified and read-only; phone sync is optional on-device parsing.
+              </p>
+            </div>
+            <Badge variant="outline" className="shrink-0 text-[10px] text-muted-foreground">
+              {consentLedgerRows.length || 0} connected
             </Badge>
           </div>
-          <Card className="overflow-hidden">
-            {consentLedgerRows.length === 0 ? (
-              <div className="p-5 text-center">
-                <p className="text-[13px] font-semibold text-foreground">No data source connected yet</p>
-                <p className="mx-auto mt-1 max-w-sm text-[11px] leading-relaxed text-muted-foreground">
-                  Connect a bank source or phone sync when you want PocketBuddy to track payments automatically.
-                </p>
-              </div>
-            ) : (
-              <div className="divide-y divide-border">
-                {consentLedgerRows.slice(0, 4).map((consent, index) => (
-                  <ConsentLedgerRow key={consent.id || `${consent.source}-${index}`} consent={consent} />
-                ))}
-              </div>
-            )}
-          </Card>
+
+          <div className="grid gap-3 lg:grid-cols-2">
+            <ConsentSourceCard
+              icon={<ShieldCheck className="h-4 w-4" />}
+              title="Bank consent"
+              subtitle="Account Aggregator"
+              description="Use this when you want verified bank-source transactions. It is read-only, consent-based, and does not require bank passwords."
+              status={aaTrustStatus}
+              actionLabel={bankConsentCanStart ? "Connect bank" : currentAAConsent ? "Review consent" : "Unavailable"}
+              onAction={bankConsentCanStart ? () => setBankConsentDialogOpen(true) : focusBankConsentCard}
+              actionDisabled={!bankConsentCanStart && !currentAAConsent}
+            >
+              {aaConsents.length ? (
+                aaConsents.slice(0, 2).map((consent, index) => (
+                  <ConsentLedgerRow key={consent.id || `aa-${index}`} consent={consent} compact />
+                ))
+              ) : (
+                <EmptySourceState text="No bank consent has been started yet." />
+              )}
+            </ConsentSourceCard>
+
+            <ConsentSourceCard
+              icon={<Smartphone className="h-4 w-4" />}
+              title="Phone auto-sync"
+              subtitle="Android connector"
+              description="Use this for practical UPI alert tracking. Parsing happens on the phone and PocketBuddy receives structured transaction fields."
+              status={profile?.companion_paired ? (syncEnabled ? "Active" : "Paused") : "Optional"}
+              actionLabel="Manage sync"
+              onAction={() => nav({ to: "/companion" })}
+            >
+              {androidConsents.length ? (
+                androidConsents.slice(0, 2).map((consent, index) => (
+                  <ConsentLedgerRow key={consent.id || `android-${index}`} consent={consent} compact />
+                ))
+              ) : (
+                <EmptySourceState text="No phone connector has synced yet." />
+              )}
+            </ConsentSourceCard>
+          </div>
         </section>
 
         {/* Bank Consent */}
@@ -1293,7 +1323,71 @@ function SourceRow({
   );
 }
 
-function ConsentLedgerRow({ consent }: { consent: DataConsent }) {
+function ConsentSourceCard({
+  icon,
+  title,
+  subtitle,
+  description,
+  status,
+  actionLabel,
+  onAction,
+  actionDisabled,
+  children,
+}: {
+  icon: ReactNode;
+  title: string;
+  subtitle: string;
+  description: string;
+  status: string;
+  actionLabel: string;
+  onAction: () => void;
+  actionDisabled?: boolean;
+  children: ReactNode;
+}) {
+  const active = ["Active", "Ready", "Pending"].includes(status);
+  return (
+    <Card className="overflow-hidden bg-surface-raised">
+      <div className="border-b border-border p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 gap-3">
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+              {icon}
+            </div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-[13px] font-semibold text-foreground">{title}</p>
+                <Badge
+                  variant="outline"
+                  className={`text-[9px] ${active ? "border-success/35 text-success" : "text-muted-foreground"}`}
+                >
+                  {status}
+                </Badge>
+              </div>
+              <p className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+                {subtitle}
+              </p>
+            </div>
+          </div>
+          <Button variant="outline" size="sm" className="h-8 shrink-0 text-xs" disabled={actionDisabled} onClick={onAction}>
+            {actionLabel}
+          </Button>
+        </div>
+        <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">{description}</p>
+      </div>
+      <div className="divide-y divide-border">{children}</div>
+    </Card>
+  );
+}
+
+function EmptySourceState({ text }: { text: string }) {
+  return (
+    <div className="p-4">
+      <p className="text-[11px] leading-relaxed text-muted-foreground">{text}</p>
+    </div>
+  );
+}
+
+function ConsentLedgerRow({ consent, compact = false }: { consent: DataConsent; compact?: boolean }) {
   const categories = consent.data_categories?.length
     ? consent.data_categories.map((category) => category.replace(/_/g, " ")).join(", ")
     : "Structured transaction fields";
@@ -1304,9 +1398,14 @@ function ConsentLedgerRow({ consent }: { consent: DataConsent }) {
     ? consent.financial_institution_name || consent.provider_label || "Bank consent"
     : consent.device_name || "PocketBuddy Android Connector";
   const purpose = consent.purpose || (isBankConsent ? "verified bank-source tracking" : "instant payment tracking");
+  const rawPolicy = isBankConsent
+    ? "Encrypted bank data only"
+    : consent.raw_text_policy === "not_required_for_v2"
+      ? "Not required for v2"
+      : consent.raw_text_policy || "Masked only";
 
   return (
-    <div className="p-4">
+    <div className={compact ? "p-3" : "p-4"}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -1317,7 +1416,7 @@ function ConsentLedgerRow({ consent }: { consent: DataConsent }) {
               {status}
             </Badge>
           </div>
-          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground line-clamp-2">
             Purpose: {purpose}. Fields: {categories}.
           </p>
         </div>
@@ -1326,13 +1425,13 @@ function ConsentLedgerRow({ consent }: { consent: DataConsent }) {
             Raw text policy
           </p>
           <p className="mt-0.5 text-[11px] font-semibold text-foreground">
-            {consent.raw_text_policy === "not_required_for_v2" ? "Not required for v2" : consent.raw_text_policy || "Masked only"}
+            {rawPolicy}
           </p>
         </div>
       </div>
       <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
         <span className="rounded-full border border-border bg-surface px-2 py-1">
-          Source: Android connector
+          Source: {isBankConsent ? "Account Aggregator" : "Android connector"}
         </span>
         <span className="rounded-full border border-border bg-surface px-2 py-1">
           {lastActivity ? `Last activity ${relativeTime(lastActivity)}` : "No activity yet"}

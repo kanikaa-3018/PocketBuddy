@@ -105,6 +105,7 @@ function Onboarding() {
           aa_handle: payload.aaHandle || null,
           bank_code: payload.bankCode,
           bank_name: payload.bankName,
+          bank_short_name: payload.bankShortName,
         },
       });
       await updateProfile({

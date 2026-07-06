@@ -47,4 +47,5 @@ class Settings(BaseSettings):
     AA_CLIENT_SECRET: str = ""
     AA_FIU_ID: str = ""
     AA_CALLBACK_SECRET: str = ""
+    AA_INSTITUTION_REGISTRY_URL: str = ""
 settings = Settings()

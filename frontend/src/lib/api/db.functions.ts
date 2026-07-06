@@ -190,6 +190,11 @@ export async function getAccountAggregatorStatus() {
   return apiRequest("/api/account-aggregator/status");
 }
 
+export async function getAccountAggregatorInstitutions(q = "") {
+  const qs = q.trim() ? `?q=${encodeURIComponent(q.trim())}` : "";
+  return apiRequest(`/api/account-aggregator/institutions${qs}`);
+}
+
 export async function startAccountAggregatorSandboxConsent({ data }: { data?: any } = {}) {
   return apiRequest("/api/account-aggregator/sandbox/consents", {
     method: "POST",

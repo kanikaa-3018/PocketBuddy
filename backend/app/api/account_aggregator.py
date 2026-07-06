@@ -1,8 +1,10 @@
 import datetime
+import json
 import uuid
 from typing import Literal, Optional
+from urllib.request import Request as UrlRequest, urlopen
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
@@ -22,11 +24,51 @@ AA_DATA_CATEGORIES = [
     "masked_account_reference",
 ]
 
+AA_REGISTRY_REFERENCE_URL = "https://sahamati.org.in/fip-aa-mapping/"
+DEFAULT_AA_INSTITUTIONS = [
+    {"id": "sbi", "name": "State Bank of India", "short_name": "SBI", "type": "Bank", "regulator": "RBI", "status": "Live"},
+    {"id": "hdfc", "name": "HDFC Bank", "short_name": "HDFC", "type": "Bank", "regulator": "RBI", "status": "Live"},
+    {"id": "icici", "name": "ICICI Bank", "short_name": "ICICI", "type": "Bank", "regulator": "RBI", "status": "Live"},
+    {"id": "axis", "name": "Axis Bank", "short_name": "AXIS", "type": "Bank", "regulator": "RBI", "status": "Live"},
+    {"id": "kotak", "name": "Kotak Mahindra Bank", "short_name": "KOTAK", "type": "Bank", "regulator": "RBI", "status": "Live"},
+    {"id": "pnb", "name": "Punjab National Bank", "short_name": "PNB", "type": "Bank", "regulator": "RBI", "status": "Live"},
+    {"id": "bob", "name": "Bank of Baroda", "short_name": "BOB", "type": "Bank", "regulator": "RBI", "status": "Live"},
+    {"id": "canara", "name": "Canara Bank", "short_name": "CAN", "type": "Bank", "regulator": "RBI", "status": "Live"},
+    {"id": "union-bank", "name": "Union Bank of India", "short_name": "UBI", "type": "Bank", "regulator": "RBI", "status": "Live"},
+    {"id": "indian-bank", "name": "Indian Bank", "short_name": "IB", "type": "Bank", "regulator": "RBI", "status": "Live"},
+    {"id": "bank-of-india", "name": "Bank of India", "short_name": "BOI", "type": "Bank", "regulator": "RBI", "status": "Live"},
+    {"id": "central-bank", "name": "Central Bank of India", "short_name": "CBI", "type": "Bank", "regulator": "RBI", "status": "Live"},
+    {"id": "idfc-first", "name": "IDFC FIRST Bank", "short_name": "IDFC", "type": "Bank", "regulator": "RBI", "status": "Live"},
+    {"id": "yes-bank", "name": "YES Bank", "short_name": "YES", "type": "Bank", "regulator": "RBI", "status": "Live"},
+    {"id": "indusind", "name": "IndusInd Bank", "short_name": "IIB", "type": "Bank", "regulator": "RBI", "status": "Live"},
+    {"id": "federal", "name": "Federal Bank", "short_name": "FED", "type": "Bank", "regulator": "RBI", "status": "Live"},
+    {"id": "rbl", "name": "RBL Bank", "short_name": "RBL", "type": "Bank", "regulator": "RBI", "status": "Live"},
+    {"id": "bandhan", "name": "Bandhan Bank", "short_name": "BDN", "type": "Bank", "regulator": "RBI", "status": "Live"},
+    {"id": "idbi", "name": "IDBI Bank", "short_name": "IDBI", "type": "Bank", "regulator": "RBI", "status": "Live"},
+    {"id": "bank-of-maharashtra", "name": "Bank of Maharashtra", "short_name": "BOM", "type": "Bank", "regulator": "RBI", "status": "Live"},
+    {"id": "uco", "name": "UCO Bank", "short_name": "UCO", "type": "Bank", "regulator": "RBI", "status": "Live"},
+    {"id": "iob", "name": "Indian Overseas Bank", "short_name": "IOB", "type": "Bank", "regulator": "RBI", "status": "Live"},
+    {"id": "south-indian", "name": "South Indian Bank", "short_name": "SIB", "type": "Bank", "regulator": "RBI", "status": "Live"},
+    {"id": "city-union", "name": "City Union Bank", "short_name": "CUB", "type": "Bank", "regulator": "RBI", "status": "Live"},
+    {"id": "karur-vysya", "name": "Karur Vysya Bank", "short_name": "KVB", "type": "Bank", "regulator": "RBI", "status": "Live"},
+    {"id": "karnataka", "name": "Karnataka Bank", "short_name": "KBL", "type": "Bank", "regulator": "RBI", "status": "Live"},
+    {"id": "dcb", "name": "DCB Bank", "short_name": "DCB", "type": "Bank", "regulator": "RBI", "status": "Live"},
+    {"id": "csb", "name": "CSB Bank", "short_name": "CSB", "type": "Bank", "regulator": "RBI", "status": "Live"},
+    {"id": "tmb", "name": "Tamilnad Mercantile Bank", "short_name": "TMB", "type": "Bank", "regulator": "RBI", "status": "Live"},
+    {"id": "j-and-k", "name": "Jammu & Kashmir Bank", "short_name": "JKB", "type": "Bank", "regulator": "RBI", "status": "Live"},
+    {"id": "equitas", "name": "Equitas Small Finance Bank", "short_name": "EQX", "type": "Small Finance Bank", "regulator": "RBI", "status": "Live"},
+    {"id": "au-small-finance", "name": "AU Small Finance Bank", "short_name": "AU", "type": "Small Finance Bank", "regulator": "RBI", "status": "Live"},
+    {"id": "ujjivan", "name": "Ujjivan Small Finance Bank", "short_name": "UJV", "type": "Small Finance Bank", "regulator": "RBI", "status": "Live"},
+    {"id": "airtel-payments", "name": "Airtel Payments Bank", "short_name": "APB", "type": "Payments Bank", "regulator": "RBI", "status": "Live-enabled"},
+    {"id": "nsdl-payments", "name": "NSDL Payments Bank", "short_name": "NSDL", "type": "Payments Bank", "regulator": "RBI", "status": "Live"},
+]
+
 
 class AASandboxConsentReq(BaseModel):
     aa_handle: Optional[str] = Field(default=None, max_length=120)
     bank_code: Optional[str] = Field(default=None, max_length=60)
     bank_name: Optional[str] = Field(default=None, max_length=120)
+    bank_short_name: Optional[str] = Field(default=None, max_length=24)
     purpose: str = Field(default=DEFAULT_AA_PURPOSE, max_length=180)
     requested_range_days: int = Field(default=30, ge=1, le=365)
     fi_types: list[str] = Field(default_factory=lambda: ["DEPOSIT"])
@@ -51,6 +93,53 @@ def provider_missing_env() -> list[str]:
         if not getattr(settings, key, ""):
             missing.append(key)
     return missing
+
+
+def normalize_institution(row: dict) -> dict:
+    name = str(row.get("name") or row.get("institution_name") or row.get("fip_name") or "").strip()
+    short_name = str(row.get("short_name") or row.get("short") or row.get("code") or "").strip()
+    institution_id = str(row.get("id") or row.get("fip_id") or row.get("entity_id") or "").strip()
+    if not institution_id and name:
+        institution_id = name.lower().replace("&", "and").replace(".", "").replace(" ", "-")
+    if not short_name and name:
+        short_name = "".join(part[0] for part in name.replace("&", " ").split()[:4]).upper()
+    return {
+        "id": institution_id,
+        "name": name,
+        "short_name": short_name[:8],
+        "type": row.get("type") or row.get("category") or "Bank",
+        "regulator": row.get("regulator") or "RBI",
+        "status": row.get("status") or row.get("stage") or "Available",
+        "logo_url": row.get("logo_url") or row.get("logoUrl"),
+    }
+
+
+def load_external_institution_registry() -> tuple[list[dict], str] | None:
+    registry_url = (settings.AA_INSTITUTION_REGISTRY_URL or "").strip()
+    if not registry_url:
+        return None
+    try:
+        req = UrlRequest(registry_url, headers={"User-Agent": "PocketBuddy-AA-Registry/1.0"})
+        with urlopen(req, timeout=4) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        rows = payload.get("institutions") if isinstance(payload, dict) else payload
+        if not isinstance(rows, list):
+            return None
+        institutions = [normalize_institution(row) for row in rows if isinstance(row, dict)]
+        institutions = [row for row in institutions if row["id"] and row["name"]]
+        if not institutions:
+            return None
+        return institutions, registry_url
+    except Exception:
+        return None
+
+
+def aa_institution_registry() -> tuple[list[dict], str, str]:
+    external = load_external_institution_registry()
+    if external:
+        institutions, registry_url = external
+        return institutions, "Configured AA institution registry", registry_url
+    return DEFAULT_AA_INSTITUTIONS, "AA institution registry snapshot", AA_REGISTRY_REFERENCE_URL
 
 
 def aa_runtime_state() -> dict:
@@ -226,6 +315,26 @@ async def get_aa_status(user_id: str = Depends(get_current_user)):
     }
 
 
+@router.get("/institutions")
+async def get_aa_institutions(q: str = Query(default="", max_length=80), user_id: str = Depends(get_current_user)):
+    institutions_list, source_label, source_url = aa_institution_registry()
+    query = q.strip().lower()
+    if query:
+        institutions_list = [
+            row
+            for row in institutions_list
+            if query in row["name"].lower()
+            or query in row.get("short_name", "").lower()
+            or query in row.get("type", "").lower()
+        ]
+    return {
+        "source": source_label,
+        "source_url": source_url,
+        "updated_hint": "Use AA_INSTITUTION_REGISTRY_URL to connect a provider-backed registry.",
+        "institutions": institutions_list[:150],
+    }
+
+
 @router.post("/sandbox/consents")
 async def start_sandbox_consent(req: AASandboxConsentReq, user_id: str = Depends(get_current_user)):
     ensure_local_sandbox_enabled()
@@ -265,6 +374,7 @@ async def start_sandbox_consent(req: AASandboxConsentReq, user_id: str = Depends
         "provider_label": req.bank_name or "Bank consent",
         "financial_institution_code": req.bank_code,
         "financial_institution_name": req.bank_name,
+        "financial_institution_short_name": req.bank_short_name,
         "trust_framework": "RBI Account Aggregator",
         "status": "pending",
         "aa_status": "PENDING",
@@ -294,6 +404,7 @@ async def start_sandbox_consent(req: AASandboxConsentReq, user_id: str = Depends
             "requested_range_days": req.requested_range_days,
             "bank_code": req.bank_code,
             "bank_name": req.bank_name,
+            "bank_short_name": req.bank_short_name,
         },
     )
     return {
