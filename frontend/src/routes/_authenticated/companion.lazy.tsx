@@ -55,6 +55,18 @@ function randomPairingCode() {
   return s;
 }
 
+function maskMiddle(value: string, visibleStart = 6, visibleEnd = 4) {
+  if (!value) return "";
+  if (value.length <= visibleStart + visibleEnd) return "••••";
+  return `${value.slice(0, visibleStart)}••••${value.slice(-visibleEnd)}`;
+}
+
+function maskEmail(value: string) {
+  const [name, domain] = value.split("@");
+  if (!name || !domain) return maskMiddle(value, 3, 2);
+  return `${maskMiddle(name, 2, 1)}@${domain}`;
+}
+
 function CompanionPage() {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -98,14 +110,24 @@ function CompanionPage() {
 
   function makeConnectorConfig(pairingCode: string) {
     return [
-    `POCKETBUDDY_WEBHOOK_URL=${companionWebhookUrl}`,
+      `POCKETBUDDY_WEBHOOK_URL=${companionWebhookUrl}`,
       `POCKETBUDDY_WEBHOOK_TOKEN=${pairingCode}`,
-    `POCKETBUDDY_USER_ID=${user?.id ?? ""}`,
-    `POCKETBUDDY_ACCOUNT_EMAIL=${user?.email ?? ""}`,
+      `POCKETBUDDY_USER_ID=${user?.id ?? ""}`,
+      `POCKETBUDDY_ACCOUNT_EMAIL=${user?.email ?? ""}`,
+    ].join("\n");
+  }
+
+  function makeDisplayConnectorConfig(pairingCode: string) {
+    return [
+      `POCKETBUDDY_WEBHOOK_URL=${companionWebhookUrl}`,
+      `POCKETBUDDY_WEBHOOK_TOKEN=${maskMiddle(pairingCode, 3, 2)}`,
+      `POCKETBUDDY_USER_ID=${maskMiddle(user?.id ?? "", 6, 4)}`,
+      `POCKETBUDDY_ACCOUNT_EMAIL=${maskEmail(user?.email ?? "")}`,
     ].join("\n");
   }
 
   const connectorConfig = makeConnectorConfig(pairingForDisplay);
+  const displayConnectorConfig = makeDisplayConnectorConfig(pairingForDisplay);
 
   useEffect(() => {
     if (profile?.pairing_code) setPairing(profile.pairing_code);
@@ -308,8 +330,8 @@ function CompanionPage() {
                 </Button>
               </div>
               <details className="mt-3 rounded-md bg-surface p-3 text-left text-xs text-muted-foreground">
-                <summary className="cursor-pointer font-semibold text-foreground">Show copied values</summary>
-                <pre className="mt-3 overflow-x-auto leading-5">{connectorConfig}</pre>
+                <summary className="cursor-pointer font-semibold text-foreground">Show setup values (masked)</summary>
+                <pre className="mt-3 overflow-x-auto leading-5">{displayConnectorConfig}</pre>
               </details>
             </Card>
 
@@ -405,8 +427,8 @@ function CompanionPage() {
                 </Button>
               </div>
               <details className="mt-3 rounded-md bg-surface p-3 text-left text-xs text-muted-foreground">
-                <summary className="cursor-pointer font-semibold text-foreground">Show copied values</summary>
-                <pre className="mt-3 overflow-x-auto leading-5">{connectorConfig}</pre>
+                <summary className="cursor-pointer font-semibold text-foreground">Show setup values (masked)</summary>
+                <pre className="mt-3 overflow-x-auto leading-5">{displayConnectorConfig}</pre>
               </details>
             </Card>
 

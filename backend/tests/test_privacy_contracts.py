@@ -2,12 +2,16 @@ import datetime
 import os
 import unittest
 
-os.environ.setdefault("JWT_SECRET", "test-secret")
+import jwt
+from fastapi.testclient import TestClient
+
+os.environ["JWT_SECRET"] = "test-secret-for-privacy-contracts-minimum-32-bytes"
 os.environ.setdefault("MONGO_URI", "mongodb://localhost:27017")
 
 from app.api.account_aggregator import aa_runtime_state, build_sandbox_records
+from app.api.auth import create_session_token
 from app.api.webhook import build_android_consent_id, clean_confidence
-from app.core.config import settings
+from app.core.config import Settings, settings
 from app.main import app
 
 
@@ -21,6 +25,8 @@ class PrivacyContractTests(unittest.TestCase):
             "AA_CLIENT_SECRET": settings.AA_CLIENT_SECRET,
             "AA_FIU_ID": settings.AA_FIU_ID,
             "AA_CALLBACK_SECRET": settings.AA_CALLBACK_SECRET,
+            "DEMO_PHONE_AUTH_ENABLED": settings.DEMO_PHONE_AUTH_ENABLED,
+            "ACCESS_TOKEN_EXPIRE_MINUTES": settings.ACCESS_TOKEN_EXPIRE_MINUTES,
         }
 
     def tearDown(self):
@@ -72,6 +78,27 @@ class PrivacyContractTests(unittest.TestCase):
 
         self.assertIn("/api/ingest/notification-v2", paths)
         self.assertIn("/api/ingest/notification", paths)
+
+    def test_demo_phone_auth_is_disabled_by_default(self):
+        self.assertFalse(Settings.model_fields["DEMO_PHONE_AUTH_ENABLED"].default)
+
+    def test_phone_login_blocks_when_demo_mode_is_off(self):
+        settings.DEMO_PHONE_AUTH_ENABLED = False
+
+        response = TestClient(app).post("/api/auth/login/phone", json={"phone": "+919876543210"})
+
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("disabled", response.json()["detail"])
+
+    def test_auth_tokens_include_expiration(self):
+        settings.ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+        token = create_session_token("user-1")
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])
+
+        self.assertEqual(payload["userId"], "user-1")
+        self.assertIn("iat", payload)
+        self.assertIn("exp", payload)
 
     def test_connector_privacy_helpers_are_stable(self):
         self.assertEqual(clean_confidence("HIGH"), "high")

@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     # Frontend base URL (change to deployed URL in production)
     FRONTEND_BASE_URL: str = "http://localhost:5173"
 
+    # Demo-only phone auth is disabled by default because the current phone
+    # path does not integrate a real OTP provider. Email/password remains the
+    # normal local/dev auth flow.
+    DEMO_PHONE_AUTH_ENABLED: bool = False
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080
+
     # Account Aggregator sandbox integration. Disabled by default so the app
     # never pretends to verify live bank data without explicit configuration.
     AA_SANDBOX_ENABLED: bool = False

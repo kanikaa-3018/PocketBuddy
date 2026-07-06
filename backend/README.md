@@ -75,6 +75,19 @@ $ADB = "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"
 & $ADB -s <device-id> reverse tcp:8000 tcp:8000
 ```
 
+## Auth Privacy Defaults
+
+Email/password auth is the default local/dev login path.
+
+The phone login route is a demo placeholder unless a real OTP provider is integrated, so it is disabled by default:
+
+```env
+DEMO_PHONE_AUTH_ENABLED=false
+ACCESS_TOKEN_EXPIRE_MINUTES=10080
+```
+
+Only set `DEMO_PHONE_AUTH_ENABLED=true` for an explicit demo environment where that tradeoff is understood. Do not use it as a production phone verification flow.
+
 ## Account Aggregator Sandbox
 
 AA sandbox support is disabled by default and must be explicitly enabled:

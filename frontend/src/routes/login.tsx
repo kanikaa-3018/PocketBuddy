@@ -22,6 +22,8 @@ export const Route = createFileRoute("/login")({
 type Mode = "signin" | "signup";
 type Tab = "email" | "phone";
 
+const PHONE_DEMO_AUTH_ENABLED = import.meta.env.VITE_DEMO_PHONE_AUTH_ENABLED === "true";
+
 function LoginPage() {
   const nav = useNavigate();
   const { session, loading, login } = useAuth();
@@ -36,6 +38,7 @@ function LoginPage() {
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState("");
   const [busy, setBusy] = useState(false);
+  const activeTab: Tab = PHONE_DEMO_AUTH_ENABLED ? tab : "email";
 
   useEffect(() => {
     setMounted(true);
@@ -83,6 +86,10 @@ function LoginPage() {
   }
 
   async function handlePhone() {
+    if (!PHONE_DEMO_AUTH_ENABLED) {
+      toast.error("Phone sign-in is not configured. Use email/password login.");
+      return;
+    }
     if (!phone || phone.length < 10) {
       toast.error("Enter a valid phone number");
       return;
@@ -173,21 +180,27 @@ function LoginPage() {
           </p>
         </div>
 
-        <div className="flex bg-surface-raised border border-border rounded-full p-1 max-w-[200px] mx-auto text-[10px] font-bold uppercase tracking-wider">
+        <div
+          className={`flex bg-surface-raised border border-border rounded-full p-1 mx-auto text-[10px] font-bold uppercase tracking-wider ${
+            PHONE_DEMO_AUTH_ENABLED ? "max-w-[200px]" : "max-w-[112px]"
+          }`}
+        >
           <button
             id="tab-login-email"
             onClick={() => setTab("email")}
-            className={`flex-1 py-1.5 rounded-full transition-all duration-150 cursor-pointer ${tab === "email" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+            className={`flex-1 py-1.5 rounded-full transition-all duration-150 cursor-pointer ${activeTab === "email" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
           >
             Email
           </button>
-          <button
-            id="tab-login-phone"
-            onClick={() => setTab("phone")}
-            className={`flex-1 py-1.5 rounded-full transition-all duration-150 cursor-pointer ${tab === "phone" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-          >
-            Phone
-          </button>
+          {PHONE_DEMO_AUTH_ENABLED && (
+            <button
+              id="tab-login-phone"
+              onClick={() => setTab("phone")}
+              className={`flex-1 py-1.5 rounded-full transition-all duration-150 cursor-pointer ${activeTab === "phone" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Phone
+            </button>
+          )}
         </div>
 
         <div className="mt-8 space-y-4">
@@ -203,7 +216,7 @@ function LoginPage() {
               />
             </div>
           )}
-          {tab === "email" ? (
+          {activeTab === "email" ? (
             <>
               <div className="space-y-1">
                 <label className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest pl-1">Email Address</label>
@@ -281,7 +294,7 @@ function LoginPage() {
         <div className="mt-6">
           <Button
             id={mode === "signup" ? "btn-create-account" : "btn-sign-in"}
-            onClick={tab === "email" ? handleEmail : handlePhone}
+            onClick={activeTab === "email" ? handleEmail : handlePhone}
             disabled={busy}
             className="w-full h-10 bg-foreground text-background font-black uppercase tracking-wider text-xs shadow-md transition-all duration-150 relative flex items-center justify-center cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -292,7 +305,7 @@ function LoginPage() {
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
                 <span>
-                  {tab === "phone" && !otpSent
+                  {activeTab === "phone" && !otpSent
                     ? "Sending..."
                     : mode === "signup"
                       ? "Creating Account..."
@@ -300,11 +313,11 @@ function LoginPage() {
                 </span>
               </div>
             ) : (
-              tab === "phone" && !otpSent
+              activeTab === "phone" && !otpSent
                 ? "Send OTP"
                 : mode === "signup"
                   ? "Create Account"
-                  : tab === "phone"
+                  : activeTab === "phone"
                     ? "Verify & Sign In"
                     : "Sign In"
             )}
