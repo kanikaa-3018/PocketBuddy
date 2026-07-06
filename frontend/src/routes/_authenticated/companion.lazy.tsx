@@ -287,7 +287,7 @@ function CompanionPage() {
                 </Button>
               ) : (
                 <div className="rounded-lg bg-card border border-border p-3 text-[11px] md:text-xs text-muted-foreground leading-normal">
-                  💡 <b>Opening this on Desktop?</b> Log in to PocketBuddy on your Android phone's web browser, navigate to settings/companion, and click this button to auto-configure instantly.
+                  <b>Opening this on desktop?</b> Log in to PocketBuddy on your Android phone, open Settings / Companion, then tap auto-configure.
                 </div>
               )}
             </Card>
@@ -374,7 +374,7 @@ function CompanionPage() {
                 </Button>
               ) : (
                 <div className="rounded-lg bg-card border border-border p-3 text-[11px] md:text-xs text-muted-foreground leading-normal">
-                  💡 <b>Opening this on Desktop?</b> Log in to PocketBuddy on your Android phone's web browser, navigate to settings/companion, and click this button to auto-configure instantly.
+                  <b>Opening this on desktop?</b> Log in to PocketBuddy on your Android phone, open Settings / Companion, then tap auto-configure.
                 </div>
               )}
             </Card>
@@ -544,12 +544,12 @@ function ConnectorTrustCard({
     (latestLog?.data_origin === "android_on_device" ? "android-v2" : "Awaiting first sync");
 
   return (
-    <Card className="border-primary/20 bg-primary/5 p-4">
+    <Card className="bg-surface-raised p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-primary" />
-            <p className="text-[13px] font-bold text-foreground">Privacy-safe connector</p>
+            <p className="text-[13px] font-semibold text-foreground">Privacy-safe connector</p>
           </div>
           <p className="mt-1 max-w-xl text-[12px] leading-relaxed text-muted-foreground">
             The connector is optional. It parses supported payment alerts on the phone and sends only transaction facts plus a masked preview.

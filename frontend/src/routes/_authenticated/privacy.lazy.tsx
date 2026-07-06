@@ -421,13 +421,13 @@ function PrivacyPage() {
           <p className="text-[10px] font-bold tracking-[0.18em] uppercase text-muted-foreground">
             Trust Layer
           </p>
-          <Card className="border-primary/20 bg-primary/5 p-4 sm:p-5">
+          <Card className="bg-surface-raised p-4 sm:p-5">
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <ShieldCheck className="h-4 w-4 text-primary shrink-0" />
-                    <p className="text-[14px] font-bold text-foreground">Privacy Trust Layer</p>
+                    <p className="text-[14px] font-semibold text-foreground">Privacy Trust Layer</p>
                   </div>
                   <p className="mt-1 max-w-xl text-[12px] leading-relaxed text-muted-foreground">
                     PocketBuddy can track payments without bank login, OTP, MPIN, or raw notification upload from the new connector flow.
@@ -506,27 +506,27 @@ function PrivacyPage() {
         </section>
 
         {/* Data minimization statement */}
-        <Card className="border-primary/20 bg-primary/5 p-5 space-y-2">
+        <Card className="bg-surface-raised p-5 space-y-2">
           <div className="flex items-center gap-2">
             <Lock className="h-4 w-4 text-primary shrink-0" />
-            <p className="text-[13px] font-bold text-foreground">How PocketBuddy handles your data</p>
+            <p className="text-[13px] font-semibold text-foreground">How PocketBuddy handles your data</p>
           </div>
           <ul className="space-y-1.5 text-[11px] text-muted-foreground leading-relaxed list-none">
             <li className="flex items-start gap-2">
-              <CheckCircle2 className="h-3.5 w-3.5 text-green-500 mt-0.5 shrink-0" />
-              Notification text is <b className="text-foreground">masked before storage</b> — only the amount and merchant are kept.
+              <CheckCircle2 className="h-3.5 w-3.5 text-success mt-0.5 shrink-0" />
+              New connector events store <b className="text-foreground">structured fields and a masked preview</b>, not raw alert text.
             </li>
             <li className="flex items-start gap-2">
-              <CheckCircle2 className="h-3.5 w-3.5 text-green-500 mt-0.5 shrink-0" />
-              Your raw notification bodies are <b className="text-foreground">never persisted</b> on any server.
+              <CheckCircle2 className="h-3.5 w-3.5 text-success mt-0.5 shrink-0" />
+              Legacy raw payloads are classified separately and stored only as masked previews.
             </li>
             <li className="flex items-start gap-2">
-              <CheckCircle2 className="h-3.5 w-3.5 text-green-500 mt-0.5 shrink-0" />
-              All data is scoped to your account — no cross-user analytics.
+              <CheckCircle2 className="h-3.5 w-3.5 text-success mt-0.5 shrink-0" />
+              Consent, sync state, and parser confidence are visible here.
             </li>
             <li className="flex items-start gap-2">
-              <CheckCircle2 className="h-3.5 w-3.5 text-green-500 mt-0.5 shrink-0" />
-              You can delete everything below with one click.
+              <CheckCircle2 className="h-3.5 w-3.5 text-success mt-0.5 shrink-0" />
+              You can pause sync, unpair the connector, clear logs, or delete account data.
             </li>
           </ul>
         </Card>
@@ -586,7 +586,7 @@ function PrivacyPage() {
             <div className="flex items-center justify-between gap-4 p-4 border-b border-border">
               <div className="flex items-center gap-3 min-w-0">
                 {syncEnabled ? (
-                  <Wifi className="h-4.5 w-4.5 text-green-500 shrink-0" />
+                  <Wifi className="h-4.5 w-4.5 text-success shrink-0" />
                 ) : (
                   <WifiOff className="h-4.5 w-4.5 text-muted-foreground shrink-0" />
                 )}
@@ -677,7 +677,7 @@ function PrivacyPage() {
           <Card className="overflow-hidden">
             {pendingTxns.length === 0 ? (
               <div className="py-10 flex flex-col items-center gap-2 text-center">
-                <CheckCircle2 className="h-8 w-8 text-green-500/60" />
+                <CheckCircle2 className="h-8 w-8 text-success/60" />
                 <p className="text-[13px] font-semibold text-foreground">All clear</p>
                 <p className="text-[11px] text-muted-foreground max-w-xs leading-relaxed">
                   No transactions are flagged for review. Low-confidence or incomplete transactions will appear here.
@@ -819,7 +819,7 @@ function PrivacyPage() {
                 <div className="flex items-start gap-3">
                   <XCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-[13px] font-bold text-foreground">Delete My Account & All Data</p>
+                    <p className="text-[13px] font-semibold text-foreground">Delete My Account & All Data</p>
                     <p className="text-[11px] text-muted-foreground leading-relaxed mt-1">
                       Permanently removes your profile, all transactions, subscriptions, companion logs, and cart pool data. <b className="text-destructive">This is irreversible.</b>
                     </p>
@@ -840,7 +840,7 @@ function PrivacyPage() {
               <div className="p-5 space-y-4">
                 <div className="rounded-lg bg-destructive/10 border border-destructive/25 p-3">
                   <p className="text-[12px] text-destructive font-semibold leading-relaxed">
-                    ⚠️ This will immediately and permanently delete everything tied to your account. Type <b>delete my account</b> below to confirm.
+                    This will immediately and permanently delete everything tied to your account. Type <b>delete my account</b> below to confirm.
                   </p>
                 </div>
                 <input
@@ -931,7 +931,7 @@ function AccountAggregatorSandboxCard({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-[14px] font-bold text-foreground">AA verification sandbox</p>
+              <p className="text-[14px] font-semibold text-foreground">AA verification sandbox</p>
               <Badge variant="outline" className={`text-[9px] ${aaStatusClass(runtimeStatus)}`}>
                 {humanAARuntimeStatus(runtimeStatus)}
               </Badge>
@@ -1114,7 +1114,7 @@ function humanAARuntimeStatus(status?: string) {
 }
 
 function aaStatusClass(status?: string) {
-  if (status === "sandbox_ready" || status === "provider_configured") return "border-green-500/35 text-green-500";
+  if (status === "sandbox_ready" || status === "provider_configured") return "border-success/35 text-success";
   if (status === "misconfigured") return "border-warning/40 text-warning";
   return "text-muted-foreground";
 }
@@ -1193,7 +1193,7 @@ function SourceRow({
           variant="outline"
           className={`shrink-0 text-[9px] ${
             active
-              ? "border-green-500/35 text-green-500"
+              ? "border-success/35 text-success"
               : paused
                 ? "border-warning/40 text-warning"
                 : "text-muted-foreground"
