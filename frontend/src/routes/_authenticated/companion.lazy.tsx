@@ -41,6 +41,8 @@ const ANDROID_APK_DOWNLOAD_URL =
   "https://d3g6cg7q9hn7hi.cloudfront.net/downloads/PocketBuddy-Connector-v0.1.0.apk";
 
 function getCompanionWebhookUrl() {
+  const configuredUrl = import.meta.env.VITE_CONNECTOR_WEBHOOK_URL?.trim();
+  if (configuredUrl) return configuredUrl;
   if (typeof window === "undefined") return LOCAL_WEBHOOK_URL;
 
   const { hostname, origin } = window.location;
@@ -241,9 +243,9 @@ function CompanionPage() {
     }
 
     if (copied) {
-      toast.success("Pairing token saved and Android config copied.");
+      toast.success("Fallback Android config copied.");
     } else {
-      toast.error("Failed to copy config. Please copy manually.");
+      toast.error("Failed to copy fallback config.");
     }
   }
 
@@ -282,7 +284,7 @@ function CompanionPage() {
                 UPI apps: {profile.upi_apps_used?.length ? profile.upi_apps_used.join(", ") : "-"}
               </p>
               <p className="mt-2 rounded-md bg-surface px-2.5 py-2 text-[12px] text-muted-foreground">
-                This phone is linked to your account. New supported payment alerts are parsed locally before sync.
+                This phone is linked to your account. Supported payment alerts are parsed on-device, then shown with a trust path in Transactions.
               </p>
             </Card>
 
@@ -299,7 +301,7 @@ function CompanionPage() {
                 <p className="text-[13px] font-bold text-foreground">One-Tap Auto Configure</p>
               </div>
               <p className="text-[12px] text-muted-foreground leading-relaxed">
-                Skip copying and pasting. Click below to automatically open the Android connector app and apply all configuration fields.
+                Open the connector and fill the server, account, and pairing fields from this signed-in session. No typing required.
               </p>
               {isAndroid ? (
                 <Button 
@@ -322,12 +324,12 @@ function CompanionPage() {
                 <div>
                   <p className="text-[13px] font-semibold">Pair another phone or reconnect</p>
                   <p className="mt-0.5 text-[12px] text-muted-foreground">
-                    Copy this config, paste it in the Android connector, then save it on the phone.
+                    Use only if one-tap setup is not available on the Android phone.
                   </p>
                 </div>
                 <Button variant="outline" size="sm" onClick={copyConnectorConfig}>
                   <Copy />
-                  Copy Android config
+                  Copy fallback config
                 </Button>
               </div>
               <details className="mt-3 rounded-md bg-surface p-3 text-left text-xs text-muted-foreground">
@@ -364,7 +366,7 @@ function CompanionPage() {
                 <div>
                   <p className="text-[14px] font-semibold">Android Connector</p>
                   <p className="mt-0.5 text-[12px] text-muted-foreground">
-                    Install the app once, copy the setup from here, then paste it in the phone app.
+                    Install the app once, then link this signed-in PocketBuddy account from the phone.
                   </p>
                 </div>
                 <Badge variant="outline" className="text-xs">
@@ -386,7 +388,7 @@ function CompanionPage() {
                 <p className="text-[13px] font-bold text-foreground">One-Tap Auto Configure</p>
               </div>
               <p className="text-[12px] text-muted-foreground leading-relaxed">
-                Skip copying and pasting. Click below to automatically open the Android connector app and apply all configuration fields.
+                Open the connector and fill the server, account, and pairing fields from this signed-in session. No typing required.
               </p>
               {isAndroid ? (
                 <Button 
@@ -407,24 +409,24 @@ function CompanionPage() {
             <div className="rounded-xl border border-border bg-surface-raised p-4 text-center">
               <p className="text-[13px] font-semibold text-foreground">No manual code required</p>
               <p className="mx-auto mt-1 max-w-sm text-[12px] leading-relaxed text-muted-foreground">
-                PocketBuddy creates a private setup key and includes it when you copy the Android config. You do not need to type or remember it.
+                PocketBuddy creates a private setup key and passes it through one-tap setup. You do not need to type or remember it.
               </p>
               <Badge variant={isPairingSaved ? "outline" : "secondary"} className="mt-2 text-[10px] md:text-xs">
-                {isPairingSaved ? "Setup key saved" : "Setup key will save before copy"}
+                {isPairingSaved ? "Setup key saved" : "Setup key will save before setup"}
               </Badge>
             </div>
 
             <Card className="bg-surface-raised p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-[13px] font-semibold">Connector config</p>
+                  <p className="text-[13px] font-semibold">Fallback manual config</p>
                   <p className="mt-0.5 text-[12px] text-muted-foreground">
-                    Tap copy, open the Android app, tap Paste config, then save.
+                    Use this only when the one-tap app link cannot open the connector.
                   </p>
                 </div>
                 <Button variant="outline" size="sm" onClick={copyConnectorConfig}>
                   <Copy />
-                  Copy Android config
+                  Copy fallback config
                 </Button>
               </div>
               <details className="mt-3 rounded-md bg-surface p-3 text-left text-xs text-muted-foreground">
@@ -508,7 +510,7 @@ function AndroidInstallGuideCard() {
             <p className="text-[14px] font-semibold text-foreground">Install PocketBuddy Connector</p>
           </div>
           <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
-            Download the Android connector, install it once, then paste the config from this page into the app.
+            Download the Android connector on the phone that receives UPI or SMS payment alerts. Pairing is handled from PocketBuddy web.
           </p>
         </div>
 
@@ -532,7 +534,7 @@ function AndroidInstallGuideCard() {
         </div>
         <div className="rounded-md border border-border bg-surface p-3">
           <p className="font-semibold text-foreground">3. Connect</p>
-          <p className="mt-1 leading-relaxed">Copy the Android config below, paste it in the connector, and enable notification access.</p>
+          <p className="mt-1 leading-relaxed">Open PocketBuddy on the phone, tap One-Tap Auto Configure, and enable notification access.</p>
         </div>
       </div>
 

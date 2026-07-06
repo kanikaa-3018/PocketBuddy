@@ -13,6 +13,8 @@ import { ShieldCheck, Smartphone } from "lucide-react";
 const LOCAL_WEBHOOK_URL = "http://127.0.0.1:8000/api/ingest/notification-v2";
 
 function getCompanionWebhookUrl() {
+  const configuredUrl = import.meta.env.VITE_CONNECTOR_WEBHOOK_URL?.trim();
+  if (configuredUrl) return configuredUrl;
   if (typeof window === "undefined") return LOCAL_WEBHOOK_URL;
   const { hostname, origin } = window.location;
   const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1";
@@ -714,13 +716,13 @@ function Onboarding() {
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-black text-primary">
                     2
                   </span>
-                  <span>On the next web page, tap <b className="text-foreground">Copy Android config</b>.</span>
+                  <span>On the Android phone, tap <b className="text-foreground">One-Tap Auto Configure</b> from PocketBuddy web.</span>
                 </li>
                 <li className="flex gap-3">
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-black text-primary">
                     3
                   </span>
-                  <span>In the Android app, tap <b className="text-foreground">Paste config</b>, then <b className="text-foreground">Save connector config</b>.</span>
+                  <span>The connector opens with the server, account, and pairing fields filled from this signed-in session.</span>
                 </li>
                 <li className="flex gap-3">
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-black text-primary">
@@ -745,7 +747,7 @@ function Onboarding() {
                   <p className="text-[13px] font-bold text-foreground">One-Tap Auto Configure</p>
                 </div>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  If you're on Android, tap the button below to instantly launch the connector app and apply all config fields automatically - no copy-paste needed.
+                  If you're on Android, tap the button below to launch the connector and link this account without typing any setup values.
                 </p>
                 {isAndroid ? (
                   <Button

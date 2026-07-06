@@ -92,28 +92,39 @@ class SetupActivity : Activity() {
                 if (::webhookTokenInput.isInitialized) {
                     webhookTokenInput.setText(webhookToken.orEmpty())
                 }
-                showPairingSuccessDialog(accountEmail ?: "PocketBuddy User")
+                showPairingSuccessDialog(accountEmail ?: "PocketBuddy User", autoFilled = true)
                 refreshStatus()
             }
         }
     }
 
-    private fun showPairingSuccessDialog(email: String) {
+    private fun showPairingSuccessDialog(email: String, autoFilled: Boolean) {
         runOnUiThread {
             if (!isFinishing && !isDestroyed) {
+                val setupText = if (autoFilled) {
+                    "The setup fields were filled automatically."
+                } else {
+                    "The setup fields were saved on this phone."
+                }
                 try {
                     android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Light_Dialog_Alert)
-                        .setTitle("Pairing Successful! 🎉")
-                        .setMessage("PocketBuddy Connector is now successfully linked to your account:\n\n$email\n\nIt will securely sync supported UPI notifications. Please ensure Notification Access is enabled.")
-                        .setPositiveButton("Awesome", null)
+                        .setTitle("Phone linked")
+                        .setMessage("PocketBuddy Connector is now linked to:\n\n$email\n\n$setupText Enable Notification Access next so supported payment alerts can be parsed on this phone.")
+                        .setPositiveButton("Open notification access") { _, _ ->
+                            startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                        }
+                        .setNegativeButton("Later", null)
                         .setCancelable(false)
                         .show()
                 } catch (e: Exception) {
                     // Fallback to simpler platform dialog if style resource is missing
                     android.app.AlertDialog.Builder(this)
-                        .setTitle("Pairing Successful! 🎉")
-                        .setMessage("PocketBuddy Connector is now linked to:\n\n$email")
-                        .setPositiveButton("Awesome", null)
+                        .setTitle("Phone linked")
+                        .setMessage("PocketBuddy Connector is now linked to:\n\n$email\n\n$setupText Enable Notification Access next to start optional on-device sync.")
+                        .setPositiveButton("Open notification access") { _, _ ->
+                            startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                        }
+                        .setNegativeButton("Later", null)
                         .show()
                 }
             }
@@ -142,7 +153,7 @@ class SetupActivity : Activity() {
             visibility = View.GONE
 
             val icon = TextView(context).apply {
-                text = "✓"
+                text = "OK"
                 textSize = 18f
                 setTextColor(Color.rgb(21, 128, 61))
                 typeface = Typeface.DEFAULT_BOLD
@@ -241,8 +252,8 @@ class SetupActivity : Activity() {
     private fun configCard(): LinearLayout =
         sectionCard().apply {
             addView(stepTitle("1", "Connect this phone"))
-            addView(bodyText("Copy the connector config from PocketBuddy web, paste it once, then save."))
-            addView(secondaryButton("Paste config from clipboard") {
+            addView(bodyText("Open PocketBuddy on this Android phone and tap One-Tap Auto Configure. The server address is prefilled from this app build; your account link is filled only after you approve pairing. Paste is only a fallback."))
+            addView(secondaryButton("Paste fallback config") {
                 pasteConnectorConfig()
             })
             addView(sectionLabel("Backend webhook URL"))
@@ -402,7 +413,7 @@ class SetupActivity : Activity() {
         statusText.setTextColor(if (ready) Color.rgb(22, 101, 52) else Color.rgb(146, 64, 14))
         statusDetailText.text = when {
             !notificationAccessEnabled -> "Next step: open Notification Access and enable PocketBuddy."
-            userId.isNullOrBlank() -> "Next step: paste and save the user ID from PocketBuddy web."
+            userId.isNullOrBlank() -> "Next step: link this phone from PocketBuddy web or paste fallback config."
             else -> "This phone can now send locally parsed payment events to PocketBuddy."
         }
 
@@ -455,7 +466,7 @@ class SetupActivity : Activity() {
             webhookToken = webhookToken,
             accountEmail = currentAccountEmail
         )
-        showPairingSuccessDialog(currentAccountEmail ?: "PocketBuddy User")
+        showPairingSuccessDialog(currentAccountEmail ?: "PocketBuddy User", autoFilled = false)
         refreshStatus()
     }
 

@@ -14,7 +14,7 @@ if (localPropertiesFile.exists()) {
 
 val pocketBuddyWebhookUrl =
     localProperties.getProperty("POCKETBUDDY_WEBHOOK_URL")
-        ?: "http://10.0.2.2:8000/api/ingest/notification"
+        ?: "http://10.0.2.2:8000/api/ingest/notification-v2"
 val pocketBuddyWebhookToken =
     localProperties.getProperty("POCKETBUDDY_WEBHOOK_TOKEN") ?: ""
 val pocketBuddyUserId =
