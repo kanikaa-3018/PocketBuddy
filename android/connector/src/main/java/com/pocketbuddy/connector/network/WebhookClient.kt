@@ -82,13 +82,17 @@ class WebhookClient(
             put("userId", userId)
             put("deviceId", deviceId)
             put("type", "unpair")
-            put("text", "unpair")
             put("packageName", "com.pocketbuddy.connector")
             put("sourceApp", "PocketBuddy Android Connector")
             put("timestamp", System.currentTimeMillis())
             put("amount", 0.0)
             put("currency", "INR")
             put("direction", "debit")
+            put("maskedPreview", "Connector unpair request")
+            put("parserVersion", "android-v2")
+            put("privacyMode", "on_device_only")
+            put("rawTextSuppressed", true)
+            put("schemaVersion", 2)
         }
 
         val request = Request.Builder()

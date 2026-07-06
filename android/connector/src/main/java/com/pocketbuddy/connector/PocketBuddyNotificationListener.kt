@@ -47,7 +47,6 @@ class PocketBuddyNotificationListener : NotificationListenerService() {
 
         val payload = TransactionNotificationPayload(
             packageName = sbn.packageName,
-            text = notificationText,
             timestamp = sbn.postTime,
             sourceApp = parsedNotification.sourceApp,
             captureSource = parsedNotification.captureSource,
@@ -58,6 +57,8 @@ class PocketBuddyNotificationListener : NotificationListenerService() {
             direction = parsedNotification.direction,
             merchant = parsedNotification.merchant,
             transactionId = parsedNotification.transactionId,
+            maskedPreview = parser.maskedPreview(notificationText),
+            confidence = parser.confidenceFor(parsedNotification),
         )
 
         webhookClient.post(payload) { result ->

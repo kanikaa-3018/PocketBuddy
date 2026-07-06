@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional
 import datetime
@@ -42,6 +42,16 @@ class WebhookReq(BaseModel):
     merchant: Optional[str] = None
     transactionId: Optional[str] = None
     detectedAtDeviceMillis: Optional[int] = None
+
+    # Privacy-preserving connector v2 shape. Raw notification text is parsed on
+    # device; the server receives only transaction facts and a masked preview.
+    maskedPreview: Optional[str] = None
+    parserVersion: Optional[str] = None
+    confidence: Optional[str] = None
+    privacyMode: Optional[str] = None
+    rawTextSuppressed: Optional[bool] = None
+    schemaVersion: Optional[int] = None
+    clientEventId: Optional[str] = None
 
 
 def parse_amount(text: str) -> Optional[int]:
@@ -185,6 +195,59 @@ def millis_to_utc_datetime(value: Optional[int]) -> Optional[datetime.datetime]:
         return datetime.datetime.utcfromtimestamp(value / 1000)
     except (OverflowError, OSError, ValueError):
         return None
+
+
+def clean_confidence(value: Optional[str]) -> Optional[str]:
+    if not value:
+        return None
+    normalized = value.strip().lower()
+    return normalized if normalized in {"high", "medium", "low"} else None
+
+
+def build_android_consent_id(user_id: str, device_id: Optional[str]) -> str:
+    return f"android:{user_id}:{device_id or 'unknown-device'}"
+
+
+async def upsert_android_consent(
+    db,
+    *,
+    user_id: str,
+    device_id: Optional[str],
+    req: WebhookReq,
+    now: datetime.datetime,
+    status: str = "active",
+) -> str:
+    consent_id = build_android_consent_id(user_id, device_id)
+    update = {
+        "$set": {
+            "user_id": user_id,
+            "source": "android_connector",
+            "status": status,
+            "purpose": "instant_payment_tracking",
+            "data_categories": [
+                "amount",
+                "merchant",
+                "direction",
+                "transaction_reference",
+                "source_app",
+                "masked_preview",
+            ],
+            "device_id": device_id,
+            "device_name": req.device_name or req.sourceApp or req.packageName or "PocketBuddy Android Connector",
+            "last_sync_at": now,
+            "raw_text_policy": "not_required_for_v2",
+            "updated_at": now,
+        },
+        "$setOnInsert": {
+            "_id": consent_id,
+            "granted_at": now,
+            "created_at": now,
+        },
+    }
+    if status == "revoked":
+        update["$set"]["revoked_at"] = now
+    await db.data_consents.update_one({"_id": consent_id}, update, upsert=True)
+    return consent_id
 
 
 async def update_profile_sync_state(db, user_id: str, req: WebhookReq, now: datetime.datetime, device_id: Optional[str] = None):
@@ -417,7 +480,9 @@ async def try_auto_verify_pool_payment(
 
 @router.post("/")
 @router.post("/notification")
+@router.post("/notification-v2")
 async def ingest_notification(
+    request: Request,
     req: WebhookReq,
     authorization: Optional[str] = Header(None),
     x_pocketbuddy_user_id: Optional[str] = Header(None, alias="X-PocketBuddy-User-Id"),
@@ -446,6 +511,7 @@ async def ingest_notification(
             raise HTTPException(status_code=403, detail="Invalid pairing code")
 
     if req.type == "unpair" or req.source == "unpair":
+        device_id = req.deviceId or x_pocketbuddy_device_id
         await db.profiles.update_one(
             {"_id": user_id},
             {
@@ -457,15 +523,39 @@ async def ingest_notification(
                 }
             }
         )
+        await upsert_android_consent(db, user_id=user_id, device_id=device_id, req=req, now=now, status="revoked")
         return {"status": "ok", "message": "unpaired_successfully"}
 
+    strict_sanitized = request.url.path.endswith("/notification-v2")
+    if strict_sanitized and (req.text or req.body):
+        raise HTTPException(status_code=400, detail="Raw notification text is not accepted on v2 ingest")
+
     raw_body = req.text or req.body or ""
-    notification_preview = mask_notification_text(raw_body)
+    raw_payload_received = bool(raw_body)
+    has_structured_event = req.amount is not None or bool(req.merchant) or bool(req.transactionId)
+    notification_preview = (req.maskedPreview or "").strip() or mask_notification_text(raw_body)
     notification_source = req.captureSource or req.type or req.source or "unknown"
     device_id = req.deviceId or x_pocketbuddy_device_id
+    requested_privacy_mode = (req.privacyMode or "").strip().lower()
+    if raw_payload_received:
+        privacy_mode = "legacy_server_parse"
+    elif requested_privacy_mode == "on_device_only" or req.rawTextSuppressed or req.maskedPreview or has_structured_event:
+        privacy_mode = "on_device_only"
+    else:
+        privacy_mode = "legacy_server_parse"
+    data_origin = "android_on_device" if privacy_mode == "on_device_only" else "legacy_android_raw_ingest"
+    source_confidence = clean_confidence(req.confidence)
     log_id = str(uuid.uuid4())
 
     sync_enabled = profile.get("companion_sync_enabled", True)
+    consent_id = await upsert_android_consent(
+        db,
+        user_id=user_id,
+        device_id=device_id,
+        req=req,
+        now=now,
+        status="active" if sync_enabled else "paused",
+    )
     initial_status = "pending" if sync_enabled else "paused"
 
     await db.companion_sync_log.insert_one(
@@ -480,6 +570,14 @@ async def ingest_notification(
             "package_name": req.packageName,
             "source_app": req.sourceApp,
             "transaction_reference": req.transactionId,
+            "data_origin": data_origin,
+            "consent_id": consent_id,
+            "parser_version": req.parserVersion,
+            "source_confidence": source_confidence,
+            "privacy_mode": privacy_mode,
+            "raw_payload_received": raw_payload_received,
+            "schema_version": req.schemaVersion,
+            "client_event_id": req.clientEventId,
             "created_at": now,
         }
     )
@@ -526,7 +624,7 @@ async def ingest_notification(
 
     transaction_reference = req.transactionId or parse_transaction_id(raw_body)
 
-    if not raw_body or not amount_paise or not merchant:
+    if not (raw_body or has_structured_event) or not amount_paise or not merchant:
         await mark_sync_log(db, log_id, "incomplete", amount_paise, merchant, transaction_reference)
         await update_profile_sync_state(db, user_id, req, now, device_id)
         return {"status": "incomplete", "reason": "missing_amount_or_merchant"}
@@ -562,9 +660,11 @@ async def ingest_notification(
     # --- Parser Feedback Loop: Confidence Scoring ---
     # If amount/merchant came from the Android app's pre-parsed data, confidence is high.
     # If we had to regex-parse from raw text, confidence is lower.
-    parsing_confidence = "high"
+    parsing_confidence = source_confidence or "high"
     needs_verification = False
-    if req.amount is not None and req.merchant:
+    if source_confidence:
+        parsing_confidence = source_confidence
+    elif req.amount is not None and req.merchant:
         parsing_confidence = "high"  # Pre-parsed by Android app
     elif amount_paise and merchant:
         parsing_confidence = "medium"  # Regex-parsed successfully
@@ -579,6 +679,7 @@ async def ingest_notification(
             parsing_confidence = "medium"
 
     source = "companion_sms" if "sms" in notification_source.lower() else "companion_notification"
+    verification_status = "parsed_on_device" if data_origin == "android_on_device" else "legacy_parsed"
     txn_id = str(uuid.uuid4())
     new_txn = {
         "_id": txn_id,
@@ -597,6 +698,16 @@ async def ingest_notification(
         "package_name": req.packageName,
         "source_app": req.sourceApp,
         "capture_source": notification_source,
+        "data_origin": data_origin,
+        "consent_id": consent_id,
+        "parser_version": req.parserVersion,
+        "source_confidence": source_confidence or parsing_confidence,
+        "privacy_mode": privacy_mode,
+        "raw_payload_received": raw_payload_received,
+        "schema_version": req.schemaVersion,
+        "client_event_id": req.clientEventId,
+        "verification_status": "needs_review" if needs_verification else verification_status,
+        "verified_by": None,
         "detected_at_device": millis_to_utc_datetime(req.detectedAtDeviceMillis or req.timestamp),
         "parsing_confidence": parsing_confidence,
         "needs_verification": needs_verification,

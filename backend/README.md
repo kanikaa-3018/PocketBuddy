@@ -64,7 +64,7 @@ GET /api/profile
 GET /api/transactions
 ```
 
-New ingest events store a masked `notification_preview`, parsed amount, parsed merchant, and transaction reference. Full raw notification/SMS text is used only in-memory for parsing and is not persisted for new events.
+Privacy-preserving connector v2 events are parsed on-device and send only structured transaction facts plus a masked `notification_preview`. The backend keeps the legacy ingest endpoint for older connector builds, but new connector payloads do not require raw notification/SMS text to be uploaded or persisted.
 
 For USB testing, keep the backend on port `8000` and run:
 

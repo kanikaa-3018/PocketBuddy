@@ -283,7 +283,7 @@ class SetupActivity : Activity() {
     private fun permissionCard(): LinearLayout =
         sectionCard().apply {
             addView(stepTitle("2", "Allow notification access"))
-            addView(bodyText("Enable PocketBuddy in Android Notification Access so payment and SMS alerts can be detected."))
+            addView(bodyText("Enable PocketBuddy in Android Notification Access for optional Instant UPI Sync. Supported payment alerts are parsed on this phone; raw notification text is not uploaded."))
             addView(primaryButton("Open notification access") {
                 startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
             })
@@ -403,7 +403,7 @@ class SetupActivity : Activity() {
         statusDetailText.text = when {
             !notificationAccessEnabled -> "Next step: open Notification Access and enable PocketBuddy."
             userId.isNullOrBlank() -> "Next step: paste and save the user ID from PocketBuddy web."
-            else -> "This phone can now send payment events to PocketBuddy."
+            else -> "This phone can now send locally parsed payment events to PocketBuddy."
         }
 
         val hasConfig = !userId.isNullOrBlank()

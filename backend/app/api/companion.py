@@ -21,3 +21,11 @@ async def clear_companion_logs(user_id: str = Depends(get_current_user)):
     db = get_db()
     result = await db.companion_sync_log.delete_many({"user_id": user_id})
     return {"status": "ok", "deleted_count": result.deleted_count}
+
+
+@router.get("/consents")
+async def get_data_consents(user_id: str = Depends(get_current_user)):
+    db = get_db()
+    cursor = db.data_consents.find({"user_id": user_id}).sort("updated_at", -1)
+    consents = await cursor.to_list(length=100)
+    return map_docs(consents)

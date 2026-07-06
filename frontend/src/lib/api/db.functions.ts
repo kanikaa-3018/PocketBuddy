@@ -182,6 +182,10 @@ export async function getCompanionSyncLogs() {
   return apiRequest("/api/companion/logs");
 }
 
+export async function getDataConsents() {
+  return apiRequest("/api/companion/consents");
+}
+
 export async function getDashboardInsights() {
   return apiRequest("/api/insights");
 }
@@ -353,5 +357,4 @@ export async function deleteAccountData() {
 export async function confirmTransaction({ id }: { id: string }) {
   return apiRequest(`/api/transactions/${id}/confirm`, { method: "POST" });
 }
-
 
