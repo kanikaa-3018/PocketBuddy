@@ -17,7 +17,7 @@ from app.api.webhook import (
     pairing_rotated_after_revocation,
 )
 from app.core.config import Settings, settings
-from app.core.privacy import connector_token_hash, verify_connector_pairing_token
+from app.core.privacy import connector_token_hash, connector_token_preview, verify_connector_pairing_token
 from app.main import app
 
 
@@ -92,7 +92,18 @@ class PrivacyContractTests(unittest.TestCase):
         self.assertFalse(state["can_start_sandbox"])
 
     def test_strict_connector_route_is_registered(self):
-        paths = {route.path for route in app.routes}
+        paths = set()
+        for route in app.routes:
+            if hasattr(route, "path"):
+                paths.add(route.path)
+                continue
+
+            include_context = getattr(route, "include_context", None)
+            original_router = getattr(route, "original_router", None)
+            prefix = getattr(include_context, "prefix", "") if include_context else ""
+            for child_route in getattr(original_router, "routes", []):
+                if hasattr(child_route, "path"):
+                    paths.add(f"{prefix}{child_route.path}")
 
         self.assertIn("/api/ingest/notification-v2", paths)
         self.assertIn("/api/ingest/notification", paths)
@@ -133,6 +144,12 @@ class PrivacyContractTests(unittest.TestCase):
 
         self.assertTrue(verify_connector_pairing_token(profile, token))
         self.assertFalse(verify_connector_pairing_token(profile, "wrong-token"))
+
+    def test_connector_pairing_token_preview_is_ascii_safe(self):
+        preview = connector_token_preview("pb_secure-test-token")
+
+        self.assertEqual(preview, "pb_se****oken")
+        self.assertNotIn("â", preview)
 
     def test_connector_ingest_blocks_without_active_user_consent(self):
         active_profile = {"pairing_code": "PB-1234", "companion_sync_enabled": True}

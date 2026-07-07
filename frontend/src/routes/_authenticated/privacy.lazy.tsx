@@ -230,6 +230,16 @@ function PrivacyPage() {
   const aaEvents = aaStatus?.events ?? [];
   const aaSnapshots = aaStatus?.snapshots ?? [];
   const aaTrustStatus = humanAAStatus(aaStatus, currentAAConsent);
+  const bankConsentRuntimeIsProvider = aaStatus?.status === "provider_configured";
+  const bankConsentPathDescription = bankConsentRuntimeIsProvider
+    ? "Provider-backed bank consent for transaction verification."
+    : "Account Aggregator-style consent sandbox for controlled bank-data access demos.";
+  const bankConsentConnectMessage = bankConsentRuntimeIsProvider
+    ? "Ready to connect through the provider-backed bank consent flow."
+    : "Ready to start the local bank-consent sandbox.";
+  const bankConsentFallbackMessage = bankConsentRuntimeIsProvider
+    ? "Read-only bank-source tracking. No bank password or OTP is collected."
+    : "Read-only bank-consent sandbox. No bank password or OTP is collected.";
   const bankConsentCanStart = Boolean(aaStatus?.can_start_sandbox) && !currentAAConsent;
   const bankConsentPrimaryAction =
     currentAAConsent?.status === "active"
@@ -519,9 +529,9 @@ function PrivacyPage() {
                 status={aaTrustStatus}
                 detail={
                   currentAAConsent
-                    ? `${currentAAConsent.financial_institution_name || currentAAConsent.provider_label || "Connected bank"} · ${currentAAConsent.fetch_status || "fetch not started"}`
+                    ? `${currentAAConsent.financial_institution_name || currentAAConsent.provider_label || "Connected bank"} - ${currentAAConsent.fetch_status || "fetch not started"}`
                     : bankConsentCanStart
-                      ? "Ready to connect through the Account Aggregator flow."
+                      ? bankConsentConnectMessage
                       : "Not connected."
                 }
               />
@@ -574,10 +584,10 @@ function PrivacyPage() {
                       ? "primary"
                       : "muted"
               }
-              description="Verified bank-source tracking through the Account Aggregator consent framework."
+              description={bankConsentPathDescription}
               detail={
                 currentAAConsent
-                  ? `${currentAAConsent.financial_institution_name || currentAAConsent.provider_label || "Connected bank"} · ${currentAAConsent.fetch_status || "fetch not started"}`
+                  ? `${currentAAConsent.financial_institution_name || currentAAConsent.provider_label || "Connected bank"} - ${currentAAConsent.fetch_status || "fetch not started"}`
                   : aaConsents.some((consent) => ["revoked", "expired", "rejected"].includes(consent.status || ""))
                     ? "No active bank consent. Past revoked or expired requests remain visible in activity only."
                     : "No active bank consent connected."
@@ -682,8 +692,8 @@ function PrivacyPage() {
                   </div>
                   <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
                     {currentAAConsent
-                      ? `${currentAAConsent.financial_institution_name || currentAAConsent.provider_label || "Connected institution"} · ${currentAAConsent.fetch_status || "fetch not started"}`
-                      : "Read-only verified bank-source tracking. No bank password or OTP is collected."}
+                      ? `${currentAAConsent.financial_institution_name || currentAAConsent.provider_label || "Connected institution"} - ${currentAAConsent.fetch_status || "fetch not started"}`
+                      : bankConsentFallbackMessage}
                   </p>
                 </div>
               </div>
@@ -1365,7 +1375,7 @@ function bankConsentMessage(runtimeStatus?: string, consentStatus?: string) {
     return "Bank consent needs configuration before it can be used.";
   }
   if (runtimeStatus === "not_configured") {
-    return "Bank consent is optional and can be enabled when you want verified bank-source tracking.";
+    return "Bank consent is optional and can be enabled when you want a controlled consent trail.";
   }
   if (consentStatus === "active") {
     return "Consent is active. You can fetch consented records, revoke access, or review the activity here.";
@@ -1380,10 +1390,13 @@ function bankConsentMessage(runtimeStatus?: string, consentStatus?: string) {
     return "Consent was rejected. You can start a new request when needed.";
   }
   if (consentStatus === "expired") {
-    return "Consent expired. Start a new request to continue verified tracking.";
+    return "Consent expired. Start a new request to continue consent-based tracking.";
   }
-  if (runtimeStatus === "provider_configured" || runtimeStatus === "sandbox_ready") {
-    return "Start consent to connect verified bank-source tracking.";
+  if (runtimeStatus === "provider_configured") {
+    return "Start provider-backed bank consent.";
+  }
+  if (runtimeStatus === "sandbox_ready") {
+    return "Start the local bank-consent sandbox.";
   }
   return "Checking bank consent status.";
 }
@@ -1593,7 +1606,7 @@ function ConsentLedgerRow({ consent, compact = false }: { consent: DataConsent; 
   const sourceLabel = isBankConsent
     ? consent.financial_institution_name || consent.provider_label || "Bank consent"
     : consent.device_name || "PocketBuddy Android Connector";
-  const purpose = consent.purpose || (isBankConsent ? "verified bank-source tracking" : "instant payment tracking");
+  const purpose = consent.purpose || (isBankConsent ? "bank-consent transaction review" : "instant payment tracking");
   const rawPolicy = isBankConsent
     ? "Encrypted bank data only"
     : consent.raw_text_policy === "not_required_for_v2"

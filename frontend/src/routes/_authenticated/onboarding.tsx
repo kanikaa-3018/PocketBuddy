@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { getProfile, updateProfile, getCatalog, addCatalogItem, startAccountAggregatorSandboxConsent } from "@/lib/api/db.functions.js";
+import { createCompanionPairingToken, getProfile, updateProfile, getCatalog, addCatalogItem, startAccountAggregatorSandboxConsent } from "@/lib/api/db.functions.js";
 import { ShieldCheck, Smartphone } from "lucide-react";
 
 const LOCAL_WEBHOOK_URL = "http://127.0.0.1:8000/api/ingest/notification-v2";
@@ -19,13 +19,6 @@ function getCompanionWebhookUrl() {
   const { hostname, origin } = window.location;
   const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1";
   return isLocalhost ? LOCAL_WEBHOOK_URL : `${origin}/api/ingest/notification-v2`;
-}
-
-function randomPairingCode() {
-  const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-  let s = "PB-";
-  for (let i = 0; i < 4; i++) s += chars[Math.floor(Math.random() * chars.length)];
-  return s;
 }
 
 export const Route = createFileRoute("/_authenticated/onboarding")({
@@ -67,10 +60,8 @@ function Onboarding() {
     if (!user) return;
     setBusy(true);
     try {
-      const code = randomPairingCode();
       await updateProfile({
         data: {
-          pairing_code: code,
           onboarding_completed: true,
           setup_completed: true,
           companion_paired: false,
@@ -78,6 +69,11 @@ function Onboarding() {
           companion_last_sync: null,
         },
       });
+      const tokenResult = await createCompanionPairingToken();
+      const code = tokenResult?.pairing_token;
+      if (!code) {
+        throw new Error("Could not create connector setup token");
+      }
       qc.invalidateQueries({ queryKey: ["profile"] });
       
       const webhookUrl = getCompanionWebhookUrl();

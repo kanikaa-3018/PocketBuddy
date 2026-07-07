@@ -21,6 +21,7 @@ export const Route = createFileRoute("/login")({
 
 type Mode = "signin" | "signup";
 type Tab = "email" | "phone";
+const demoPhoneAuthEnabled = import.meta.env.VITE_DEMO_PHONE_AUTH_ENABLED === "true";
 
 function LoginPage() {
   const nav = useNavigate();
@@ -36,7 +37,7 @@ function LoginPage() {
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState("");
   const [busy, setBusy] = useState(false);
-  const activeTab: Tab = tab;
+  const activeTab: Tab = demoPhoneAuthEnabled ? tab : "email";
 
   useEffect(() => {
     setMounted(true);
@@ -84,13 +85,17 @@ function LoginPage() {
   }
 
   async function handlePhone() {
+    if (!demoPhoneAuthEnabled) {
+      toast.error("Phone sign-in is disabled for this build");
+      return;
+    }
     if (!phone || phone.length < 10) {
       toast.error("Enter a valid phone number");
       return;
     }
     if (!otpSent) {
       setOtpSent(true);
-      toast.success("OTP sent (demo: enter any 6 digits)");
+      toast.success("Demo phone sign-in enabled. Enter any 6 digits to continue.");
       return;
     }
     if (otp.length !== 6) {
@@ -184,13 +189,15 @@ function LoginPage() {
           >
             Email
           </button>
-          <button
-            id="tab-login-phone"
-            onClick={() => setTab("phone")}
-            className={`flex-1 py-1.5 rounded-full transition-all duration-150 cursor-pointer ${activeTab === "phone" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-          >
-            Phone
-          </button>
+          {demoPhoneAuthEnabled && (
+            <button
+              id="tab-login-phone"
+              onClick={() => setTab("phone")}
+              className={`flex-1 py-1.5 rounded-full transition-all duration-150 cursor-pointer ${activeTab === "phone" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Phone
+            </button>
+          )}
         </div>
 
         <div className="mt-8 space-y-4">
@@ -226,7 +233,7 @@ function LoginPage() {
                   <Input
                     id="input-login-password"
                     type={showPassword ? "text" : "password"}
-                    placeholder="••••••••"
+                    placeholder="********"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     autoComplete={mode === "signup" ? "new-password" : "current-password"}

@@ -23,8 +23,8 @@ def mask_sensitive_value(value: Optional[str], visible_start: int = 4, visible_e
     if not cleaned:
         return None
     if len(cleaned) <= visible_start + visible_end:
-        return "••••"
-    return f"{cleaned[:visible_start]}••••{cleaned[-visible_end:]}"
+        return "****"
+    return f"{cleaned[:visible_start]}****{cleaned[-visible_end:]}"
 
 
 def generate_connector_pairing_token() -> str:
