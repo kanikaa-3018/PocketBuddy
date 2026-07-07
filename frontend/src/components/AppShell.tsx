@@ -15,7 +15,6 @@ import {
   Moon,
   LogOut,
   Compass,
-  BarChart3,
   ShieldCheck,
   Activity
 } from "lucide-react";
@@ -34,21 +33,21 @@ type Ctx = {
 const SidebarCtx = createContext<Ctx | null>(null);
 
 const tabs = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, id: "nav-dashboard" },
-  { to: "/transactions", label: "History", icon: List, id: "nav-transactions" },
-  { to: "/stats", label: "Stats", icon: BarChart3, id: "nav-stats" },
-  { to: "/runway", label: "Runway", icon: Activity, id: "nav-runway" },
-  { to: "/pool", label: "Pool", icon: ShoppingCart, id: "nav-pool" },
-  { to: "/travel", label: "Travel", icon: Compass, id: "nav-travel" },
-  { to: "/settings", label: "Settings", icon: Settings, id: "nav-settings" },
-  { to: "/privacy", label: "Privacy", icon: ShieldCheck, id: "nav-privacy" },
+  { to: "/dashboard", search: undefined, label: "Dashboard", icon: LayoutDashboard, id: "nav-dashboard" },
+  { to: "/transactions", search: { view: "ledger", tab: "daily" }, label: "Transactions", icon: List, id: "nav-transactions" },
+  { to: "/runway", search: undefined, label: "Runway", icon: Activity, id: "nav-runway" },
+  { to: "/pool", search: undefined, label: "Pool", icon: ShoppingCart, id: "nav-pool" },
+  { to: "/travel", search: undefined, label: "Travel", icon: Compass, id: "nav-travel" },
+  { to: "/settings", search: undefined, label: "Settings", icon: Settings, id: "nav-settings" },
+  { to: "/privacy", search: undefined, label: "Privacy", icon: ShieldCheck, id: "nav-privacy" },
 ] as const;
 
 
 function SidebarBody({ onNavigate, isMobile = false }: { onNavigate?: () => void; isMobile?: boolean }) {
   const ctx = useContext(SidebarCtx)!;
   const collapsed = isMobile ? false : ctx.collapsed;
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const location = useRouterState({ select: (s) => s.location });
+  const pathname = location.pathname;
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { user, logout } = useAuth();
@@ -168,9 +167,10 @@ function SidebarBody({ onNavigate, isMobile = false }: { onNavigate?: () => void
               const active = pathname === t.to || pathname.startsWith(t.to + "/");
               const Icon = t.icon;
               return (
-                <li key={t.to}>
+                <li key={t.id}>
                   <Link
                     to={t.to}
+                    search={t.search}
                     id={isMobile ? `drawer-${t.id}` : t.id}
                     onClick={onNavigate}
                     title={collapsed ? t.label : undefined}
