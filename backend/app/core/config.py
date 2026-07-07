@@ -39,6 +39,32 @@ class Settings(BaseSettings):
     # Frontend base URL (change to deployed URL in production)
     FRONTEND_BASE_URL: str = "http://localhost:5173"
 
+    # Demo-only phone auth is disabled by default because the current phone
+    # path does not integrate a real OTP provider. Email/password remains the
+    # normal local/dev auth flow.
+    DEMO_PHONE_AUTH_ENABLED: bool = False
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080
+    CORS_ALLOW_ORIGINS: str = ""
+
+    # Android connector trust boundary. Legacy raw notification ingest remains
+    # available only when explicitly enabled for migration from old connector
+    # builds. New connector builds use notification-v2, on-device parsing, and
+    # signed requests.
+    CONNECTOR_LEGACY_RAW_INGEST_ENABLED: bool = False
+    CONNECTOR_SIGNATURE_REQUIRED: bool = False
+    CONNECTOR_SIGNATURE_TOLERANCE_SECONDS: int = 300
+
+    # Account Aggregator sandbox integration. Disabled by default so the app
+    # never pretends to verify live bank data without explicit configuration.
+    AA_SANDBOX_ENABLED: bool = False
+    AA_SANDBOX_PROVIDER: str = "local"
+    AA_SANDBOX_BASE_URL: str = ""
+    AA_CLIENT_ID: str = ""
+    AA_CLIENT_SECRET: str = ""
+    AA_FIU_ID: str = ""
+    AA_CALLBACK_SECRET: str = ""
+    AA_INSTITUTION_REGISTRY_URL: str = ""
+
     DEMO_MODE: bool = False
     OCR_PROVIDER: str = "ocrspace"
     OCR_SPACE_API_KEY: str = ""

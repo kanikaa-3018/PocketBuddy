@@ -2,27 +2,23 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
+import { BankConsentDialog, type BankConsentPayload } from "@/components/privacy/BankConsentDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { getProfile, updateProfile, getCatalog, addCatalogItem } from "@/lib/api/db.functions.js";
-import { Smartphone } from "lucide-react";
+import { createCompanionPairingToken, getProfile, updateProfile, getCatalog, addCatalogItem, startAccountAggregatorSandboxConsent } from "@/lib/api/db.functions.js";
+import { ShieldCheck, Smartphone } from "lucide-react";
 
-const LOCAL_WEBHOOK_URL = "http://127.0.0.1:8000/api/ingest/notification";
+const LOCAL_WEBHOOK_URL = "http://127.0.0.1:8000/api/ingest/notification-v2";
 
 function getCompanionWebhookUrl() {
+  const configuredUrl = import.meta.env.VITE_CONNECTOR_WEBHOOK_URL?.trim();
+  if (configuredUrl) return configuredUrl;
   if (typeof window === "undefined") return LOCAL_WEBHOOK_URL;
   const { hostname, origin } = window.location;
   const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1";
-  return isLocalhost ? LOCAL_WEBHOOK_URL : `${origin}/api/ingest/notification`;
-}
-
-function randomPairingCode() {
-  const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-  let s = "PB-";
-  for (let i = 0; i < 4; i++) s += chars[Math.floor(Math.random() * chars.length)];
-  return s;
+  return isLocalhost ? LOCAL_WEBHOOK_URL : `${origin}/api/ingest/notification-v2`;
 }
 
 export const Route = createFileRoute("/_authenticated/onboarding")({
@@ -56,6 +52,7 @@ function Onboarding() {
   const qc = useQueryClient();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [busy, setBusy] = useState(false);
+  const [bankConsentDialogOpen, setBankConsentDialogOpen] = useState(false);
 
   const isAndroid = typeof window !== "undefined" && /android/i.test(window.navigator.userAgent);
 
@@ -63,10 +60,8 @@ function Onboarding() {
     if (!user) return;
     setBusy(true);
     try {
-      const code = randomPairingCode();
       await updateProfile({
         data: {
-          pairing_code: code,
           onboarding_completed: true,
           setup_completed: true,
           companion_paired: false,
@@ -74,6 +69,11 @@ function Onboarding() {
           companion_last_sync: null,
         },
       });
+      const tokenResult = await createCompanionPairingToken();
+      const code = tokenResult?.pairing_token;
+      if (!code) {
+        throw new Error("Could not create connector setup token");
+      }
       qc.invalidateQueries({ queryKey: ["profile"] });
       
       const webhookUrl = getCompanionWebhookUrl();
@@ -91,7 +91,41 @@ function Onboarding() {
     }
   }
 
-  // Step 1 — starts empty (no prefilled demo data)
+  async function connectBankFromOnboarding(payload: BankConsentPayload) {
+    if (!user) return;
+    setBusy(true);
+    try {
+      await startAccountAggregatorSandboxConsent({
+        data: {
+          purpose: "Verify bank transactions for PocketBuddy insights",
+          requested_range_days: payload.requestedRangeDays,
+          fi_types: ["DEPOSIT"],
+          aa_handle: payload.aaHandle || null,
+          bank_code: payload.bankCode,
+          bank_name: payload.bankName,
+          bank_short_name: payload.bankShortName,
+          selected_accounts: payload.selectedAccounts,
+        },
+      });
+      await updateProfile({
+        data: {
+          onboarding_completed: true,
+          setup_completed: true,
+        },
+      });
+      qc.invalidateQueries({ queryKey: ["profile"] });
+      qc.invalidateQueries({ queryKey: ["aa-status", user.id] });
+      setBankConsentDialogOpen(false);
+      toast.success("Bank consent started. Review it from Privacy Center.");
+      nav({ to: "/privacy", replace: true });
+    } catch (err: any) {
+      toast.error(err.message || "Bank consent is unavailable right now. You can continue with phone sync or manual logging.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Step 1 starts empty.
   const [allowance, setAllowance] = useState("");
   const [cycleDay, setCycleDay] = useState("1");
   const [college, setCollege] = useState("");
@@ -608,17 +642,17 @@ function Onboarding() {
         {step === 3 && (
           <div id="onboarding-step-3" className="space-y-6">
             <div className="mb-2">
-              <h2 className="text-[20px] font-black tracking-tight text-foreground uppercase">Auto-Track Expense</h2>
+              <h2 className="text-[20px] font-black tracking-tight text-foreground uppercase">Connect Safely</h2>
               <p className="mt-1.5 text-xs text-muted-foreground">
-                Set up the Android connector once. After that, PocketBuddy can sync supported UPI payment alerts automatically.
+                PocketBuddy is designed around consent-first payment tracking. Bank consent is the verified path; Android sync is optional and gives you local auto-tracking for supported UPI alerts.
               </p>
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               {[
-                { e: "01", l: "Install App" },
-                { e: "02", l: "Paste Config" },
-                { e: "03", l: "Allow Access" },
+                { e: "01", l: "Bank Consent" },
+                { e: "02", l: "On-Device" },
+                { e: "03", l: "Controls" },
               ].map((c) => (
                 <div
                   key={c.l}
@@ -634,16 +668,39 @@ function Onboarding() {
 
             <div className="rounded-lg border border-border bg-surface-raised/40 p-4 space-y-1">
               <p className="text-xs font-bold text-foreground uppercase tracking-wider">
-                What you will do next
+                What this setup means
               </p>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                The next page gives you one copy button. Open the Android app, tap paste, save, and allow notification access. You do not need to type any code manually.
+                You stay in control of every source. Phone sync parses supported payment alerts on your device, sends only structured transaction fields, and can be paused or removed anytime from Privacy Center.
               </p>
+            </div>
+
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 gap-3">
+                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                    <ShieldCheck className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-bold text-foreground">Connect bank consent</p>
+                    <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                      Recommended for verified tracking. You can connect now or do it later from Privacy Center.
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  onClick={() => setBankConsentDialogOpen(true)}
+                  disabled={busy}
+                  className="h-9 w-full shrink-0 bg-primary text-primary-foreground text-xs font-black uppercase tracking-wider sm:w-fit"
+                >
+                  Connect Bank
+                </Button>
+              </div>
             </div>
 
             <div className="rounded-xl border border-border bg-surface-raised p-5">
               <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                Simple setup steps
+                Android auto-sync setup
               </p>
               <ol className="mt-3 space-y-3 text-[12px] leading-relaxed text-muted-foreground">
                 <li className="flex gap-3">
@@ -656,19 +713,25 @@ function Onboarding() {
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-black text-primary">
                     2
                   </span>
-                  <span>On the next web page, tap <b className="text-foreground">Copy Android config</b>.</span>
+                  <span>On the Android phone, tap <b className="text-foreground">One-Tap Auto Configure</b> from PocketBuddy web.</span>
                 </li>
                 <li className="flex gap-3">
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-black text-primary">
                     3
                   </span>
-                  <span>In the Android app, tap <b className="text-foreground">Paste config</b>, then <b className="text-foreground">Save connector config</b>.</span>
+                  <span>The connector opens with the server, account, and pairing fields filled from this signed-in session.</span>
                 </li>
                 <li className="flex gap-3">
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-black text-primary">
                     4
                   </span>
                   <span>Tap <b className="text-foreground">Open notification access</b> and allow PocketBuddy Connector.</span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-black text-primary">
+                    5
+                  </span>
+                  <span>Open <b className="text-foreground">Privacy Center</b> anytime to pause sync, unpair the device, view provenance labels, or review low-confidence entries.</span>
                 </li>
               </ol>
             </div>
@@ -681,7 +744,7 @@ function Onboarding() {
                   <p className="text-[13px] font-bold text-foreground">One-Tap Auto Configure</p>
                 </div>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  If you're on Android, tap the button below to instantly launch the connector app and apply all config fields automatically — no copy-paste needed.
+                  If you're on Android, tap the button below to launch the connector and link this account without typing any setup values.
                 </p>
                 {isAndroid ? (
                   <Button
@@ -693,7 +756,7 @@ function Onboarding() {
                   </Button>
                 ) : (
                   <div className="rounded-lg bg-card border border-border p-3 text-[11px] text-muted-foreground leading-normal">
-                    💡 <b>On Desktop?</b> Log in to PocketBuddy on your Android phone's browser, come back to this step, and tap this button to auto-configure.
+                    <b>On desktop?</b> Log in to PocketBuddy on your Android phone's browser, come back to this step, and tap this button to auto-configure.
                   </div>
                 )}
               </div>
@@ -718,6 +781,13 @@ function Onboarding() {
           </div>
         )}
       </div>
+
+      <BankConsentDialog
+        open={bankConsentDialogOpen}
+        onOpenChange={setBankConsentDialogOpen}
+        onConfirm={connectBankFromOnboarding}
+        busy={busy}
+      />
     </div>
   );
 }
