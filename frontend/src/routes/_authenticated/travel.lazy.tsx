@@ -315,7 +315,7 @@ function PlaceSuggestionsDropdown({
       onClick={handleManualSelect}
       className="mt-1 flex w-full items-center justify-between gap-2 rounded-md border border-dashed border-border bg-surface/60 px-2.5 py-2 text-left text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary/30 hover:text-primary"
     >
-      <span className="min-w-0 truncate">Use “{typedQuery}” and verify while estimating</span>
+      <span className="min-w-0 truncate">Use "{typedQuery}" and verify while estimating</span>
       <Search className="h-3.5 w-3.5 shrink-0" />
     </button>
   ) : null;
@@ -400,7 +400,7 @@ function TravelPage() {
   const [reportQuote, setReportQuote] = useState<string>("");
   const [reportTime, setReportTime] = useState<string>("Morning");
   const [reportLuggage, setReportLuggage] = useState<boolean>(false);
-  const [reportAnonymous, setReportAnonymous] = useState<boolean>(false);
+  const [reportAnonymous, setReportAnonymous] = useState<boolean>(true);
 
   const [userSituation, setUserSituation] = useState<string>("");
   const [appQuote, setAppQuote] = useState<string>("");
@@ -478,13 +478,21 @@ function TravelPage() {
     return Array.from(new Set(options));
   }, [activeCollege, profile, selectedCollege]);
 
-  const selectCollege = (college: string) => {
+  const selectCollege = (college: string, options: { persist?: boolean } = {}) => {
     const nextCollege = college.trim();
     if (!nextCollege) return;
+    if (nextCollege.toLowerCase().includes("pocketbuddy")) {
+      setCustomCollegeDraft("");
+      setCampusEditorOpen(true);
+      return;
+    }
 
     setSelectedCollege(nextCollege);
     setCampusEditorOpen(false);
     setSelectedRouteId("");
+    if (options.persist !== false && nextCollege !== profile?.college_name?.trim()) {
+      updateCollegeMutation.mutate(nextCollege);
+    }
   };
 
   const handleCampusChange = (value: string) => {
@@ -499,8 +507,12 @@ function TravelPage() {
 
   const saveCustomCollege = () => {
     const nextCollege = customCollegeDraft.trim();
-    if (!nextCollege) {
-      toast.error("Enter your college name first.");
+    if (nextCollege.length < 3) {
+      toast.error("Enter a valid college name.");
+      return;
+    }
+    if (nextCollege.toLowerCase().includes("pocketbuddy")) {
+      toast.error("Enter your real college name so estimates use the right city.");
       return;
     }
 
@@ -558,14 +570,14 @@ function TravelPage() {
 
   const { data: originSuggestionData, isLoading: originSuggestionsLoading } = useQuery({
     queryKey: ["travel-place-suggestions", "origin", debouncedDynamicOrigin, activeCollege],
-    enabled: !!user && debouncedDynamicOrigin.length >= 2,
+    enabled: !!user && !isFallbackCampus && debouncedDynamicOrigin.length >= 2,
     staleTime: 5 * 60 * 1000,
     queryFn: () => getTravelPlaceSuggestions(debouncedDynamicOrigin, activeCollege),
   });
 
   const { data: destinationSuggestionData, isLoading: destinationSuggestionsLoading } = useQuery({
     queryKey: ["travel-place-suggestions", "destination", debouncedDynamicDestination, activeCollege],
-    enabled: !!user && debouncedDynamicDestination.length >= 2,
+    enabled: !!user && !isFallbackCampus && debouncedDynamicDestination.length >= 2,
     staleTime: 5 * 60 * 1000,
     queryFn: () => getTravelPlaceSuggestions(debouncedDynamicDestination, activeCollege),
   });
@@ -667,7 +679,7 @@ function TravelPage() {
       setReportPaid("");
       setReportQuote("");
       setReportLuggage(false);
-      setReportAnonymous(false);
+      setReportAnonymous(true);
     },
     onError: (error) => toast.error(routeEstimateErrorMessage(error)),
   });
@@ -777,6 +789,12 @@ function TravelPage() {
       toast.error("Enter both origin and destination.");
       return;
     }
+    if (isFallbackCampus) {
+      toast.error("Set your college first so fares are estimated near the right campus.");
+      setCustomCollegeDraft("");
+      setCampusEditorOpen(true);
+      return;
+    }
     if (origin.toLowerCase() === destination.toLowerCase()) {
       toast.error("Origin and destination must be different.");
       return;
@@ -819,10 +837,9 @@ function TravelPage() {
             <span>{timeContext.label}</span>
           </div>
             {savings && savings.total_saved > 0 && (
-              <Badge variant="outline" style={{ fontSize: 0 }} className="flex items-center gap-1 border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 font-mono font-bold text-emerald-600 dark:bg-emerald-500/5 dark:text-emerald-400">
+              <Badge variant="outline" className="flex items-center gap-1 border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 font-mono font-bold text-emerald-600 dark:bg-emerald-500/5 dark:text-emerald-400">
                 <TrendingDown className="h-3 w-3" />
                 <span className="text-xs">Saved ₹{savings.total_saved}</span>
-                Saved ₹{savings.total_saved}
               </Badge>
             )}
           </div>
@@ -871,6 +888,26 @@ function TravelPage() {
               </div>
             </div>
 
+            {isFallbackCampus && (
+              <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2.5 text-xs text-amber-700 dark:text-amber-300">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="leading-relaxed">
+                    Add your college once so places, saved routes, and fare reports are searched near the right campus.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomCollegeDraft("");
+                      setCampusEditorOpen(true);
+                    }}
+                    className="w-fit rounded-md border border-amber-500/30 bg-background px-2.5 py-1.5 text-[11px] font-semibold text-foreground transition-colors hover:bg-surface"
+                  >
+                    Set campus
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div ref={routeSearchRef} className="relative z-30 overflow-visible rounded-lg border border-border bg-background p-1.5 shadow-sm">
               <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-2">
                 <div className={`relative rounded-md px-3 py-2 transition-colors hover:bg-surface/60 focus-within:bg-surface focus-within:ring-1 focus-within:ring-primary/20 ${originSuggestionsOpen ? "z-[70]" : "z-10"}`}>
@@ -895,7 +932,7 @@ function TravelPage() {
                       className="h-8 border-0 bg-transparent px-0 text-sm font-medium shadow-none placeholder:text-muted-foreground/60 focus-visible:ring-0 focus-visible:ring-offset-0"
                     />
                     <PlaceSuggestionsDropdown
-                      open={originSuggestionsOpen && debouncedDynamicOrigin.length >= 2}
+                      open={!isFallbackCampus && originSuggestionsOpen && debouncedDynamicOrigin.length >= 2}
                       loading={originSuggestionsLoading}
                       suggestions={originSuggestions}
                       query={debouncedDynamicOrigin}
@@ -941,7 +978,7 @@ function TravelPage() {
                       className="h-8 border-0 bg-transparent px-0 text-sm font-medium shadow-none placeholder:text-muted-foreground/60 focus-visible:ring-0 focus-visible:ring-offset-0"
                     />
                     <PlaceSuggestionsDropdown
-                      open={destinationSuggestionsOpen && debouncedDynamicDestination.length >= 2}
+                      open={!isFallbackCampus && destinationSuggestionsOpen && debouncedDynamicDestination.length >= 2}
                       loading={destinationSuggestionsLoading}
                       suggestions={destinationSuggestions}
                       query={debouncedDynamicDestination}
@@ -968,10 +1005,12 @@ function TravelPage() {
               </div>
 
               <div className="mt-1.5 border-t border-border/70 px-1.5 pt-2">
-                <Button id="btn-estimate-route" onClick={handleEstimateRoute} disabled={isEstimating}
+                <Button id="btn-estimate-route" onClick={handleEstimateRoute} disabled={isEstimating || isFallbackCampus}
                   className="h-10 w-full rounded-md bg-primary px-5 text-xs font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-70">
                   <span className="flex items-center justify-center gap-2">
-                  {isEstimating ? (
+                  {isFallbackCampus ? (
+                    <>Set campus to estimate</>
+                  ) : isEstimating ? (
                     <><span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />Mapping route</>
                   ) : (
                     <><Search className="h-4 w-4" />Estimate fare</>
@@ -1025,7 +1064,9 @@ function TravelPage() {
                     {estimatedResult.price_basis || "Fare range is estimated from campus-local tariff rules and computed road distance."}
                   </p>
                 </div>
-                <button onClick={() => {
+                <button
+                  disabled={estimatedResult.needs_review}
+                  onClick={() => {
                     if (estimatedResult.needs_review) {
                       toast.error("Select exact places and recalculate before saving this route.");
                       return;
@@ -1048,8 +1089,8 @@ function TravelPage() {
                       }
                     });
                   }}
-                  className="h-9 shrink-0 rounded-lg border border-primary/30 bg-primary/5 px-3 text-[11px] font-semibold text-primary transition-colors hover:bg-primary hover:text-white">
-                  Save route and open coach
+                  className="h-9 shrink-0 rounded-lg border border-primary/30 bg-primary/5 px-3 text-[11px] font-semibold text-primary transition-colors hover:bg-primary hover:text-white disabled:cursor-not-allowed disabled:border-border disabled:bg-surface disabled:text-muted-foreground">
+                  {estimatedResult.needs_review ? "Select exact places to save" : "Save route and open coach"}
                 </button>
               </div>
 
@@ -1332,8 +1373,8 @@ function TravelPage() {
                     <p className="font-semibold text-foreground text-[11px] md:text-xs">How the fair zone is calculated</p>
                     <ul className="list-disc pl-4 space-y-1">
                       <li>We calculate road distance from mapped routes when available.</li>
-                      <li>We apply local transport regulator tariffs (e.g. ₹60 base + ₹9.5/km).</li>
-                      <li>We adjust values dynamically using live <span className="font-semibold text-primary">Student Reports</span> from your campus.</li>
+                      <li>We apply transparent campus-local fare rules based on distance and city context.</li>
+                      <li>Student reports improve the fare window only after enough matching reports are trusted.</li>
                     </ul>
                   </div>
                 )}
@@ -1501,7 +1542,7 @@ function TravelPage() {
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <h3 className="text-sm font-semibold tracking-tight text-foreground">Split fare</h3>
-                    <p className="mt-0.5 text-xs text-muted-foreground">First split the ride fairly. Then compare whether a direct ride or a two-hop route makes sense.</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">Set the group size, then compare a direct ride with a two-hop route.</p>
                   </div>
                   {splitFareData && (
                     <div className="shrink-0 sm:text-right">
@@ -1564,7 +1605,7 @@ function TravelPage() {
                           <SplitSquareHorizontal className="h-4 w-4 text-primary" />
                           <h3 className="text-xs font-semibold tracking-tight text-foreground">Ride strategy</h3>
                         </div>
-                        <p className="mt-0.5 text-[11px] text-muted-foreground">Choose speed or savings. Two-hop only makes sense when the transfer point is familiar, public, and busy.</p>
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">Direct is simplest. Two-hop is only for familiar, public, busy transfer points.</p>
                       </div>
 
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -1577,7 +1618,7 @@ function TravelPage() {
                           },
                           {
                             id: "split" as const,
-                            title: "Two-hop saver",
+                            title: "Two-hop route",
                             price: splitFare,
                             note: savings > 0 ? `Can save ₹${savings}` : "Use only if safer",
                           },
@@ -1750,13 +1791,13 @@ function TravelPage() {
                       {showCoachInfo && (
                         <div className="border-l-2 border-primary/50 pl-3 animate-[fadeIn_0.15s_ease-out] text-[11px] md:text-xs text-muted-foreground">
                           <p className="font-semibold text-foreground">What it does</p>
-                          <p className="mt-1 leading-relaxed">It compares the app quote you enter with the mapped fare anchor, adds your situation, then prepares a short script plus safety-aware tactics.</p>
+                          <p className="mt-1 leading-relaxed">It compares the ride-app quote you enter with the mapped fare anchor, adds your situation, then prepares a short script plus safety-aware tactics.</p>
                         </div>
                       )}
 
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-[180px_minmax(0,1fr)_auto] sm:items-end">
                         <div className="space-y-1.5">
-                          <label className="text-[10px] md:text-xs font-medium text-muted-foreground">App quote, optional</label>
+                          <label className="text-[10px] md:text-xs font-medium text-muted-foreground">Ride-app quote, optional</label>
                           <Input id="input-ai-app-quote" type="number" placeholder="₹ shown in app"
                             value={appQuote} onChange={(e) => setAppQuote(e.target.value)} className="bg-background border-border text-xs h-10" />
                         </div>
@@ -1809,8 +1850,11 @@ function TravelPage() {
                       {aiCoachResult && (
                         <div className="space-y-4 border-t border-border/70 pt-4 animate-[fadeIn_0.25s_ease-out]">
                           <div className="flex flex-wrap gap-1.5">
+                            <Badge className="bg-background border border-border text-muted-foreground text-[9px] md:text-xs py-0.5 px-1.5">
+                              {aiCoachResult.source === "bedrock" ? "Context guide" : "Local fare guide"}
+                            </Badge>
                             <Badge className={`font-medium text-[9px] py-0.5 px-1.5 border ${aiCoachResult.surge_factor && aiCoachResult.surge_factor > 1.1 ? "bg-red-500/10 border-red-500/20 text-red-400" : "bg-emerald-500/10 border-emerald-500/20 text-emerald-500"}`}>
-                              {aiCoachResult.surge_factor && aiCoachResult.surge_factor > 1.0 ? `${aiCoachResult.surge_factor}x app quote` : appQuote ? "Quote normal" : "No app quote"}
+                              {aiCoachResult.surge_factor && aiCoachResult.surge_factor > 1.0 ? `${aiCoachResult.surge_factor}x vs anchor` : appQuote ? "Quote normal" : "No app quote"}
                             </Badge>
                             {aiCoachResult.fare_anchor ? (
                               <Badge className="bg-background border border-border text-muted-foreground text-[9px] md:text-xs py-0.5 px-1.5">
@@ -1927,25 +1971,32 @@ function TravelPage() {
                                     <p className="text-xs font-semibold text-foreground">{r.mode.split(" ")[0]}</p>
                                     <span className="text-[10px] text-muted-foreground">{r.time_of_day}</span>
                                     {r.luggage && <Badge className="text-[8px] bg-primary/10 text-primary py-0 px-1">Luggage</Badge>}
+                                    {r.counts_in_model ? (
+                                      <Badge className="text-[8px] border border-emerald-500/20 bg-emerald-500/10 py-0 px-1 text-emerald-500">Trusted signal</Badge>
+                                    ) : (
+                                      <Badge className="text-[8px] border border-border bg-surface py-0 px-1 text-muted-foreground">Signal only</Badge>
+                                    )}
                                   </div>
                                   <p className="mt-0.5 text-[10px] text-muted-foreground">By {r.user_name}</p>
                                   <div className="mt-2 flex flex-wrap items-center gap-2">
                                     <button
-                                      disabled={voteReportMutation.isPending}
+                                      disabled={voteReportMutation.isPending || r.is_own_report}
                                       onClick={() => voteReportMutation.mutate({ reportId: r.id, voteType: "up" })}
                                       className={`flex items-center gap-1 text-[9px] font-medium transition-colors cursor-pointer ${
                                         r.user_vote === "up" ? "text-emerald-500" : "text-muted-foreground hover:text-foreground"
-                                      }`}
+                                      } disabled:cursor-not-allowed disabled:opacity-50`}
+                                      title={r.is_own_report ? "You cannot vote on your own report" : "Agree with this fare"}
                                     >
                                       <ThumbsUp className="h-2.5 w-2.5" />
                                       <span>{r.upvotes_count || 0} agree</span>
                                     </button>
                                     <button
-                                      disabled={voteReportMutation.isPending}
+                                      disabled={voteReportMutation.isPending || r.is_own_report}
                                       onClick={() => voteReportMutation.mutate({ reportId: r.id, voteType: "down" })}
                                       className={`flex items-center gap-1 text-[9px] font-medium transition-colors cursor-pointer ${
                                         r.user_vote === "down" ? "text-red-400" : "text-muted-foreground hover:text-foreground"
-                                      }`}
+                                      } disabled:cursor-not-allowed disabled:opacity-50`}
+                                      title={r.is_own_report ? "You cannot vote on your own report" : "Dispute this fare"}
                                     >
                                       <ThumbsDown className="h-2.5 w-2.5" />
                                       <span>{r.downvotes_count || 0} dispute</span>
@@ -2099,12 +2150,12 @@ function TravelPage() {
                 onClick={() => setReportAnonymous(!reportAnonymous)}
                 className={`rounded-xl border px-3 py-2 text-left text-xs transition-all ${reportAnonymous ? "border-primary bg-primary/10 text-primary" : "border-border bg-surface text-muted-foreground hover:text-foreground"}`}
               >
-                Report anonymously
+                {reportAnonymous ? "Anonymous report" : "Campus student report"}
               </button>
             </div>
 
             <p className="text-[11px] text-muted-foreground leading-relaxed">
-              Reports are used only in aggregate. PocketBuddy starts showing report-backed fares after enough students report the same route.
+              Anonymous by default. Reports are used only in aggregate, and PocketBuddy shows report-backed fares only after enough trusted students confirm the same route.
             </p>
 
             <DialogFooter>

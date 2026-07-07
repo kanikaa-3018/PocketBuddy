@@ -18,36 +18,40 @@ logger = logging.getLogger("app.api.travel")
 
 MIN_COMMUNITY_REPORTS_FOR_FARE = 3
 FARE_MODEL_VERSION = "campus-distance-v2"
+REPORT_TRUST_WINDOW_DAYS = 90
+REPORT_DUPLICATE_WINDOW_HOURS = 12
+PLACEHOLDER_CAMPUS_NAMES = {"pocketbuddy campus", "select campus", "campus", "my campus"}
+TRANSPORT_HUB_TERMS = ("airport", "station", "railway", "junction", "bus stand", "isbt", "terminal", "depot")
 
 
 # Default seeded routes for ABV-IIITM Gwalior
 DEFAULT_ROUTES = [
     {
         "id": "gwalior_station_iiitm",
-        "name": "Gwalior Railway Station â†’ ABV-IIITM",
+        "name": "Gwalior Railway Station to ABV-IIITM",
         "description": "Travel from Gwalior Main Railway Station to the ABV-IIITM Campus.",
         "modes": [
             {"mode": "Auto", "min_fare": 140, "max_fare": 180, "median_fare": 160},
             {"mode": "Cab", "min_fare": 220, "max_fare": 300, "median_fare": 260},
             {"mode": "Shared Auto + Tempo", "min_fare": 40, "max_fare": 70, "median_fare": 50}
         ],
-        "cheapest_route_combo": "Take a shared auto from outside the station till Phool Bagh (â‚¹20), then change to a tempo towards Morena Road / IIITM gate (â‚¹20-â‚¹30). Total: â‚¹45-â‚¹50.",
-        "negotiation_helper": "Bhaiya, ABV-IIITM ka normal student fare â‚¹150-â‚¹170 hota hai. â‚¹170 final?",
+        "cheapest_route_combo": "Take a shared auto from outside the station till Phool Bagh (Rs 20), then change to a tempo towards Morena Road / IIITM gate (Rs 20-Rs 30). Total: Rs 45-Rs 50.",
+        "negotiation_helper": "Bhaiya, ABV-IIITM ka normal student fare Rs 150-Rs 170 hota hai. Rs 170 final?",
         "safety_score_day": "High Safety",
         "safety_score_night": "Avoid shared routes after 9:00 PM. Prefer pre-booked cab or direct auto from main stand.",
-        "scam_warnings": "Auto drivers inside the station gate will quote â‚¹400+. Walk 100 meters outside the station main gate to the circle to get a direct auto for â‚¹150.",
+        "scam_warnings": "Auto drivers inside the station gate may quote Rs 400+. Walk 100 meters outside the station main gate to the circle to get a direct auto near Rs 150.",
         "campus_landmark": "Campus Gate No 1, Morena Link Road"
     },
     {
         "id": "gwalior_airport_iiitm",
-        "name": "Gwalior Airport â†’ ABV-IIITM",
+        "name": "Gwalior Airport to ABV-IIITM",
         "description": "Travel from Rajmata Vijaya Raje Scindia Airport to the ABV-IIITM Campus.",
         "modes": [
             {"mode": "Cab", "min_fare": 450, "max_fare": 600, "median_fare": 500},
             {"mode": "Auto", "min_fare": 300, "max_fare": 380, "median_fare": 340}
         ],
         "cheapest_route_combo": "No direct shared transit is usually available. A cab is the safer option when travelling with luggage or late at night.",
-        "negotiation_helper": "Bhaiya, IIITM Gwalior to 12km hi hai. â‚¹330 chaloge?",
+        "negotiation_helper": "Bhaiya, IIITM Gwalior to 12km hi hai. Rs 330 chaloge?",
         "safety_score_day": "Moderate Safety",
         "safety_score_night": "Avoid travel after 10 PM unless using a pre-booked cab.",
         "scam_warnings": "Pre-book a cab if arriving late. Airport autos charge highly inflated premium rates.",
@@ -55,15 +59,15 @@ DEFAULT_ROUTES = [
     },
     {
         "id": "bus_stand_iiitm",
-        "name": "Gwalior Bus Stand â†’ ABV-IIITM",
+        "name": "Gwalior Bus Stand to ABV-IIITM",
         "description": "Travel from Gola ka Mandir Bus Stand to ABV-IIITM Campus.",
         "modes": [
             {"mode": "Auto", "min_fare": 100, "max_fare": 130, "median_fare": 110},
             {"mode": "Cab", "min_fare": 160, "max_fare": 220, "median_fare": 180},
             {"mode": "Shared Auto", "min_fare": 30, "max_fare": 50, "median_fare": 40}
         ],
-        "cheapest_route_combo": "Take a shared auto from Gola ka Mandir to Hazira (â‚¹15), then another auto/tempo to IIITM gate (â‚¹15). Total: â‚¹30.",
-        "negotiation_helper": "Bhaiya, Hazira crossing hote hue â‚¹110 normal fare hai. â‚¹120 chaloge?",
+        "cheapest_route_combo": "Take a shared auto from Gola ka Mandir to Hazira (Rs 15), then another auto/tempo to IIITM gate (Rs 15). Total: Rs 30.",
+        "negotiation_helper": "Bhaiya, Hazira crossing hote hue Rs 110 normal fare hai. Rs 120 chaloge?",
         "safety_score_day": "High Safety",
         "safety_score_night": "Avoid shared autos after 8:30 PM. Use direct auto.",
         "scam_warnings": "Walk 50m away from busy bus exits to hire a passing running auto instead of stationary ones parked at the gates.",
@@ -124,7 +128,7 @@ def _fare_mode(mode: str, min_fare: int, max_fare: int, median_fare: int, distan
         "median_fare": max(0, int(median_fare)),
         "fare_source": "distance_model",
         "fare_source_label": "Distance model",
-        "fare_basis": f"{distance_km:.1f} km × {rule_name}",
+        "fare_basis": f"{distance_km:.1f} km x {rule_name}",
         "fare_model_version": FARE_MODEL_VERSION,
         "report_sample_size": 0,
     }
@@ -156,7 +160,7 @@ def estimate_fares_by_city(d: float, college: str) -> list[dict[str, Any]]:
         
     elif "delhi" in col_lower:
         rule_name = "Delhi local fare rule"
-        # Delhi Autos (metered â‚¹30 base + â‚¹11/km)
+        # Delhi autos: metered Rs 30 base + Rs 11/km.
         auto_min = int(30 + max(0.0, d - 1.5) * 10.0)
         auto_max = int(35 + max(0.0, d - 1.5) * 12.0)
         auto_median = int(30 + max(0.0, d - 1.5) * 11.0)
@@ -175,7 +179,7 @@ def estimate_fares_by_city(d: float, college: str) -> list[dict[str, Any]]:
         
     elif "bangalore" in col_lower:
         rule_name = "Bangalore local fare rule"
-        # Bangalore Autos (metered â‚¹30 base + â‚¹15/km)
+        # Bangalore autos: metered Rs 30 base + Rs 15/km.
         auto_min = int(30 + max(0.0, d - 2.0) * 13.5)
         auto_max = int(35 + max(0.0, d - 2.0) * 16.0)
         auto_median = int(30 + max(0.0, d - 2.0) * 15.0)
@@ -307,6 +311,40 @@ def _robust_fare_range(values: list[float]) -> Optional[dict[str, int]]:
     }
 
 
+def _report_created_at(report: dict[str, Any]) -> Optional[datetime.datetime]:
+    created_at = report.get("created_at")
+    if isinstance(created_at, datetime.datetime):
+        return created_at.replace(tzinfo=None) if created_at.tzinfo else created_at
+    if isinstance(created_at, str):
+        try:
+            parsed = datetime.datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            return parsed.astimezone(datetime.timezone.utc).replace(tzinfo=None) if parsed.tzinfo else parsed
+        except ValueError:
+            return None
+    return None
+
+
+def _is_disputed_report(report: dict[str, Any]) -> bool:
+    upvotes = report.get("upvotes") or []
+    downvotes = report.get("downvotes") or []
+    return len(downvotes) >= 2 and len(downvotes) > len(upvotes)
+
+
+def _trusted_fare_reports(reports: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    cutoff = datetime.datetime.utcnow() - datetime.timedelta(days=REPORT_TRUST_WINDOW_DAYS)
+    trusted: list[dict[str, Any]] = []
+    for report in reports:
+        if _is_disputed_report(report):
+            continue
+        created_at = _report_created_at(report)
+        if created_at and created_at < cutoff:
+            continue
+        if not isinstance(report.get("final_amount"), (int, float)) or float(report.get("final_amount") or 0) <= 0:
+            continue
+        trusted.append(report)
+    return trusted
+
+
 def _with_report_fare_meta(mode_doc: dict[str, Any], sample_size: int) -> dict[str, Any]:
     updated = dict(mode_doc)
     updated["report_sample_size"] = sample_size
@@ -328,7 +366,7 @@ def _ensure_fare_meta(mode_doc: dict[str, Any], route_distance_km: Optional[floa
     updated.setdefault("fare_source", "distance_model")
     updated["fare_source_label"] = "Distance model"
     if route_distance_km:
-        updated["fare_basis"] = updated.get("fare_basis") or f"{float(route_distance_km):.1f} km × campus-local fare rule"
+        updated["fare_basis"] = updated.get("fare_basis") or f"{float(route_distance_km):.1f} km x campus-local fare rule"
     else:
         updated["fare_basis"] = updated.get("fare_basis") or "Campus-local fare rule"
     updated["report_sample_size"] = sample_size
@@ -350,7 +388,7 @@ class ReportSubmitReq(BaseModel):
     luggage: bool
     driver_quote: float
     final_amount: float
-    anonymous: bool = False
+    anonymous: bool = True
 
 class SavingsLogReq(BaseModel):
     amount_saved: float
@@ -363,6 +401,16 @@ class VoteReq(BaseModel):
 def _clean_text(value: Optional[str], max_len: int) -> str:
     cleaned = re.sub(r"\s+", " ", (value or "").strip())
     return cleaned[:max_len]
+
+
+def _is_placeholder_campus(value: Optional[str]) -> bool:
+    cleaned = re.sub(r"\s+", " ", (value or "").strip()).lower()
+    return not cleaned or cleaned in PLACEHOLDER_CAMPUS_NAMES
+
+
+def _is_transport_hub_query(value: str) -> bool:
+    q = (value or "").lower()
+    return any(term in q for term in TRANSPORT_HUB_TERMS)
 
 
 def _parse_user_datetime(value: str) -> Optional[datetime.datetime]:
@@ -392,6 +440,71 @@ def _find_mode(route_doc: dict[str, Any], selected_mode: str) -> Optional[dict[s
         if _mode_matches(selected_mode, str(mode.get("mode", ""))):
             return mode
     return modes[0]
+
+
+async def _refresh_route_mode_fares(db, route_id: str, selected_mode: str) -> None:
+    route_doc = await db.travel_routes.find_one({"_id": route_id})
+    if not route_doc:
+        return
+
+    cursor = db.travel_reports.find({"route_id": route_id, "mode": {"$regex": f"^{re.escape(selected_mode)}$", "$options": "i"}})
+    all_reports = await cursor.to_list(length=1000)
+    trusted_reports = _trusted_fare_reports(all_reports)
+    robust_range = _robust_fare_range([r.get("final_amount") for r in trusted_reports])
+
+    model_mode = None
+    distance_km = route_doc.get("distance_km")
+    if isinstance(distance_km, (int, float)) and distance_km > 0:
+        model_mode = _find_mode(
+            {"modes": estimate_fares_by_city(float(distance_km), str(route_doc.get("college") or ""))},
+            selected_mode,
+        )
+
+    updated_modes = []
+    mode_found = False
+    for mode in route_doc.get("modes", []):
+        if _mode_matches(selected_mode, str(mode.get("mode", ""))):
+            mode_found = True
+            if robust_range:
+                updated_modes.append(_with_report_fare_meta({
+                    **mode,
+                    "min_fare": robust_range["min_fare"],
+                    "max_fare": robust_range["max_fare"],
+                    "median_fare": robust_range["median_fare"],
+                }, robust_range["sample_size"]))
+            elif model_mode:
+                updated_modes.append({
+                    **mode,
+                    "min_fare": model_mode["min_fare"],
+                    "max_fare": model_mode["max_fare"],
+                    "median_fare": model_mode["median_fare"],
+                    "fare_source": "distance_model",
+                    "fare_source_label": "Distance model",
+                    "fare_basis": model_mode.get("fare_basis") or f"{float(distance_km):.1f} km x campus-local fare rule",
+                    "fare_model_version": FARE_MODEL_VERSION,
+                    "report_sample_size": len(trusted_reports),
+                })
+            else:
+                next_mode = _ensure_fare_meta(mode, distance_km if isinstance(distance_km, (int, float)) else None)
+                next_mode["fare_source"] = "distance_model"
+                next_mode["fare_source_label"] = "Distance model"
+                next_mode["report_sample_size"] = len(trusted_reports)
+                updated_modes.append(next_mode)
+        else:
+            updated_modes.append(mode)
+
+    if not mode_found and robust_range:
+        updated_modes.append(_with_report_fare_meta({
+            "mode": selected_mode,
+            "min_fare": robust_range["min_fare"],
+            "max_fare": robust_range["max_fare"],
+            "median_fare": robust_range["median_fare"],
+        }, robust_range["sample_size"]))
+
+    await db.travel_routes.update_one(
+        {"_id": route_id},
+        {"$set": {"modes": updated_modes, "last_report_at": datetime.datetime.utcnow()}}
+    )
 
 
 def _clean_phone(value: Optional[str]) -> str:
@@ -435,10 +548,10 @@ async def get_routes(college: Optional[str] = Query(None), user_id: str = Depend
     if not college:
         # Get user profile to determine college
         profile = await db.profiles.find_one({"_id": user_id})
-        college = profile.get("college_name") if profile else "ABV-IIITM Gwalior"
+        college = profile.get("college_name") if profile else None
 
-    if not college:
-        college = "ABV-IIITM Gwalior"
+    if _is_placeholder_campus(college):
+        return []
 
     cursor = db.travel_routes.find({"college": college})
     routes = await cursor.to_list(length=100)
@@ -524,7 +637,8 @@ async def get_routes(college: Optional[str] = Query(None), user_id: str = Depend
         
         # Calculate dynamic labels based on report age
         reports_cursor = db.travel_reports.find({"route_id": route_id}).sort("created_at", -1)
-        r_reports = await reports_cursor.to_list(length=10)
+        all_reports = await reports_cursor.to_list(length=50)
+        r_reports = _trusted_fare_reports(all_reports)[:10]
         
         age_days = None
         has_recent = False
@@ -604,10 +718,10 @@ async def create_custom_route(req: CustomRouteCreateReq, user_id: str = Depends(
     college = _clean_text(req.college, 120)
     if not college:
         profile = await db.profiles.find_one({"_id": user_id})
-        college = profile.get("college_name") if profile else "ABV-IIITM Gwalior"
+        college = profile.get("college_name") if profile else None
 
-    if not college:
-        college = "ABV-IIITM Gwalior"
+    if _is_placeholder_campus(college):
+        raise HTTPException(status_code=400, detail="Set your college before saving travel routes")
 
     d = req.distance_km
     if d <= 0 or d > 250:
@@ -623,7 +737,7 @@ async def create_custom_route(req: CustomRouteCreateReq, user_id: str = Depends(
         "description": route_desc,
         "modes": modes,
         "cheapest_route_combo": f"Compare auto and cab prices. The estimated distance is {d} km.",
-        "negotiation_helper": f"Bhaiya, {route_name} ka normal student fare â‚¹{int(70 + d * 10.5)} hai. Sahi rate pe chal lo.",
+        "negotiation_helper": f"Bhaiya, {route_name} ka normal student fare Rs {int(70 + d * 10.5)} hai. Sahi rate pe chal lo.",
         "safety_score_day": "High Safety",
         "safety_score_night": "Stick to app-based rides late at night.",
         "scam_warnings": "If you have a ride-app quote, compare it before negotiating flat prices.",
@@ -646,12 +760,13 @@ async def get_reports(route_id: str = Query(...), user_id: str = Depends(get_cur
     for r in reports:
         report_dict = _to_dict(r)
         poster_id = report_dict.get("user_id")
-        
-        if report_dict.get("anonymous"):
-            report_dict["user_name"] = "Anonymous Student"
+        report_dict["is_own_report"] = poster_id == user_id
+        if poster_id == user_id:
+            report_dict["user_name"] = "Your report"
+        elif report_dict.get("anonymous", True):
+            report_dict["user_name"] = "Anonymous student"
         else:
-            user_doc = await db.users.find_one({"_id": poster_id})
-            report_dict["user_name"] = user_doc.get("full_name", "Anonymous Student") if user_doc else "Anonymous Student"
+            report_dict["user_name"] = "Campus student"
         
         # Calculate upvotes and downvotes
         upvotes = r.get("upvotes", [])
@@ -665,6 +780,8 @@ async def get_reports(route_id: str = Query(...), user_id: str = Depends(get_cur
             report_dict["user_vote"] = "down"
         else:
             report_dict["user_vote"] = None
+
+        report_dict["counts_in_model"] = bool(_trusted_fare_reports([r]))
             
         mapped_reports.append(report_dict)
 
@@ -676,6 +793,9 @@ async def vote_report(report_id: str, req: VoteReq, user_id: str = Depends(get_c
     report = await db.travel_reports.find_one({"_id": report_id})
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
+
+    if report.get("user_id") == user_id:
+        raise HTTPException(status_code=400, detail="You cannot vote on your own fare report")
         
     vote_type = req.vote_type.lower()
     if vote_type not in ["up", "down"]:
@@ -703,6 +823,7 @@ async def vote_report(report_id: str, req: VoteReq, user_id: str = Depends(get_c
         {"_id": report_id},
         {"$set": {"upvotes": upvotes, "downvotes": downvotes}}
     )
+    await _refresh_route_mode_fares(db, str(report.get("route_id") or ""), str(report.get("mode") or ""))
     
     return {
         "status": "ok",
@@ -731,13 +852,27 @@ async def create_report(req: ReportSubmitReq, user_id: str = Depends(get_current
     if req.amount_paid != req.final_amount:
         raise HTTPException(status_code=400, detail="Amount paid and final amount must match")
     if req.amount_paid <= 0 or req.amount_paid > base_median_fare * 3:
-        raise HTTPException(status_code=400, detail=f"Amount paid must be positive and not exceed 3x the baseline fare (â‚¹{base_median_fare * 3})")
+        raise HTTPException(status_code=400, detail=f"Amount paid must be positive and not exceed 3x the baseline fare (Rs {base_median_fare * 3:.0f})")
     if req.final_amount <= 0 or req.final_amount > base_median_fare * 3:
-        raise HTTPException(status_code=400, detail=f"Final amount must be positive and not exceed 3x the baseline fare (â‚¹{base_median_fare * 3})")
+        raise HTTPException(status_code=400, detail=f"Final amount must be positive and not exceed 3x the baseline fare (Rs {base_median_fare * 3:.0f})")
     if req.driver_quote <= 0 or req.driver_quote > base_median_fare * 5:
-        raise HTTPException(status_code=400, detail=f"Driver quote must be positive and within reasonable limits (maximum â‚¹{base_median_fare * 5})")
+        raise HTTPException(status_code=400, detail=f"Driver quote must be positive and within reasonable limits (maximum Rs {base_median_fare * 5:.0f})")
     if req.final_amount > req.driver_quote:
         raise HTTPException(status_code=400, detail="Final amount cannot be higher than the driver quote")
+
+    now = datetime.datetime.utcnow()
+    duplicate_cutoff = now - datetime.timedelta(hours=REPORT_DUPLICATE_WINDOW_HOURS)
+    recent_duplicate = await db.travel_reports.find_one({
+        "user_id": user_id,
+        "route_id": req.route_id,
+        "mode": {"$regex": f"^{re.escape(req.mode)}$", "$options": "i"},
+        "created_at": {"$gte": duplicate_cutoff},
+    })
+    if recent_duplicate:
+        raise HTTPException(
+            status_code=409,
+            detail="You already reported this route and mode recently. Update the route after your next ride.",
+        )
 
     report_id = str(uuid.uuid4())
 
@@ -752,43 +887,13 @@ async def create_report(req: ReportSubmitReq, user_id: str = Depends(get_current
         "luggage": req.luggage,
         "driver_quote": req.driver_quote,
         "final_amount": req.final_amount,
-        "anonymous": req.anonymous,
-        "created_at": datetime.datetime.utcnow()
+        "anonymous": True if req.anonymous is None else bool(req.anonymous),
+        "upvotes": [],
+        "downvotes": [],
+        "created_at": now
     })
 
-    # Dynamically update the fair fare ranges in the route document based on community reports
-    cursor = db.travel_reports.find({"route_id": req.route_id, "mode": req.mode})
-    mode_reports = await cursor.to_list(length=1000)
-
-    robust_range = _robust_fare_range([r.get("final_amount") for r in mode_reports])
-
-    if robust_range:
-        route_doc = await db.travel_routes.find_one({"_id": req.route_id})
-        if route_doc:
-            updated_modes = []
-            mode_found = False
-            for m in route_doc.get("modes", []):
-                # match mode name (case-insensitive substring)
-                if _mode_matches(req.mode, str(m.get("mode", ""))):
-                    m["min_fare"] = robust_range["min_fare"]
-                    m["max_fare"] = robust_range["max_fare"]
-                    m["median_fare"] = robust_range["median_fare"]
-                    m = _with_report_fare_meta(m, robust_range["sample_size"])
-                    mode_found = True
-                updated_modes.append(m)
-
-            if not mode_found:
-                updated_modes.append(_with_report_fare_meta({
-                    "mode": req.mode,
-                    "min_fare": robust_range["min_fare"],
-                    "max_fare": robust_range["max_fare"],
-                    "median_fare": robust_range["median_fare"],
-                }, robust_range["sample_size"]))
-
-            await db.travel_routes.update_one(
-                {"_id": req.route_id},
-                {"$set": {"modes": updated_modes, "last_report_at": datetime.datetime.utcnow()}}
-            )
+    await _refresh_route_mode_fares(db, req.route_id, req.mode)
 
     # Add to wing feed activity
     profile = await db.profiles.find_one({"_id": user_id})
@@ -796,7 +901,7 @@ async def create_report(req: ReportSubmitReq, user_id: str = Depends(get_current
 
     route_doc = await db.travel_routes.find_one({"_id": req.route_id})
     route_name = route_doc.get("name", "campus route") if route_doc else "campus route"
-    route_short = route_name.split("â†’")[0].strip() if "â†’" in route_name else route_name
+    route_short = route_name.replace("→", " to ").split(" to ")[0].strip()
 
     await db.checkin_logs.insert_one({
         "_id": str(uuid.uuid4()),
@@ -805,8 +910,8 @@ async def create_report(req: ReportSubmitReq, user_id: str = Depends(get_current
         "gap_hours": 0,
         "food_gap_hours": 0,
         "suggestion_given": f"{req.mode} via {route_short}",
-        "stress_note": f"A student reported paying â‚¹{req.final_amount:.0f} (saved â‚¹{max(0.0, req.driver_quote - req.final_amount):.0f} from â‚¹{req.driver_quote:.0f} quote)",
-        "created_at": datetime.datetime.utcnow()
+        "stress_note": f"A student reported paying Rs {req.final_amount:.0f} (saved Rs {max(0.0, req.driver_quote - req.final_amount):.0f} from Rs {req.driver_quote:.0f} quote)",
+        "created_at": now
     })
 
     return {"status": "ok", "id": report_id}
@@ -844,7 +949,7 @@ async def log_savings(req: SavingsLogReq, user_id: str = Depends(get_current_use
         "gap_hours": 0,
         "food_gap_hours": 0,
         "suggestion_given": "negotiation_helper",
-        "stress_note": f"Saved â‚¹{req.amount_saved:.0f} using Travel negotiation helper!",
+        "stress_note": f"Saved Rs {req.amount_saved:.0f} using Travel negotiation helper!",
         "created_at": datetime.datetime.utcnow()
     })
 
@@ -955,44 +1060,44 @@ def generate_rich_fallback_script(college: str, mode: str, situation: str, app_q
     # 1. Base pitches depending on college & mode
     if "gwalior" in col_lower or "iiitm" in col_lower:
         if "shared" in mode_lower or "tempo" in mode_lower:
-            script = "Bhaiya, Hazira ka â‚¹10 chalo na, regular campus rate hai."
+            script = "Bhaiya, Hazira ka Rs 10 chalo na, regular campus rate hai."
         elif "auto" in mode_lower:
-            script = f"Bhaiya, ABV-IIITM Gate 1 chalo na. Regular student rate â‚¹{median_fare:.0f} hai."
+            script = f"Bhaiya, ABV-IIITM Gate 1 chalo na. Regular student rate Rs {median_fare:.0f} hai."
         elif "cab" in mode_lower or "taxi" in mode_lower:
             if app_quote:
-                script = f"Bhaiya, IIITM campus direct drop. App par â‚¹{app_quote:.0f} dikha raha hai, â‚¹{median_fare:.0f} me done karte hain."
+                script = f"Bhaiya, IIITM campus direct drop. App par Rs {app_quote:.0f} dikha raha hai, Rs {median_fare:.0f} me done karte hain."
             else:
-                script = f"Bhaiya, IIITM campus direct drop. Regular fare â‚¹{median_fare:.0f} ke around hai, done karte hain."
+                script = f"Bhaiya, IIITM campus direct drop. Regular fare Rs {median_fare:.0f} ke around hai, done karte hain."
         else:
-            script = f"Bhaiya, IIITM Gate 1 chalo. Normal fare â‚¹{median_fare:.0f} lagao."
+            script = f"Bhaiya, IIITM Gate 1 chalo. Normal fare Rs {median_fare:.0f} lagao."
             
     elif "delhi" in col_lower:
         if "auto" in mode_lower:
-            script = f"Bhaiya, IIT Delhi main gate chalo. Meter se chaloge? Ya flat â‚¹{median_fare:.0f} le lo."
+            script = f"Bhaiya, IIT Delhi main gate chalo. Meter se chaloge? Ya flat Rs {median_fare:.0f} le lo."
         else:
-            script = f"Bhaiya, IIT main gate. Regular route rate is â‚¹{median_fare:.0f}."
+            script = f"Bhaiya, IIT main gate. Regular route rate is Rs {median_fare:.0f}."
             
     elif "pilani" in col_lower or "bits" in col_lower:
-        script = f"Bhaiya ji, BITS Campus chalna hai. Standard rate â‚¹{median_fare:.0f} chalo na."
+        script = f"Bhaiya ji, BITS Campus chalna hai. Standard rate Rs {median_fare:.0f} chalo na."
         
     elif "bombay" in col_lower or "mumbai" in col_lower:
-        script = f"Dada, IIT Bombay chalo. Meter chalu karo na please, ya flat â‚¹{median_fare:.0f} chalo."
+        script = f"Dada, IIT Bombay chalo. Meter chalu karo na please, ya flat Rs {median_fare:.0f} chalo."
         
     elif "bangalore" in col_lower or "iiitb" in col_lower:
         if app_quote:
-            script = f"Anna, IIIT Bangalore chalo. Regular route rate is â‚¹{median_fare:.0f}. App is showing â‚¹{app_quote:.0f}."
+            script = f"Anna, IIIT Bangalore chalo. Regular route rate is Rs {median_fare:.0f}. App is showing Rs {app_quote:.0f}."
         else:
-            script = f"Anna, IIIT Bangalore chalo. Regular route rate is â‚¹{median_fare:.0f}."
+            script = f"Anna, IIIT Bangalore chalo. Regular route rate is Rs {median_fare:.0f}."
         
     elif "vellore" in col_lower or "vit" in col_lower:
-        script = f"Anna, VIT Vellore campus main gate. Katpadi station se standard rate â‚¹{median_fare:.0f} chalo."
+        script = f"Anna, VIT Vellore campus main gate. Katpadi station se standard rate Rs {median_fare:.0f} chalo."
         
     else:
-        script = f"Bhaiya, campus chalna hai. Sahi price lagao, regular rate â‚¹{median_fare:.0f} hai."
+        script = f"Bhaiya, campus chalna hai. Sahi price lagao, regular rate Rs {median_fare:.0f} hai."
 
     # 2. Append app benchmark counter-anchors
     if app_quote and app_quote > median_fare:
-        script += f" App par toh high surge rate â‚¹{app_quote:.0f} dikha raha hai, regular rates toh â‚¹{median_fare:.0f} hote hain."
+        script += f" App par toh high quote Rs {app_quote:.0f} dikha raha hai, regular rates toh Rs {median_fare:.0f} hote hain."
 
     # 3. Add situation-specific overlays
     if sit_lower:
@@ -1052,6 +1157,7 @@ async def get_ai_negotiation_coach(req: AiCoachReq, user_id: str = Depends(get_c
             "mode": {"$regex": re.escape(req.mode), "$options": "i"},
         }).sort("created_at", -1)
         recent_reports = await report_cursor.to_list(length=200)
+        recent_reports = _trusted_fare_reports(recent_reports)
         report_count = len(recent_reports)
         if report_count >= MIN_COMMUNITY_REPORTS_FOR_FARE:
             robust_range = _robust_fare_range([r.get("final_amount") for r in recent_reports])
@@ -1104,7 +1210,7 @@ async def get_ai_negotiation_coach(req: AiCoachReq, user_id: str = Depends(get_c
         "tactics": [
             f"If you have a ride-app quote, compare it with this fare anchor before discussing flat rates.",
             f"Walk 100 meters away from main exit gates to hire passing running autos rather than stationary ones.",
-            f"Refer to standard rates: Bhaiya, regular campus rate is between â‚¹{min_fare}-â‚¹{max_fare}."
+            f"Refer to standard rates: Bhaiya, regular campus rate is between Rs {min_fare}-Rs {max_fare}."
         ],
         "safety": route.get("safety_score_night", "Avoid shared/unknown routes late at night; prefer pre-booked rides.") if route else "Always prefer pre-booked rides late at night.",
         "surge_factor": surge_factor,
@@ -1159,7 +1265,7 @@ async def get_ai_negotiation_coach(req: AiCoachReq, user_id: str = Depends(get_c
 #  ROUTING ENGINE
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-# Curated landmark â†’ (city, (lat, lon)) mapping.
+# Curated landmark to (city, (lat, lon)) mapping.
 # City field is used to validate that a matched landmark
 # belongs to the same city as the user's campus, preventing
 # cross-campus coordinate leakage.
@@ -1712,25 +1818,12 @@ async def get_campus_metadata(db, college_name: str) -> dict:
                 "_id": college_name,
                 "lat": lat, "lon": lon,
                 "city": city, "state": state,
+                "source": "known_campus",
+                "confidence": "high",
                 "updated_at": datetime.datetime.utcnow(),
             }
             await db.campus_metadata.replace_one({"_id": college_name}, meta, upsert=True)
             logger.info("Known campus matched: '%s' -> %s", college_name, city)
-            return meta
-
-    # 2b. Extended city-keyword matching for college names that don't contain
-    #     institution acronyms. Safe here because we're matching the college name,
-    #     not a landmark query.
-    for keyword, city, state, lat, lon in _COLLEGE_NAME_CITY_HINTS:
-        if keyword in col_lower:
-            meta = {
-                "_id": college_name,
-                "lat": lat, "lon": lon,
-                "city": city, "state": state,
-                "updated_at": datetime.datetime.utcnow(),
-            }
-            await db.campus_metadata.replace_one({"_id": college_name}, meta, upsert=True)
-            logger.info("City keyword matched college name '%s' -> %s", college_name, city)
             return meta
 
     # 3. Dynamic Nominatim geocode
@@ -1765,7 +1858,35 @@ async def get_campus_metadata(db, college_name: str) -> dict:
         except Exception as exc:
             logger.warning("Nominatim campus resolution failed for '%s': %s", college_name, exc)
 
-    # 4. Absolute fallback
+    if lat:
+        meta = {
+            "_id": college_name,
+            "lat": lat, "lon": lon,
+            "city": city, "state": state,
+            "source": "geocoded_campus",
+            "confidence": "medium" if city and city != "Unknown" else "low",
+            "updated_at": datetime.datetime.utcnow(),
+        }
+        await db.campus_metadata.replace_one({"_id": college_name}, meta, upsert=True)
+        return meta
+
+    # 4. Extended city-keyword matching for college names that do not resolve exactly.
+    # This is treated as a city-level anchor, not a confirmed campus coordinate.
+    for keyword, city, state, lat, lon in _COLLEGE_NAME_CITY_HINTS:
+        if keyword in col_lower:
+            meta = {
+                "_id": college_name,
+                "lat": lat, "lon": lon,
+                "city": city, "state": state,
+                "source": "city_hint",
+                "confidence": "low",
+                "updated_at": datetime.datetime.utcnow(),
+            }
+            await db.campus_metadata.replace_one({"_id": college_name}, meta, upsert=True)
+            logger.info("City keyword matched college name '%s' -> %s", college_name, city)
+            return meta
+
+    # 5. Absolute fallback
     if not lat:
         lat, lon, city, state = 26.2514, 78.1685, "Gwalior", "Madhya Pradesh"
         logger.warning("Absolute fallback to Gwalior for unknown campus '%s'", college_name)
@@ -1774,6 +1895,8 @@ async def get_campus_metadata(db, college_name: str) -> dict:
         "_id": college_name,
         "lat": lat, "lon": lon,
         "city": city, "state": state,
+        "source": "absolute_fallback",
+        "confidence": "low",
         "updated_at": datetime.datetime.utcnow(),
     }
     await db.campus_metadata.replace_one({"_id": college_name}, meta, upsert=True)
@@ -1801,7 +1924,18 @@ async def place_suggestions(
     db = get_db()
     if not college:
         profile = await db.profiles.find_one({"_id": user_id})
-        college = (profile.get("college_name") if profile else None) or "ABV-IIITM Gwalior"
+        college = profile.get("college_name") if profile else None
+
+    if _is_placeholder_campus(college):
+        return {
+            "suggestions": [],
+            "source": "campus_required",
+            "campus": college,
+            "campus_city": None,
+            "requires_selection": False,
+            "requires_campus": True,
+            "message": "Set your college first so suggestions are searched near the right campus.",
+        }
 
     campus_meta = await get_campus_metadata(db, college)
     local = _local_place_suggestions(
@@ -1942,12 +2076,12 @@ async def geocode_query(
     Resolves an arbitrary location query to (lat, lon).
 
     Pipeline:
-      Phase 1 â€” Campus endpoint detection: if the query refers to the
+      Phase 1 - Campus endpoint detection: if the query refers to the
                  college/campus itself, return campus coordinates immediately.
-      Phase 2 â€” Curated landmark match with city-validation.
-      Phase 3a â€” Nominatim search with viewbox bias around the campus.
+      Phase 2 - Curated landmark match with city-validation.
+      Phase 3a - Nominatim search with viewbox bias around the campus.
                   Returns the closest result to campus when multiple hits.
-      Phase 3b â€” Nominatim global search (no viewbox) as final fallback.
+      Phase 3b - Nominatim global search (no viewbox) as final fallback.
     """
     q = query.lower().strip()
 
@@ -2083,7 +2217,7 @@ async def compute_route(
     Returns: (distance_km, duration_mins, leaflet_geometry_list, source_label)
 
     Uses OSRM public API for real driving routes with turn-by-turn geometry.
-    Falls back to Haversine Ã— 1.35 road-factor if OSRM is unreachable.
+    Falls back to Haversine x 1.35 road-factor if OSRM is unreachable.
     """
     # OSRM public routing engine
     try:
@@ -2146,7 +2280,12 @@ async def calculate_route(
 
     # Resolve college and campus location
     profile = await db.profiles.find_one({"_id": user_id})
-    college = college or (profile.get("college_name") if profile else None) or "ABV-IIITM Gwalior"
+    college = college or (profile.get("college_name") if profile else None)
+    if _is_placeholder_campus(college):
+        raise HTTPException(
+            status_code=400,
+            detail="Set your college before estimating fares so PocketBuddy searches the right city.",
+        )
 
     campus_meta = await get_campus_metadata(db, college)
     campus_lat  = campus_meta["lat"]
@@ -2231,9 +2370,16 @@ async def calculate_route(
     def _is_likely_institution(q: str) -> bool:
         return any(m in q.lower() for m in _INSTITUTION_MARKERS_SET)
 
+    def _max_allowed_campus_distance(q: str) -> float:
+        if _is_likely_institution(q):
+            return 500.0
+        if _is_transport_hub_query(q):
+            return 260.0
+        return _MAX_LOCAL_DIST_KM
+
     if coords_origin:
         dist = _distance_km(campus_lat, campus_lon, *coords_origin)
-        if dist > _MAX_LOCAL_DIST_KM and not _is_likely_institution(search_origin):
+        if dist > _max_allowed_campus_distance(search_origin):
             logger.warning(
                 "Origin '%s' resolved %.0f km from campus — rejecting (likely geocoding error)",
                 search_origin, dist
@@ -2242,7 +2388,7 @@ async def calculate_route(
             origin_resolution = "rejected_far_match"
     if coords_dest:
         dist = _distance_km(campus_lat, campus_lon, *coords_dest)
-        if dist > _MAX_LOCAL_DIST_KM and not _is_likely_institution(search_dest):
+        if dist > _max_allowed_campus_distance(search_dest):
             logger.warning(
                 "Destination '%s' resolved %.0f km from campus — rejecting (likely geocoding error)",
                 search_dest, dist
@@ -2276,10 +2422,12 @@ async def calculate_route(
     # Estimate fares using city-specific tariff rules
     modes = estimate_fares_by_city(distance_km, college)
     resolution_values = {origin_resolution, destination_resolution}
+    campus_confidence = str(campus_meta.get("confidence") or "medium")
     low_resolution = bool(resolution_values & {"deliberate_geocode", "rejected_far_match", "unresolved"})
+    campus_low_confidence = campus_confidence == "low"
     route_confidence = (
         "high"
-        if source == "osrm_route" and not low_resolution
+        if source == "osrm_route" and not low_resolution and not campus_low_confidence
         else "medium"
         if source == "osrm_route"
         else "low"
@@ -2288,6 +2436,8 @@ async def calculate_route(
     resolution_warning = (
         "Route is based on a fallback distance estimate. Confirm the places before using the fare."
         if source != "osrm_route"
+        else "Campus location is city-level, not an exact college coordinate. Confirm the places before relying on the fare."
+        if campus_confidence == "low"
         else "One or both places were resolved from typed search. Select a suggestion next time for the strongest match."
         if low_resolution
         else None
@@ -2305,6 +2455,8 @@ async def calculate_route(
         "source":         source,
         "campus":         college,
         "campus_city":    campus_city,
+        "campus_confidence": campus_confidence,
+        "campus_source": campus_meta.get("source"),
         "route_confidence": route_confidence,
         "needs_review":   needs_review,
         "resolution_warning": resolution_warning,

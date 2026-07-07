@@ -231,7 +231,7 @@ export async function submitTravelReport({ data }: { data: any }) {
 }
 
 export async function getTravelReports(routeId: string) {
-  return apiRequest(`/api/travel/reports?route_id=${routeId}`);
+  return apiRequest(`/api/travel/reports?route_id=${encodeURIComponent(routeId)}`);
 }
 
 export async function voteTravelReport(reportId: string, voteType: "up" | "down") {
