@@ -20,7 +20,19 @@ from pydantic import BaseModel
 
 from app.core.database import get_db
 from app.core.security import get_current_user, map_doc, map_docs
-from app.services.campus_food import load_campus_food
+from app.services.campus_food import (
+    REVIEW_ONLY_STATUSES,
+    apply_food_context_metadata,
+    build_food_recommendations,
+    build_food_trust_metadata,
+    compute_food_verification_threshold,
+    food_confirmation_count,
+    food_dispute_count,
+    food_dispute_hide_threshold,
+    food_effective_verification_threshold,
+    food_net_vote_score,
+    load_campus_food,
+)
 from app.core.config import settings
 
 router = APIRouter()
@@ -33,6 +45,100 @@ async def _is_user_trusted(db, user_id: str) -> bool:
     role = user.get("role", "").lower()
     is_admin = user.get("is_admin", False)
     return role in ("admin", "moderator") or is_admin
+
+
+async def _campus_review_population(db, campus: str) -> int:
+    """Estimate active reviewer population without leaking raw transaction data."""
+    campus_name = (campus or "").strip()
+    if not campus_name:
+        return 0
+
+    since = datetime.datetime.utcnow() - datetime.timedelta(days=60)
+    try:
+        recent_voters = await db.campus_food.distinct(
+            "voters",
+            {
+                "campus": {"$regex": f"^{re.escape(campus_name)}$", "$options": "i"},
+                "updated_at": {"$gte": since},
+            },
+        )
+        recent_count = len([voter for voter in recent_voters if voter])
+    except Exception:
+        recent_count = 0
+
+    try:
+        profile_count = await db.profiles.count_documents({
+            "college_name": {"$regex": f"^{re.escape(campus_name)}$", "$options": "i"},
+        })
+    except Exception:
+        profile_count = 0
+
+    return max(recent_count, min(profile_count, 300))
+
+
+async def _verification_threshold_for(db, campus: str, source_type: str) -> int:
+    population = await _campus_review_population(db, campus)
+    return compute_food_verification_threshold(source_type, active_reviewers=population)
+
+
+async def _effective_verification_threshold_for(db, item: dict, source_type: str | None = None) -> int:
+    campus = item.get("campus", "ABV-IIITM Gwalior")
+    population = await _campus_review_population(db, campus)
+    return food_effective_verification_threshold(
+        item,
+        source_type=source_type or _review_source_for_item(item),
+        active_reviewers=population,
+    )
+
+
+def _review_counts_for_new_candidate() -> dict:
+    return {
+        "verification_votes": 0,
+        "confirmation_count": 0,
+        "dispute_count": 0,
+        "voters": [],
+    }
+
+
+def _review_counts_after_submitter_confirmation(user_id: str) -> dict:
+    return {
+        "verification_votes": 1,
+        "confirmation_count": 1,
+        "dispute_count": 0,
+        "voters": [user_id],
+    }
+
+
+def _review_source_for_item(item: dict) -> str:
+    source = str(item.get("source") or "").lower()
+    if source in {"manual_correction", "student_correction"}:
+        return "manual_correction"
+    if source in {"receipt_price_spike_review", "price_spike_quiz", "receipt_ocr"}:
+        return "price_change_review"
+    if source in {"external_snapshot", "apify_snapshot", "google_places_snapshot", "swiggy_snapshot", "zomato_snapshot"}:
+        return "external_snapshot"
+    if source in {"partner_api", "partner_verified", "swiggy_partner", "zomato_partner", "ondc_partner"}:
+        return "partner_verified"
+    if source in {"community_item_quiz"}:
+        return "community_item_quiz"
+    if source in {"ocr_menu_scan", "demo_menu_scan"}:
+        return "menu_scan_pending"
+    return "menu_scan_pending" if item.get("status") == "pending_verification" else "curated_baseline"
+
+
+def _review_progress_payload(item: dict, status: str | None = None) -> dict:
+    confirmations = food_confirmation_count(item)
+    disputes = food_dispute_count(item)
+    source_type = _review_source_for_item(item)
+    threshold = food_effective_verification_threshold(item, source_type=source_type)
+    return {
+        "status": status or item.get("status", "voted"),
+        "verification_votes": food_net_vote_score(item),
+        "confirmation_count": confirmations,
+        "dispute_count": disputes,
+        "verification_threshold": threshold,
+        "dispute_hide_threshold": food_dispute_hide_threshold(threshold),
+    }
 
 # Max upload size: 5 MB
 MAX_IMAGE_SIZE = 5 * 1024 * 1024
@@ -66,18 +172,22 @@ async def _get_quiz_context(db, quiz_id: str) -> dict:
 
 @router.get("")
 @router.get("/")
-async def get_campus_food(status: Optional[str] = Query(None)):
+async def get_campus_food(
+    status: Optional[str] = Query(None),
+    safe_food_budget_paise: Optional[int] = Query(None, ge=0),
+    meal_gap_hours: Optional[float] = Query(None, ge=0),
+):
     db = get_db()
-    if status:
+    if status == "review_queue":
+        cursor = db.campus_food.find({"status": {"$in": ["pending_verification", "disputed_hidden"]}})
+    elif status:
         cursor = db.campus_food.find({"status": status})
     else:
         # Only return active or legacy items — exclude review-only candidate states.
-        cursor = db.campus_food.find({
-            "status": {"$nin": ["pending_verification", "rejected", "merged_into_active", "needs_review"]}
-        })
+        cursor = db.campus_food.find({"status": {"$nin": list(REVIEW_ONLY_STATUSES)}})
     items = await cursor.to_list(length=1000)
 
-    if not items and not status:
+    if not items and not status and settings.DEMO_MODE:
         raw_items = load_campus_food()
         if raw_items:
             for item in raw_items:
@@ -118,6 +228,7 @@ async def get_campus_food(status: Optional[str] = Query(None)):
         if "Campus Juice Center" not in venue_counts:
             venue_counts["Campus Juice Center"] = 1
 
+    campus_review_population_cache: dict[str, int] = {}
     mapped_items = []
     for item in items:
         # 1. Recent demand estimation. This is not a live queue sensor.
@@ -155,7 +266,20 @@ async def get_campus_food(status: Optional[str] = Query(None)):
         item["price_change_pct"] = price_change_pct
 
         # 3. Source & freshness metadata + price spike alerts (Food Trust Layer)
-        votes = item.get("verification_votes", 1)
+        confirmations = food_confirmation_count(item)
+        source_review_type = _review_source_for_item(item)
+        campus_key = str(item.get("campus") or "ABV-IIITM Gwalior")
+        if campus_key not in campus_review_population_cache:
+            campus_review_population_cache[campus_key] = await _campus_review_population(db, campus_key)
+        threshold = food_effective_verification_threshold(
+            item,
+            source_type=source_review_type,
+            active_reviewers=campus_review_population_cache[campus_key],
+        )
+        item["verification_threshold"] = threshold
+        item["confirmation_count"] = confirmations
+        item["dispute_count"] = food_dispute_count(item)
+        item["verification_votes"] = food_net_vote_score(item)
         history = item.get("price_history", [])
         last_change_str = "recently"
         if history:
@@ -172,18 +296,66 @@ async def get_campus_food(status: Optional[str] = Query(None)):
             except Exception:
                 pass
 
-        if votes >= 3:
-            item["freshness_info"] = f"Verified {last_change_str} by {votes} student confirmations"
+        if str(item.get("status") or "active").lower() not in REVIEW_ONLY_STATUSES and source_review_type == "curated_baseline":
+            item["freshness_info"] = "Baseline campus catalog item"
+            item["source_freshness"] = "Campus baseline"
+        elif source_review_type == "partner_verified":
+            item["freshness_info"] = "Official partner/API source"
+            item["source_freshness"] = "Partner verified"
+        elif confirmations >= threshold:
+            item["freshness_info"] = f"Verified {last_change_str} by {confirmations} independent confirmations"
             item["source_freshness"] = "Community verified"
         else:
-            item["freshness_info"] = f"Awaiting community verification ({votes}/3 confirmations)"
+            item["freshness_info"] = f"Awaiting community verification ({confirmations}/{threshold} confirmations)"
             item["source_freshness"] = "Community suggested, pending verification"
 
         item["price_spike_alert"] = not price_stable and price_change_pct >= 15
+        item.update(build_food_trust_metadata(item, now))
+        apply_food_context_metadata(item, safe_food_budget_paise, meal_gap_hours)
 
         mapped_items.append(item)
 
     return map_docs(mapped_items)
+
+
+@router.get("/recommendations")
+async def get_campus_food_recommendations(
+    campus: Optional[str] = Query(None),
+    safe_food_budget_paise: Optional[int] = Query(None, ge=0),
+    meal_gap_hours: Optional[float] = Query(None, ge=0),
+    limit: int = Query(3, ge=1, le=10),
+):
+    """
+    Return ranked food decisions, not raw menu data.
+    This keeps Food Guard deterministic: trust, budget fit, freshness,
+    availability, and price-spike risk decide the ranking.
+    """
+    db = get_db()
+    query = {"status": {"$nin": list(REVIEW_ONLY_STATUSES)}}
+    if campus:
+        query["campus"] = {"$regex": f"^{re.escape(campus.strip())}$", "$options": "i"}
+
+    items = await db.campus_food.find(query).to_list(length=1000)
+    if not items and settings.DEMO_MODE:
+        items = load_campus_food()
+        if campus:
+            campus_lower = campus.strip().lower()
+            items = [item for item in items if str(item.get("campus", "")).lower() == campus_lower]
+
+    recommendations = build_food_recommendations(
+        items,
+        now=datetime.datetime.utcnow(),
+        safe_food_budget_paise=safe_food_budget_paise,
+        meal_gap_hours=meal_gap_hours,
+        limit=limit,
+    )
+
+    return {
+        "status": "ok",
+        "strategy": "ranked_by_trust_budget_availability",
+        "count": len(recommendations),
+        "recommendations": recommendations,
+    }
 
 
 class CreateFoodItemReq(BaseModel):
@@ -218,6 +390,12 @@ async def create_food_item(
     if existing:
         return map_doc(existing)
 
+    source_type = "trusted_direct_edit" if status == "active" and is_trusted else "menu_scan_pending"
+    review_counts = (
+        _review_counts_after_submitter_confirmation(user_id)
+        if status == "pending_verification"
+        else {"verification_votes": 1, "confirmation_count": 1, "dispute_count": 0, "voters": [user_id]}
+    )
     doc = {
         "_id": f"{venue_name.lower().replace(' ', '_')}_{item_name.lower().replace(' ', '_')}_{uuid.uuid4().hex[:6]}",
         "campus": campus,
@@ -228,10 +406,11 @@ async def create_food_item(
         "price": body.price,
         "price_history": [{"price": body.price, "changed_at": datetime.datetime.utcnow().isoformat()}],
         "status": status,
-        "verification_votes": 3 if (status == "active" and is_trusted) else 1,
-        "verification_threshold": 3,
-        "voters": [user_id],
+        **review_counts,
+        "verification_threshold": await _verification_threshold_for(db, campus, source_type),
         "scanned_by": user_id,
+        "submitted_by": user_id,
+        "source": source_type,
         "s3_image_uri": "",
         "available_from": "08:00",
         "available_until": "22:00",
@@ -380,6 +559,8 @@ async def scan_menu_photo(
 
     # Step 3: Store OCR results only as pending review candidates.
     now = datetime.datetime.utcnow()
+    source_type = "demo_menu_scan" if is_fallback else "ocr_menu_scan"
+    threshold = await _verification_threshold_for(db, campus, "menu_scan_pending")
     inserted = []
     for item in parsed_items:
         existing = await db.campus_food.find_one({
@@ -395,8 +576,9 @@ async def scan_menu_photo(
                         "category": item.get("category", existing.get("category", "other")),
                         "needs_review": True,
                         "updated_at": now,
-                        "last_review_source": "ocr_menu_scan",
+                        "last_review_source": source_type,
                         "parser_source": item.get("parser_source", "heuristic_menu_parser"),
+                        "verification_threshold": max(threshold, int(existing.get("verification_threshold") or 0)),
                     }
                 },
             )
@@ -413,11 +595,11 @@ async def scan_menu_photo(
                 "price": item["price"],
                 "price_history": item.get("price_history", [{"price": item["price"], "changed_at": now.isoformat()}]),
                 "status": "pending_verification",
-                "verification_votes": 1,
-                "verification_threshold": 3,
-                "voters": [user_id],
+                **_review_counts_for_new_candidate(),
+                "verification_threshold": threshold,
                 "scanned_by": user_id,
-                "source": "demo_menu_scan" if is_fallback else "ocr_menu_scan",
+                "submitted_by": user_id,
+                "source": source_type,
                 "parser_source": item.get("parser_source", "heuristic_menu_parser"),
                 "needs_review": True,
                 "candidate_for_item_id": existing.get("_id") if existing else None,
@@ -511,17 +693,29 @@ async def edit_food_item(
         })
         if existing_candidate:
             if user_id not in existing_candidate.get("voters", []):
+                confirmations = food_confirmation_count(existing_candidate) + 1
+                disputes = food_dispute_count(existing_candidate)
+                candidate_threshold = await _effective_verification_threshold_for(
+                    db,
+                    existing_candidate,
+                    "manual_correction" if has_name_change else "price_change_review",
+                )
                 await db.campus_food.update_one(
                     {"_id": existing_candidate["_id"]},
                     {
-                        "$inc": {"verification_votes": 1},
                         "$addToSet": {"voters": user_id},
-                        "$set": {"updated_at": now},
+                        "$set": {
+                            "verification_votes": confirmations - disputes,
+                            "confirmation_count": confirmations,
+                            "dispute_count": disputes,
+                            "verification_threshold": candidate_threshold,
+                            "updated_at": now,
+                        },
                     },
                 )
             updated_candidate = await db.campus_food.find_one({"_id": existing_candidate["_id"]})
-            latest_votes = updated_candidate.get("verification_votes", 0) if updated_candidate else 0
-            latest_threshold = updated_candidate.get("verification_threshold", 3) if updated_candidate else 3
+            latest_votes = food_confirmation_count(updated_candidate) if updated_candidate else 0
+            latest_threshold = updated_candidate.get("verification_threshold", 5) if updated_candidate else 5
             candidate_for_item_id = updated_candidate.get("candidate_for_item_id") if updated_candidate else None
             if updated_candidate and candidate_for_item_id and latest_votes >= latest_threshold:
                 target_item = await db.campus_food.find_one({"_id": candidate_for_item_id})
@@ -576,10 +770,14 @@ async def edit_food_item(
             "price": proposed_price,
             "price_history": price_history,
             "status": "pending_verification",
-            "verification_votes": 1,
-            "verification_threshold": 3,
-            "voters": [user_id],
+            **_review_counts_after_submitter_confirmation(user_id),
+            "verification_threshold": await _verification_threshold_for(
+                db,
+                item.get("campus", "ABV-IIITM Gwalior"),
+                "manual_correction" if has_name_change else "price_change_review",
+            ),
             "scanned_by": user_id,
+            "submitted_by": user_id,
             "source": "manual_correction",
             "needs_review": True,
             "candidate_for_item_id": item_id,
@@ -635,7 +833,7 @@ async def delete_food_item(
     is_creator = item.get("scanned_by") == user_id
     is_trusted = await _is_user_trusted(db, user_id)
     item_status = item.get("status", "active")
-    can_delete = is_trusted or (is_creator and item_status in ("pending_verification", "rejected"))
+    can_delete = is_trusted or (is_creator and item_status in ("pending_verification", "rejected", "disputed_hidden"))
     if not can_delete:
         raise HTTPException(
             status_code=403,
@@ -657,8 +855,8 @@ async def verify_food_item(
     user_id: str = Depends(get_current_user),
 ):
     """
-    Crowdsource verification: students vote thumbs-up/down on scanned menu items.
-    Once an item hits the verification threshold (default 3), it becomes 'active'.
+    Crowdsource verification: independent confirmations promote candidates.
+    Disputes hide questionable items from recommendations instead of deleting trusted data.
     """
     db = get_db()
 
@@ -672,33 +870,50 @@ async def verify_food_item(
     # Prevent double-voting by same user
     voters = item.get("voters", [])
     if user_id in voters:
-        return {"status": "already_voted", "verification_votes": item.get("verification_votes", 0)}
+        return _review_progress_payload(item, "already_voted")
 
-    increment = 1 if req.vote == "up" else -1
-    update_ops = {
-        "$inc": {"verification_votes": increment},
-        "$addToSet": {"voters": user_id},
-        "$set": {"updated_at": datetime.datetime.utcnow()},
-    }
+    submitter_id = item.get("submitted_by") or item.get("scanned_by")
+    is_trusted = await _is_user_trusted(db, user_id)
+    if req.vote == "up" and submitter_id == user_id and not is_trusted:
+        return _review_progress_payload(item, "submitter_cannot_self_confirm")
 
-    await db.campus_food.update_one({"_id": item_id}, update_ops)
+    now = datetime.datetime.utcnow()
+    source_type = _review_source_for_item(item)
+    threshold = await _effective_verification_threshold_for(db, item, source_type)
+    confirmations = food_confirmation_count(item) + (1 if req.vote == "up" else 0)
+    disputes = food_dispute_count(item) + (1 if req.vote == "down" else 0)
+    net_score = confirmations - disputes
+
+    await db.campus_food.update_one(
+        {"_id": item_id},
+        {
+            "$set": {
+                "verification_votes": net_score,
+                "confirmation_count": confirmations,
+                "dispute_count": disputes,
+                "verification_threshold": threshold,
+                "updated_at": now,
+            },
+            "$addToSet": {"voters": user_id},
+        },
+    )
 
     # Check if threshold reached → promote to active
     updated_item = await db.campus_food.find_one({"_id": item_id})
-    current_votes = updated_item.get("verification_votes", 0)
-    threshold = updated_item.get("verification_threshold", 3)
+    current_confirmations = food_confirmation_count(updated_item)
+    current_disputes = food_dispute_count(updated_item)
 
-    if current_votes >= threshold and updated_item.get("status") == "pending_verification":
+    if current_confirmations >= threshold and updated_item.get("status") in ("pending_verification", "disputed_hidden"):
         candidate_for_item_id = updated_item.get("candidate_for_item_id")
         if candidate_for_item_id:
             active_item = await db.campus_food.find_one({"_id": candidate_for_item_id})
             if active_item:
-                now = datetime.datetime.utcnow()
                 set_updates = {
                     "price": updated_item.get("price", active_item.get("price")),
                     "category": updated_item.get("category", active_item.get("category", "other")),
                     "updated_at": now,
                     "last_review_source": updated_item.get("source", "community_verification"),
+                    "last_verified_by_count": current_confirmations,
                 }
                 if updated_item.get("item_name"):
                     set_updates["item_name"] = updated_item["item_name"]
@@ -712,7 +927,7 @@ async def verify_food_item(
                                 "price": updated_item.get("price", active_item.get("price", 0)),
                                 "changed_at": now.isoformat(),
                                 "source": updated_item.get("source", "community_verification"),
-                                "verified_by_votes": current_votes,
+                                "verified_by_votes": current_confirmations,
                             }
                         },
                     },
@@ -721,31 +936,42 @@ async def verify_food_item(
                     {"_id": item_id},
                     {"$set": {"status": "merged_into_active", "merged_at": now, "merged_into": candidate_for_item_id}},
                 )
-                return {"status": "merged_into_active", "verification_votes": current_votes}
+                updated_item["status"] = "merged_into_active"
+                return _review_progress_payload(updated_item, "merged_into_active")
 
         await db.campus_food.update_one(
             {"_id": item_id},
-            {"$set": {"status": "active"}}
+            {"$set": {"status": "active", "activated_at": now, "last_verified_by_count": current_confirmations}}
         )
-        return {"status": "promoted_to_active", "verification_votes": current_votes}
+        updated_item["status"] = "promoted_to_active"
+        return _review_progress_payload(updated_item, "promoted_to_active")
 
-    # If active item gets downvoted to -3 or lower, demote it back to pending_verification
-    if current_votes <= -3 and updated_item.get("status") == "active":
+    hide_threshold = food_dispute_hide_threshold(threshold)
+    if current_disputes >= hide_threshold and updated_item.get("status") == "active":
         await db.campus_food.update_one(
             {"_id": item_id},
-            {"$set": {"status": "pending_verification"}}
+            {"$set": {"status": "disputed_hidden", "hidden_at": now, "last_review_source": "community_dispute"}}
         )
-        return {"status": "demoted_to_pending", "verification_votes": current_votes}
+        updated_item["status"] = "disputed_hidden"
+        return _review_progress_payload(updated_item, "disputed_hidden")
 
-    # If votes go too negative, mark as rejected
-    if current_votes <= -3 and updated_item.get("status") == "pending_verification":
+    if current_disputes >= threshold and updated_item.get("status") in ("pending_verification", "disputed_hidden"):
         await db.campus_food.update_one(
             {"_id": item_id},
-            {"$set": {"status": "rejected"}}
+            {"$set": {"status": "rejected", "rejected_at": now, "last_review_source": "community_dispute"}}
         )
-        return {"status": "rejected", "verification_votes": current_votes}
+        updated_item["status"] = "rejected"
+        return _review_progress_payload(updated_item, "rejected")
 
-    return {"status": "voted", "verification_votes": current_votes, "vote": req.vote}
+    if current_disputes >= hide_threshold and updated_item.get("status") == "pending_verification":
+        await db.campus_food.update_one(
+            {"_id": item_id},
+            {"$set": {"status": "disputed_hidden", "hidden_at": now, "last_review_source": "community_dispute"}}
+        )
+        updated_item["status"] = "disputed_hidden"
+        return _review_progress_payload(updated_item, "disputed_hidden")
+
+    return {**_review_progress_payload(updated_item, "voted"), "vote": req.vote}
 
 
 class ScanReceiptRequest(BaseModel):
@@ -1187,10 +1413,10 @@ async def submit_quiz_response(req: SubmitQuizRequest, user_id: str = Depends(ge
             "price": req.price,
             "price_history": [{"price": req.price, "changed_at": now.isoformat()}],
             "status": "pending_verification",
-            "verification_votes": 1,
-            "verification_threshold": 3,
-            "voters": [user_id],
+            **_review_counts_after_submitter_confirmation(user_id),
+            "verification_threshold": await _verification_threshold_for(db, "ABV-IIITM Gwalior", "community_item_quiz"),
             "scanned_by": user_id,
+            "submitted_by": user_id,
             "source": "community_item_quiz",
             "needs_review": True,
             "created_at": now,
@@ -1221,17 +1447,29 @@ async def submit_quiz_response(req: SubmitQuizRequest, user_id: str = Depends(ge
 
             if existing_candidate:
                 if user_id not in existing_candidate.get("voters", []):
+                    confirmations = food_confirmation_count(existing_candidate) + 1
+                    disputes = food_dispute_count(existing_candidate)
+                    candidate_threshold = await _effective_verification_threshold_for(
+                        db,
+                        existing_candidate,
+                        "price_change_review",
+                    )
                     await db.campus_food.update_one(
                         {"_id": existing_candidate["_id"]},
                         {
-                            "$inc": {"verification_votes": 1},
                             "$addToSet": {"voters": user_id},
-                            "$set": {"updated_at": now},
+                            "$set": {
+                                "verification_votes": confirmations - disputes,
+                                "confirmation_count": confirmations,
+                                "dispute_count": disputes,
+                                "verification_threshold": candidate_threshold,
+                                "updated_at": now,
+                            },
                         },
                     )
                 latest_candidate = await db.campus_food.find_one({"_id": existing_candidate["_id"]})
-                latest_votes = latest_candidate.get("verification_votes", 0) if latest_candidate else 0
-                latest_threshold = latest_candidate.get("verification_threshold", 3) if latest_candidate else 3
+                latest_votes = food_confirmation_count(latest_candidate) if latest_candidate else 0
+                latest_threshold = latest_candidate.get("verification_threshold", 5) if latest_candidate else 5
                 candidate_for_item_id = latest_candidate.get("candidate_for_item_id") if latest_candidate else None
                 if latest_candidate and candidate_for_item_id and latest_votes >= latest_threshold:
                     target_item = await db.campus_food.find_one({"_id": candidate_for_item_id})
@@ -1294,10 +1532,14 @@ async def submit_quiz_response(req: SubmitQuizRequest, user_id: str = Depends(ge
                 "price": req.new_price,
                 "price_history": price_history,
                 "status": "pending_verification",
-                "verification_votes": 1,
-                "verification_threshold": 3,
-                "voters": [user_id],
+                **_review_counts_after_submitter_confirmation(user_id),
+                "verification_threshold": await _verification_threshold_for(
+                    db,
+                    (active_item or {}).get("campus", "ABV-IIITM Gwalior"),
+                    "price_change_review",
+                ),
                 "scanned_by": user_id,
+                "submitted_by": user_id,
                 "source": "receipt_price_spike_review" if req.image_b64 else "price_spike_quiz",
                 "needs_review": True,
                 "candidate_for_item_id": (active_item or {}).get("_id"),

@@ -808,11 +808,29 @@ function Dashboard() {
   const bestFood = useMemo(() => {
     if (!foods?.length) return null;
     const now = new Date();
-    const available = foods.filter((f) => isTimeInRange(now, f.available_from, f.available_until));
-    if (available.length) {
-      return [...available].sort((a, b) => a.price - b.price)[0];
-    }
-    return foods[0];
+    const foodScore = (food: Food) => {
+      const available = isTimeInRange(now, food.available_from, food.available_until);
+      const trustScore = Number(food.trust_score ?? 50);
+      const price = Number(food.price ?? 0);
+      const budgetBonus =
+        food.budget_fit === "safe"
+          ? 24
+          : food.budget_fit === "tight"
+            ? 8
+            : food.budget_fit === "avoid_today"
+              ? -36
+              : 0;
+      const sourcePenalty =
+        food.source_type === "external_snapshot"
+          ? -14
+          : food.source_type === "price_change_review" || food.source_type === "menu_scan_pending"
+            ? -60
+            : 0;
+      return (available ? 40 : -20) + trustScore + budgetBonus + sourcePenalty - Math.min(price / 1000, 12);
+    };
+    return [...foods]
+      .filter((food) => Number(food.price ?? 0) > 0 && !["pending_verification", "rejected", "merged_into_active", "needs_review", "disputed_hidden"].includes(String(food.status ?? "active")))
+      .sort((a, b) => foodScore(b) - foodScore(a))[0] ?? null;
   }, [foods]);
 
   const runwayColor = runwayView
@@ -881,8 +899,8 @@ function Dashboard() {
   const [scanBusy, setScanBusy] = useState(false);
 
   const { data: pendingFoods, refetch: refetchPending } = useQuery({
-    queryKey: ["pending-foods"],
-    queryFn: () => getCampusFood("pending_verification"),
+    queryKey: ["pending-foods", "review_queue"],
+    queryFn: () => getCampusFood("review_queue"),
     enabled: showFoodSheet && foodTab === "verify",
   });
 
@@ -894,6 +912,14 @@ function Dashboard() {
       toast.success(
         res.status === "promoted_to_active"
           ? "Item promoted to active campus menu!"
+          : res.status === "merged_into_active"
+          ? "Correction merged into the trusted menu."
+          : res.status === "disputed_hidden"
+          ? "Item hidden from recommendations for review."
+          : res.status === "rejected"
+          ? "Item rejected after community dispute."
+          : res.status === "submitter_cannot_self_confirm"
+          ? "Another student needs to confirm your submission."
           : res.status === "already_voted"
           ? "You have already voted on this item."
           : "Thank you for verifying!"
@@ -2434,7 +2460,7 @@ function Dashboard() {
             {foodTab === "verify" && (
               <div className="space-y-3 py-4 animate-[fadeIn_0.2s_ease-out] max-h-[50vh] overflow-y-auto">
                 <div className="bg-surface-raised border border-border p-3.5 rounded-xl text-xs text-zinc-400 leading-relaxed font-medium">
-                  <span className="font-bold text-foreground">Crowdsourced Menu Verification:</span> Verify items scanned by other students. Items require <strong>+3 votes</strong> to go live, or <strong>-3 votes</strong> to be deleted.
+                  <span className="font-bold text-foreground">Crowdsourced Menu Verification:</span> Scanned items stay in review until enough independent students confirm them. Disputed items are hidden from recommendations and sent back for review.
                 </div>
 
                 {!pendingFoods ? (
@@ -2456,7 +2482,8 @@ function Dashboard() {
                             {it.venue_name} · {rupees(it.price)}
                           </p>
                           <p className="text-[9px] md:text-xs font-bold text-primary tracking-widest uppercase">
-                            Votes: {it.verification_votes > 0 ? `+${it.verification_votes}` : it.verification_votes}
+                            Confirmed: {it.confirmation_count ?? Math.max(0, it.verification_votes ?? 0)}/{it.verification_threshold ?? 5}
+                            {Number(it.dispute_count ?? 0) > 0 ? ` · Disputed: ${it.dispute_count}` : ""}
                           </p>
                         </div>
 

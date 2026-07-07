@@ -17,6 +17,7 @@ import datetime
 from typing import Any
 
 from app.core.config import settings
+from app.services.campus_food import compute_food_verification_threshold
 
 logger = logging.getLogger(__name__)
 
@@ -265,8 +266,10 @@ def _normalize_parsed_items(items: list[dict], venue_name: str, campus: str) -> 
             "price": price_paise,
             "price_history": [{"price": price_paise, "changed_at": datetime.datetime.utcnow().isoformat()}],
             "status": "pending_verification",
-            "verification_votes": 1,
-            "verification_threshold": 3,
+            "verification_votes": 0,
+            "confirmation_count": 0,
+            "dispute_count": 0,
+            "verification_threshold": compute_food_verification_threshold("menu_scan_pending"),
             "needs_review": True,
             "scanned_at": datetime.datetime.utcnow().isoformat(),
         })
@@ -351,8 +354,10 @@ def _normalize_model_items(items: list[Any], venue_name: str, campus: str) -> li
             "price": price_paise,
             "price_history": [{"price": price_paise, "changed_at": datetime.datetime.utcnow().isoformat()}],
             "status": "pending_verification",
-            "verification_votes": 1,
-            "verification_threshold": 3,
+            "verification_votes": 0,
+            "confirmation_count": 0,
+            "dispute_count": 0,
+            "verification_threshold": compute_food_verification_threshold("menu_scan_pending"),
             "needs_review": True,
             "parser_source": "bedrock_menu_parser",
             "scanned_at": datetime.datetime.utcnow().isoformat(),
@@ -545,8 +550,10 @@ def _make_item(item_name: str, price: int, venue_name: str, campus: str) -> dict
         "price": price_paise,
         "price_history": [{"price": price_paise, "changed_at": datetime.datetime.utcnow().isoformat()}],
         "status": "pending_verification",
-        "verification_votes": 1,
-        "verification_threshold": 3,
+        "verification_votes": 0,
+        "confirmation_count": 0,
+        "dispute_count": 0,
+        "verification_threshold": compute_food_verification_threshold("menu_scan_pending"),
         "needs_review": True,
         "scanned_at": datetime.datetime.utcnow().isoformat(),
     }
