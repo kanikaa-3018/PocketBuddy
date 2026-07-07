@@ -283,7 +283,7 @@ export async function logTravelSavings({ data }: { data: { amount_saved: number;
   });
 }
 
-export async function createTravelRoute({ data }: { data: { name: string; description?: string; distance_km: number; campus_landmark?: string; college?: string } }) {
+export async function createTravelRoute({ data }: { data: { name: string; description?: string; distance_km: number; campus_landmark?: string; college?: string; duration_mins?: number; routing_provider?: string; eta_confidence?: string; split_suggestion?: any } }) {
   return apiRequest("/api/travel/routes", {
     method: "POST",
     body: JSON.stringify(data),

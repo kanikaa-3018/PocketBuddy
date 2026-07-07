@@ -379,6 +379,10 @@ class CustomRouteCreateReq(BaseModel):
     distance_km: float
     campus_landmark: Optional[str] = "Main Gate"
     college: Optional[str] = None
+    duration_mins: Optional[int] = None
+    routing_provider: Optional[str] = None
+    eta_confidence: Optional[str] = None
+    split_suggestion: Optional[dict[str, Any]] = None
 
 class ReportSubmitReq(BaseModel):
     route_id: str
@@ -744,7 +748,11 @@ async def create_custom_route(req: CustomRouteCreateReq, user_id: str = Depends(
         "campus_landmark": campus_landmark,
         "source": "distance_model",
         "confidence": "low",
-        "distance_km": d
+        "distance_km": d,
+        "duration_mins": req.duration_mins,
+        "routing_provider": _clean_text(req.routing_provider, 40),
+        "eta_confidence": _clean_text(req.eta_confidence, 20),
+        "split_suggestion": req.split_suggestion if isinstance(req.split_suggestion, dict) else None,
     }
 
     await db.travel_routes.insert_one(r_doc)
@@ -2207,18 +2215,105 @@ async def geocode_query(
     return None
 
 
+def _fallback_drive_minutes(road_km: float, straight_km: float) -> int:
+    """
+    Reasonable fallback when no routing provider responds.
+
+    This avoids a single flat average speed that made several routes look like
+    the same 25-minute trip. It varies by distance, road indirectness, and
+    current traffic window while still staying conservative.
+    """
+    if road_km <= 0:
+        return 2
+
+    if road_km <= 3:
+        avg_speed = 16.0
+        buffer = 3
+    elif road_km <= 8:
+        avg_speed = 21.0
+        buffer = 4
+    elif road_km <= 18:
+        avg_speed = 27.0
+        buffer = 5
+    elif road_km <= 60:
+        avg_speed = 38.0
+        buffer = 7
+    else:
+        avg_speed = 52.0
+        buffer = 10
+
+    hour = datetime.datetime.now().hour
+    if 8 <= hour < 11 or 17 <= hour < 21:
+        avg_speed *= 0.78
+        buffer += 3
+    elif hour >= 22 or hour < 6:
+        avg_speed *= 1.08
+
+    indirectness = road_km / max(straight_km, 0.1)
+    if indirectness > 1.5:
+        buffer += 4
+    elif indirectness > 1.3:
+        buffer += 2
+
+    return max(2, int(round((road_km / max(avg_speed, 8.0)) * 60 + buffer)))
+
+
 async def compute_route(
     lat1: float, lon1: float,
     lat2: float, lon2: float,
-) -> tuple[float, int, list[list[float]], str]:
+) -> tuple[float, int, list[list[float]], str, bool, int, str]:
     """
     Computes driving route between two points.
 
-    Returns: (distance_km, duration_mins, leaflet_geometry_list, source_label)
+    Returns: (distance_km, duration_mins, leaflet_geometry_list, source_label, traffic_used, traffic_delay_mins, provider_label)
 
+    Uses TomTom first when configured for traffic-aware ETA.
     Uses OSRM public API for real driving routes with turn-by-turn geometry.
     Falls back to Haversine x 1.35 road-factor if OSRM is unreachable.
     """
+    if settings.TOMTOM_API_KEY:
+        try:
+            base_url = (settings.TOMTOM_ROUTE_URL or "https://api.tomtom.com").rstrip("/")
+            url = f"{base_url}/routing/1/calculateRoute/{lat1},{lon1}:{lat2},{lon2}/json"
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                r = await client.get(
+                    url,
+                    params={
+                        "key": settings.TOMTOM_API_KEY,
+                        "traffic": "true",
+                        "travelMode": "car",
+                        "routeType": "fastest",
+                        "computeTravelTimeFor": "all",
+                        "routeRepresentation": "polyline",
+                    },
+                )
+            if r.status_code == 200:
+                data = r.json()
+                routes = data.get("routes") or []
+                if routes:
+                    route = routes[0]
+                    summary = route.get("summary") or {}
+                    dist_km = round(float(summary.get("lengthInMeters") or 0) / 1000.0, 1)
+                    dur_mins = max(1, int(float(summary.get("travelTimeInSeconds") or 0) / 60.0))
+                    delay_mins = max(0, int(float(summary.get("trafficDelayInSeconds") or 0) / 60.0))
+                    points: list[dict[str, Any]] = []
+                    for leg in route.get("legs") or []:
+                        points.extend(leg.get("points") or [])
+                    geom = [
+                        [float(point["latitude"]), float(point["longitude"])]
+                        for point in points
+                        if _valid_lat_lon(point.get("latitude"), point.get("longitude"))
+                    ]
+                    if not geom:
+                        geom = [[lat1, lon1], [lat2, lon2]]
+                    if dist_km > 0 and dur_mins > 0:
+                        logger.info("TomTom traffic route: %.1f km, %d min, %d min delay", dist_km, dur_mins, delay_mins)
+                        return dist_km, dur_mins, geom, "tomtom_traffic_route", True, delay_mins, "TomTom Traffic"
+            else:
+                logger.warning("TomTom routing failed with status %s: %s", r.status_code, r.text[:200])
+        except Exception as exc:
+            logger.warning("TomTom routing failed: %s. Falling back to OSRM.", exc)
+
     # OSRM public routing engine
     try:
         base_url = (settings.osrm_route_url or "https://router.project-osrm.org").rstrip("/")
@@ -2239,7 +2334,7 @@ async def compute_route(
                 # GeoJSON is [lon, lat]; Leaflet needs [lat, lon]
                 geom = [[c[1], c[0]] for c in coords]
                 logger.info("OSRM: %.1f km, %d min, %d pts", dist_km, dur_mins, len(geom))
-                return dist_km, dur_mins, geom, "osrm_route"
+                return dist_km, dur_mins, geom, "osrm_route", False, 0, "OSRM"
     except Exception as exc:
         logger.warning("OSRM routing failed: %s. Falling back to Haversine.", exc)
 
@@ -2251,10 +2346,139 @@ async def compute_route(
          * math.sin(dlon / 2) ** 2)
     straight_km = 2 * math.asin(math.sqrt(a)) * 6371.0
     road_km     = round(straight_km * 1.35, 1)   # urban road factor
-    dur_mins    = max(2, int(road_km / 25.0 * 60)) # avg 25 km/h urban
+    dur_mins    = _fallback_drive_minutes(road_km, straight_km)
     geom        = [[lat1, lon1], [lat2, lon2]]
     logger.info("Haversine fallback: %.1f km (road est.), %d min", road_km, dur_mins)
-    return road_km, dur_mins, geom, "haversine_estimate"
+    return road_km, dur_mins, geom, "haversine_estimate", False, 0, "Fallback estimate"
+
+
+def _mode_fare(modes: list[dict[str, Any]], *needles: str, fallback: int = 0) -> int:
+    for mode in modes:
+        label = str(mode.get("mode") or "").lower()
+        if any(needle in label for needle in needles):
+            return int(mode.get("median_fare") or fallback)
+    return fallback
+
+
+def _route_midpoint(geometry: list[list[float]], lat1: float, lon1: float, lat2: float, lon2: float) -> tuple[float, float]:
+    points = geometry if len(geometry) >= 2 else [[lat1, lon1], [lat2, lon2]]
+    segments: list[tuple[float, tuple[float, float], tuple[float, float]]] = []
+    total = 0.0
+    for idx in range(len(points) - 1):
+        a = points[idx]
+        b = points[idx + 1]
+        if len(a) < 2 or len(b) < 2:
+            continue
+        seg = _distance_km(float(a[0]), float(a[1]), float(b[0]), float(b[1]))
+        if seg <= 0:
+            continue
+        segments.append((seg, (float(a[0]), float(a[1])), (float(b[0]), float(b[1]))))
+        total += seg
+    if not segments or total <= 0:
+        return ((lat1 + lat2) / 2.0, (lon1 + lon2) / 2.0)
+
+    halfway = total / 2.0
+    travelled = 0.0
+    for seg, start, end in segments:
+        if travelled + seg >= halfway:
+            ratio = (halfway - travelled) / seg
+            return (
+                start[0] + (end[0] - start[0]) * ratio,
+                start[1] + (end[1] - start[1]) * ratio,
+            )
+        travelled += seg
+    return segments[-1][2]
+
+
+def _public_split_suggestion(
+    *,
+    origin: str,
+    destination: str,
+    campus_city: str,
+    distance_km: float,
+    modes: list[dict[str, Any]],
+    geometry: list[list[float]],
+    lat1: float,
+    lon1: float,
+    lat2: float,
+    lon2: float,
+) -> dict[str, Any]:
+    direct_auto = _mode_fare(modes, "auto", fallback=max(80, int(distance_km * 13)))
+    shared = _mode_fare(modes, "shared", "tempo", "bus", fallback=max(20, int(distance_km * 4)))
+    if distance_km < 5.0:
+        return {
+            "available": False,
+            "recommended": False,
+            "title": "Direct ride is better",
+            "reason": "The route is short, so changing vehicles will usually waste time.",
+            "direct_fare": direct_auto,
+            "split_fare": shared,
+        }
+
+    city_norm = (campus_city or "").lower()
+    midpoint = _route_midpoint(geometry, lat1, lon1, lat2, lon2)
+    straight = max(0.1, _distance_km(lat1, lon1, lat2, lon2))
+    candidates: list[dict[str, Any]] = []
+    for label, (landmark_city, coords) in KNOWN_LANDMARK_COORDS.items():
+        landmark_city_norm = landmark_city.lower()
+        if not (landmark_city_norm in city_norm or city_norm in landmark_city_norm):
+            continue
+        cand_lat, cand_lon = coords
+        dist_origin = _distance_km(lat1, lon1, cand_lat, cand_lon)
+        dist_dest = _distance_km(cand_lat, cand_lon, lat2, lon2)
+        dist_mid = _distance_km(midpoint[0], midpoint[1], cand_lat, cand_lon)
+        if min(dist_origin, dist_dest) < 1.2:
+            continue
+        corridor_ratio = (dist_origin + dist_dest) / straight
+        if corridor_ratio > 1.85:
+            continue
+        candidates.append({
+            "label": label.title(),
+            "lat": cand_lat,
+            "lon": cand_lon,
+            "dist_mid": dist_mid,
+            "dist_origin": dist_origin,
+            "dist_dest": dist_dest,
+            "corridor_ratio": corridor_ratio,
+        })
+
+    if not candidates:
+        return {
+            "available": False,
+            "recommended": False,
+            "title": "No verified split point yet",
+            "reason": "PocketBuddy did not find a known busy public transfer point on this route. Use direct ride unless a local student confirms a safe interchange.",
+            "direct_fare": direct_auto,
+            "split_fare": shared,
+        }
+
+    best = min(candidates, key=lambda item: (item["dist_mid"], item["corridor_ratio"]))
+    transport_route = _is_transport_hub_query(f"{origin} {destination}")
+    savings = max(0, direct_auto - shared)
+    public_terms = ("stand", "station", "junction", "gate", "market", "circle", "crossing", "metro", "bus", "chowk")
+    confidence = "high" if any(term in best["label"].lower() for term in public_terms) else "medium"
+    recommended = savings >= 30 and not ("airport" in f"{origin} {destination}".lower())
+
+    return {
+        "available": True,
+        "recommended": recommended,
+        "title": "Split at a public transfer point" if recommended else "Direct ride may be safer",
+        "transfer_label": best["label"],
+        "transfer_coords": [round(best["lat"], 6), round(best["lon"], 6)],
+        "confidence": confidence,
+        "reason": (
+            f"Split near {best['label']} only if it is busy and you can board the next vehicle quickly."
+            if recommended
+            else f"{best['label']} is a possible transfer area, but direct travel is usually safer for airport, luggage, late-night, or unfamiliar routes."
+        ),
+        "direct_fare": direct_auto,
+        "split_fare": shared,
+        "estimated_savings": savings,
+        "first_leg": f"{origin} to {best['label']}",
+        "second_leg": f"{best['label']} to {destination}",
+        "avoid_when": ["late night", "heavy luggage", "rain", "empty roads", "unfamiliar area"],
+        "transport_route": transport_route,
+    }
 
 
 @router.get("/calculate-route")
@@ -2417,7 +2641,7 @@ async def calculate_route(
     lat2, lon2 = coords_dest
 
     # Compute driving route
-    distance_km, duration_mins, geometry, source = await compute_route(lat1, lon1, lat2, lon2)
+    distance_km, duration_mins, geometry, source, traffic_used, traffic_delay_mins, routing_provider = await compute_route(lat1, lon1, lat2, lon2)
 
     # Estimate fares using city-specific tariff rules
     modes = estimate_fares_by_city(distance_km, college)
@@ -2427,15 +2651,15 @@ async def calculate_route(
     campus_low_confidence = campus_confidence == "low"
     route_confidence = (
         "high"
-        if source == "osrm_route" and not low_resolution and not campus_low_confidence
+        if source in {"osrm_route", "tomtom_traffic_route"} and not low_resolution and not campus_low_confidence
         else "medium"
-        if source == "osrm_route"
+        if source in {"osrm_route", "tomtom_traffic_route"}
         else "low"
     )
-    needs_review = source != "osrm_route" or low_resolution
+    needs_review = source not in {"osrm_route", "tomtom_traffic_route"} or low_resolution
     resolution_warning = (
         "Route is based on a fallback distance estimate. Confirm the places before using the fare."
-        if source != "osrm_route"
+        if source not in {"osrm_route", "tomtom_traffic_route"}
         else "Campus location is city-level, not an exact college coordinate. Confirm the places before relying on the fare."
         if campus_confidence == "low"
         else "One or both places were resolved from typed search. Select a suggestion next time for the strongest match."
@@ -2445,13 +2669,45 @@ async def calculate_route(
 
     price_basis = (
         "Mapped road distance plus campus-local fare rules. These are not ride-app API prices."
-        if source == "osrm_route"
+        if source in {"osrm_route", "tomtom_traffic_route"}
         else "Fallback road estimate plus campus-local fare rules. Confirm the route before relying on this."
+    )
+
+    eta_confidence = (
+        "high"
+        if traffic_used
+        else "medium"
+        if source == "osrm_route"
+        else "low"
+    )
+    eta_basis = (
+        f"Traffic-aware ETA from {routing_provider}."
+        if traffic_used
+        else "Mapped driving ETA without live traffic."
+        if source == "osrm_route"
+        else "Rough ETA from fallback road-distance estimate."
+    )
+    split_suggestion = _public_split_suggestion(
+        origin=origin,
+        destination=destination,
+        campus_city=str(campus_city or ""),
+        distance_km=distance_km,
+        modes=modes,
+        geometry=geometry,
+        lat1=lat1,
+        lon1=lon1,
+        lat2=lat2,
+        lon2=lon2,
     )
 
     return {
         "distance_km":    distance_km,
         "duration_mins":  duration_mins,
+        "traffic_delay_mins": traffic_delay_mins,
+        "traffic_used": traffic_used,
+        "eta_confidence": eta_confidence,
+        "eta_basis": eta_basis,
+        "routing_provider": routing_provider,
         "source":         source,
         "campus":         college,
         "campus_city":    campus_city,
@@ -2468,6 +2724,7 @@ async def calculate_route(
         "origin_coords":  [lat1, lon1],
         "dest_coords":    [lat2, lon2],
         "modes":          modes,
+        "split_suggestion": split_suggestion,
         "geometry":       geometry,
     }
 

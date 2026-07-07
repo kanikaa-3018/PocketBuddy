@@ -5,7 +5,6 @@ import { useAuth } from "@/lib/auth-context";
 import { AppShell, MobileMenuButton } from "@/components/AppShell";
 import {
   Compass,
-  Navigation,
   AlertOctagon,
   ShieldCheck,
   Copy,
@@ -87,7 +86,33 @@ interface IntermediateStop {
   direct2: number;
   directTotal: number;
   tip: string;
+  confidence?: "high" | "medium" | "low";
+  avoidWhen?: string[];
+  available?: boolean;
 }
+
+type TravelIntent = "hurry" | "save" | "safe";
+
+interface SplitSuggestion {
+  available?: boolean;
+  recommended?: boolean;
+  title?: string;
+  transfer_label?: string;
+  confidence?: "high" | "medium" | "low";
+  reason?: string;
+  direct_fare?: number;
+  split_fare?: number;
+  estimated_savings?: number;
+  first_leg?: string;
+  second_leg?: string;
+  avoid_when?: string[];
+}
+
+const TRAVEL_INTENTS: Array<{ id: TravelIntent; label: string }> = [
+  { id: "hurry", label: "Hurry" },
+  { id: "save", label: "Save" },
+  { id: "safe", label: "Safer" },
+];
 
 interface TravelPlaceSuggestion {
   id: string;
@@ -101,7 +126,31 @@ interface TravelPlaceSuggestion {
   match_score?: number;
 }
 
-const getIntermediateData = (routeName: string, college: string, fallbackDirect: number, fallbackShared: number): IntermediateStop => {
+const getIntermediateData = (
+  routeName: string,
+  college: string,
+  fallbackDirect: number,
+  fallbackShared: number,
+  splitSuggestion?: SplitSuggestion | null,
+): IntermediateStop => {
+  if (splitSuggestion?.available && splitSuggestion.transfer_label) {
+    const splitFare = splitSuggestion.split_fare || fallbackShared || Math.round((fallbackDirect || 160) * 0.45);
+    return {
+      stopName: splitSuggestion.transfer_label,
+      leg1: splitSuggestion.first_leg || `Start to ${splitSuggestion.transfer_label}`,
+      leg2: splitSuggestion.second_leg || `${splitSuggestion.transfer_label} to destination`,
+      shared1: Math.max(10, Math.round(splitFare * 0.48)),
+      shared2: Math.max(10, Math.round(splitFare * 0.52)),
+      direct1: Math.max(40, Math.round((splitSuggestion.direct_fare || fallbackDirect || 160) * 0.45)),
+      direct2: Math.max(40, Math.round((splitSuggestion.direct_fare || fallbackDirect || 160) * 0.55)),
+      directTotal: splitSuggestion.direct_fare || fallbackDirect || 160,
+      tip: splitSuggestion.reason || `Split near ${splitSuggestion.transfer_label} only if it is busy and easy to board from.`,
+      confidence: splitSuggestion.confidence || "medium",
+      avoidWhen: splitSuggestion.avoid_when || ["late night", "heavy luggage", "rain"],
+      available: true,
+    };
+  }
+
   const name = routeName.toLowerCase();
   const coll = college.toLowerCase();
 
@@ -115,7 +164,10 @@ const getIntermediateData = (routeName: string, college: string, fallbackDirect:
       direct1: 60,
       direct2: 50,
       directTotal: fallbackDirect || 160,
-      tip: "Direct autos charge a heavy premium. Shared autos run along Morena Link road to Hazira every 3 minutes for ₹15."
+      tip: "Direct autos charge a heavy premium. Shared autos run along Morena Link road to Hazira every 3 minutes for ₹15.",
+      confidence: "high",
+      avoidWhen: ["late night", "heavy luggage", "rain"],
+      available: true,
     };
   }
 
@@ -129,7 +181,10 @@ const getIntermediateData = (routeName: string, college: string, fallbackDirect:
       direct1: 75,
       direct2: 120,
       directTotal: fallbackDirect || 250,
-      tip: "Split the journey at Gola Ka Mandir circle to avoid high airport flat rates."
+      tip: "Split the journey at Gola Ka Mandir circle only in daylight and without heavy luggage. Use direct cab/auto for late arrivals.",
+      confidence: "medium",
+      avoidWhen: ["late night", "heavy luggage", "rain", "first-time arrival"],
+      available: true,
     };
   }
 
@@ -146,7 +201,10 @@ const getIntermediateData = (routeName: string, college: string, fallbackDirect:
     direct1: Math.round(direct * 0.45),
     direct2: Math.round(direct * 0.45),
     directTotal: direct,
-    tip: "Use a two-hop route only when you know the interchange is public, busy, and safe. PocketBuddy will not invent a campus-specific junction without reports."
+    tip: "No verified public transfer point is available for this route yet. Use direct ride unless a local student confirms a safe interchange.",
+    confidence: "low",
+    avoidWhen: ["late night", "heavy luggage", "rain", "unfamiliar area"],
+    available: false,
   };
 };
 
@@ -189,19 +247,6 @@ function placeSourceLabel(source?: string) {
   if (source === "campus") return "Campus";
   if (source === "manual") return "Typed";
   return "Local";
-}
-
-function routeSourceMeta(source?: string, confidence?: string) {
-  if (source === "osrm_route") {
-    return {
-      label: "Road route",
-      className: "bg-emerald-500/15 border border-emerald-500/30 text-emerald-500",
-    };
-  }
-  return {
-    label: confidence === "low" ? "Estimate" : "Mapped estimate",
-    className: "bg-amber-500/15 border border-amber-500/30 text-amber-500",
-  };
 }
 
 function travelModeStyle(mode: string) {
@@ -254,6 +299,75 @@ function fareSourceLabel(mode: any) {
 function fareTypicalLabel(mode: any) {
   const sampleSize = Number(mode?.report_sample_size || 0);
   return mode?.fare_source === "student_reports" && sampleSize >= 3 ? "Student typical" : "Model typical";
+}
+
+function findModeByIntent(modes: any[] = [], intent: TravelIntent, splitSuggestion?: SplitSuggestion | null) {
+  if (!modes.length) return null;
+  const byMedian = [...modes].sort((a, b) => Number(a.median_fare || 0) - Number(b.median_fare || 0));
+  const modeBy = (...terms: string[]) => modes.find((m) => terms.some((term) => String(m.mode || "").toLowerCase().includes(term)));
+
+  if (intent === "save") {
+    return modeBy("shared", "tempo", "bus") || modeBy("bike") || byMedian[0];
+  }
+  if (intent === "safe") {
+    return modeBy("cab") || modeBy("auto") || modes[0];
+  }
+  return modeBy("bike") || modeBy("auto") || modeBy("cab") || modes[0];
+}
+
+function buildDecision({
+  intent,
+  modes,
+  durationMins,
+  timeContext,
+  splitSuggestion,
+}: {
+  intent: TravelIntent;
+  modes: any[];
+  durationMins?: number;
+  timeContext: ReturnType<typeof getTimeOfDaySurge>;
+  splitSuggestion?: SplitSuggestion | null;
+}) {
+  const mode = findModeByIntent(modes, intent, splitSuggestion);
+  if (!mode) return null;
+  const median = Number(mode.median_fare || 0);
+  const max = Number(mode.max_fare || median);
+  const acceptUpTo = Math.max(max, Math.round(median * (timeContext.factor >= 1.3 ? 1.18 : 1.1)));
+  const eta = durationMins ? `${durationMins} min` : "";
+
+  if (intent === "save") {
+    const useSplit = Boolean(splitSuggestion?.available && splitSuggestion?.recommended && Number(splitSuggestion.estimated_savings || 0) >= 30);
+    return {
+      label: useSplit ? "Take the split route" : `Take ${String(mode.mode || "shared option").split(" ")[0]}`,
+      fare: useSplit ? splitSuggestion?.split_fare || median : median,
+      eta,
+      action: useSplit
+        ? `Split near ${splitSuggestion?.transfer_label}. Avoid this if roads are empty or you have luggage.`
+        : "Use the lowest reliable mode. Do not force a two-hop route without a known busy transfer point.",
+      acceptUpTo,
+      tone: "emerald",
+    };
+  }
+
+  if (intent === "safe") {
+    return {
+      label: `Use ${String(mode.mode || "direct ride").split(" ")[0]} direct`,
+      fare: median,
+      eta,
+      action: "Avoid unknown shared autos and two-hop transfers. Prefer a direct pickup/drop, especially after dark or with luggage.",
+      acceptUpTo,
+      tone: "indigo",
+    };
+  }
+
+  return {
+    label: `Use ${String(mode.mode || "direct ride").split(" ")[0]} now`,
+    fare: median,
+    eta,
+    action: "Do one quick counter-offer near the fair fare. If the driver refuses, switch to app/direct ride instead of spending time negotiating.",
+    acceptUpTo,
+    tone: "neutral",
+  };
 }
 
 function splitRouteName(name?: string) {
@@ -432,8 +546,9 @@ function TravelPage() {
   const [showCheckInfo, setShowCheckInfo] = useState<boolean>(false);
   const [showCoachInfo, setShowCoachInfo] = useState<boolean>(false);
   const [savedRoutesOpen, setSavedRoutesOpen] = useState<boolean>(false);
+  const [travelIntent, setTravelIntent] = useState<TravelIntent>("hurry");
 
-  const [splitTravelType, setSplitTravelType] = useState<"direct" | "split">("split");
+  const [splitTravelType, setSplitTravelType] = useState<"direct" | "split">("direct");
   const [splitHopMode, setSplitHopMode] = useState<"shared" | "direct_auto">("shared");
 
   const timeContext = useMemo(() => getTimeOfDaySurge(), []);
@@ -621,6 +736,7 @@ function TravelPage() {
       const modeNames = selectedRoute.modes.map((m: any) => m.mode);
       if (!modeNames.includes(selectedMode)) setSelectedMode(selectedRoute.modes[0].mode);
       setSplitMode(selectedRoute.modes[0].mode);
+      setSplitTravelType("direct");
     }
   }, [selectedRoute]);
 
@@ -819,6 +935,27 @@ function TravelPage() {
   };
 
   const selectedRouteParts = selectedRoute ? splitRouteName(selectedRoute.name) : null;
+  const estimatedDecision = useMemo(() => {
+    if (!estimatedResult?.modes?.length) return null;
+    return buildDecision({
+      intent: travelIntent,
+      modes: estimatedResult.modes,
+      durationMins: estimatedResult.duration_mins,
+      timeContext,
+      splitSuggestion: estimatedResult.split_suggestion,
+    });
+  }, [estimatedResult, timeContext, travelIntent]);
+
+  const selectedDecision = useMemo(() => {
+    if (!selectedRoute?.modes?.length) return null;
+    return buildDecision({
+      intent: travelIntent,
+      modes: selectedRoute.modes,
+      durationMins: selectedRoute.duration_mins,
+      timeContext,
+      splitSuggestion: selectedRoute.split_suggestion,
+    });
+  }, [selectedRoute, timeContext, travelIntent]);
 
   return (
     <AppShell>
@@ -852,7 +989,7 @@ function TravelPage() {
               <div className="min-w-0 space-y-1">
                 <h2 className="text-lg font-semibold tracking-tight text-foreground">Plan a campus ride</h2>
                 <p className="max-w-3xl text-xs leading-relaxed text-muted-foreground">
-                  Search exact places, then compare fair fares from mapped distance and student reports.
+                  Enter pickup and destination. PocketBuddy gives one clear move.
                 </p>
               </div>
               <div className="lg:min-w-[286px] lg:self-start">
@@ -952,7 +1089,7 @@ function TravelPage() {
                   {selectedOriginPlace ? (
                     <p className="mt-1 truncate text-[10px] font-medium text-primary">{selectedOriginPlace.label}</p>
                   ) : manualOriginText && manualOriginText === dynamicOrigin.trim() ? (
-                    <p className="mt-1 truncate text-[10px] font-medium text-muted-foreground">Typed place · PocketBuddy will verify it while estimating</p>
+                    <p className="mt-1 truncate text-[10px] font-medium text-muted-foreground">Typed place. PocketBuddy will verify it while estimating.</p>
                   ) : null}
                 </div>
 
@@ -998,7 +1135,7 @@ function TravelPage() {
                   {selectedDestinationPlace ? (
                     <p className="mt-1 truncate text-[10px] font-medium text-primary">{selectedDestinationPlace.label}</p>
                   ) : manualDestinationText && manualDestinationText === dynamicDestination.trim() ? (
-                    <p className="mt-1 truncate text-[10px] font-medium text-muted-foreground">Typed place · PocketBuddy will verify it while estimating</p>
+                    <p className="mt-1 truncate text-[10px] font-medium text-muted-foreground">Typed place. PocketBuddy will verify it while estimating.</p>
                   ) : null}
                 </div>
 
@@ -1020,50 +1157,47 @@ function TravelPage() {
               </div>
             </div>
 
-            <div className="flex flex-col gap-2 px-1 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                <span className="text-[10px] font-medium text-muted-foreground">Try</span>
-                {["Railway Station", "Airport", "Bus Stand", "City Centre"].map((q) => (
-                  <button key={q} onClick={() => {
-                    setDynamicOrigin(q);
-                    setSelectedOriginPlace(null);
-                    setOriginSuggestionsOpen(true);
-                  }}
-                    className="text-[10px] font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-primary hover:underline">
-                    {q}
-                  </button>
-                ))}
-              </div>
-              <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
-                <span>Mapped route</span>
-                <span>Fare model</span>
-                <span>Reports-backed</span>
-              </div>
-            </div>
           </div>
 
           {estimatedResult && (
             <div className="border-t border-border px-4 py-4 sm:px-5 lg:px-6 animate-[fadeIn_0.25s_ease-out]">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                <div className="min-w-0 space-y-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Navigation className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-semibold tracking-tight text-foreground">
-                      {estimatedResult.distance_km} km, approx {estimatedResult.duration_mins} min drive
-                    </span>
-                    {(() => {
-                      const meta = routeSourceMeta(estimatedResult.source, estimatedResult.route_confidence);
-                      return (
-                        <Badge className={`text-[9px] font-medium py-0.5 px-2 ${meta.className}`}>
-                          {meta.label}
-                        </Badge>
-                      );
-                    })()}
+              {estimatedDecision && (
+                <div className="rounded-lg bg-background/60 px-3.5 py-3 ring-1 ring-border/80">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                        <span className="text-sm font-semibold text-foreground">{estimatedDecision.label}</span>
+                        <span className="text-xs font-medium text-muted-foreground">₹{estimatedDecision.fare} around</span>
+                        {estimatedDecision.eta ? (
+                          <span className="text-xs font-medium text-muted-foreground">{estimatedDecision.eta}</span>
+                        ) : null}
+                        <span className="text-xs font-medium text-muted-foreground">{estimatedResult.distance_km} km</span>
+                      </div>
+                      <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{estimatedDecision.action}</p>
+                    </div>
+                    <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+                      <div className="text-left sm:text-right">
+                        <p className="text-[9px] text-muted-foreground">Walk away above</p>
+                        <p className="text-sm font-semibold text-foreground">₹{estimatedDecision.acceptUpTo}</p>
+                      </div>
+                      <Select value={travelIntent} onValueChange={(value) => setTravelIntent(value as TravelIntent)}>
+                        <SelectTrigger className="h-8 w-[108px] rounded-md border-border bg-surface text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-background border border-border text-foreground">
+                          {TRAVEL_INTENTS.map((intent) => (
+                            <SelectItem key={intent.id} value={intent.id} className="text-xs">
+                              {intent.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                  <p className="max-w-3xl text-[11px] leading-relaxed text-muted-foreground">
-                    {estimatedResult.price_basis || "Fare range is estimated from campus-local tariff rules and computed road distance."}
-                  </p>
                 </div>
+              )}
+
+              <div className="mt-3 flex flex-wrap items-center gap-2">
                 <button
                   disabled={estimatedResult.needs_review}
                   onClick={() => {
@@ -1077,6 +1211,10 @@ function TravelPage() {
                         name: routeName,
                         description: `Calculated route from ${dynamicOrigin} to ${dynamicDestination}.`,
                         distance_km: estimatedResult.distance_km,
+                        duration_mins: estimatedResult.duration_mins,
+                        routing_provider: estimatedResult.routing_provider,
+                        eta_confidence: estimatedResult.eta_confidence,
+                        split_suggestion: estimatedResult.split_suggestion,
                         campus_landmark: dynamicDestination.slice(0, 35),
                         college: activeCollege
                       }
@@ -1089,8 +1227,8 @@ function TravelPage() {
                       }
                     });
                   }}
-                  className="h-9 shrink-0 rounded-lg border border-primary/30 bg-primary/5 px-3 text-[11px] font-semibold text-primary transition-colors hover:bg-primary hover:text-white disabled:cursor-not-allowed disabled:border-border disabled:bg-surface disabled:text-muted-foreground">
-                  {estimatedResult.needs_review ? "Select exact places to save" : "Save route and open coach"}
+                  className="h-8 rounded-md border border-border bg-surface px-3 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50">
+                  {estimatedResult.needs_review ? "Select exact places to save" : "Save this route"}
                 </button>
               </div>
 
@@ -1111,34 +1249,40 @@ function TravelPage() {
                 </div>
               ) : null}
 
-              <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-background/50">
-                {estimatedResult.modes.map((m, idx) => {
-                  const modeStyle = travelModeStyle(m.mode);
-                  const cheapestMedian = Math.min(...estimatedResult.modes.map((mode) => mode.median_fare));
-                  const isBestValue = m.median_fare === cheapestMedian;
-                  return (
-                    <div key={m.mode} className={`grid grid-cols-[minmax(0,1fr)_auto] gap-3 px-3.5 py-3 sm:grid-cols-[minmax(0,1fr)_150px_120px] sm:items-center ${idx > 0 ? "border-t border-border/70" : ""}`}>
-                      <div className="min-w-0">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <span className={`h-2 w-2 rounded-full ${modeStyle.dotClassName}`} />
-                          <p className="truncate text-xs font-semibold text-foreground">{modeStyle.label}</p>
-                          {isBestValue ? (
-                            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-medium text-primary">Best value</span>
-                          ) : null}
+              <details className="group mt-4 overflow-hidden rounded-lg border border-border bg-background/50">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3.5 py-3 text-xs font-medium text-foreground marker:hidden">
+                  <span>Compare fare options</span>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
+                </summary>
+                <div className="border-t border-border/70">
+                  {estimatedResult.modes.map((m, idx) => {
+                    const modeStyle = travelModeStyle(m.mode);
+                    const cheapestMedian = Math.min(...estimatedResult.modes.map((mode) => mode.median_fare));
+                    const isBestValue = m.median_fare === cheapestMedian;
+                    return (
+                      <div key={m.mode} className={`grid grid-cols-[minmax(0,1fr)_auto] gap-3 px-3.5 py-3 sm:grid-cols-[minmax(0,1fr)_150px_120px] sm:items-center ${idx > 0 ? "border-t border-border/70" : ""}`}>
+                        <div className="min-w-0">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className={`h-2 w-2 rounded-full ${modeStyle.dotClassName}`} />
+                            <p className="truncate text-xs font-semibold text-foreground">{modeStyle.label}</p>
+                            {isBestValue ? (
+                              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-medium text-primary">Best value</span>
+                            ) : null}
+                          </div>
+                          <p className="mt-1 text-[10px] text-muted-foreground">{fareSourceLabel(m)}. {modeStyle.note}</p>
                         </div>
-                        <p className="mt-1 text-[10px] text-muted-foreground">{fareSourceLabel(m)} · {modeStyle.note}</p>
+                        <div className="text-right sm:text-left">
+                          <p className={`text-sm font-semibold tracking-tight ${modeStyle.textClassName}`}>₹{m.min_fare} - ₹{m.max_fare}</p>
+                          <p className="text-[10px] text-muted-foreground">Expected range</p>
+                        </div>
+                        <div className="col-span-2 text-left sm:col-span-1 sm:text-right">
+                          <p className="text-xs font-medium text-foreground">{fareTypicalLabel(m)} ₹{m.median_fare}</p>
+                        </div>
                       </div>
-                      <div className="text-right sm:text-left">
-                        <p className={`text-sm font-semibold tracking-tight ${modeStyle.textClassName}`}>₹{m.min_fare} - ₹{m.max_fare}</p>
-                        <p className="text-[10px] text-muted-foreground">Expected range</p>
-                      </div>
-                      <div className="col-span-2 text-left sm:col-span-1 sm:text-right">
-                        <p className="text-xs font-medium text-foreground">{fareTypicalLabel(m)} ₹{m.median_fare}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              </details>
             </div>
           )}
         </Card>
@@ -1161,10 +1305,10 @@ function TravelPage() {
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                {selectedRoute ? (
-                  <Badge variant="outline" className="hidden border-border bg-background px-2 py-0.5 text-[10px] font-medium text-muted-foreground sm:inline-flex">
-                    Current route loaded
-                  </Badge>
+                {selectedRouteParts ? (
+                  <span className="hidden max-w-[240px] truncate text-[11px] font-medium text-primary sm:inline">
+                    Viewing {selectedRouteParts.from} to {selectedRouteParts.to}
+                  </span>
                 ) : null}
                 <span className="text-[11px] font-medium text-muted-foreground">{savedRoutesOpen ? "Hide" : "Show"}</span>
                 <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${savedRoutesOpen ? "rotate-180" : ""}`} />
@@ -1181,20 +1325,31 @@ function TravelPage() {
                     <button
                       key={r.id}
                       type="button"
+                      aria-current={isActiveRoute ? "true" : undefined}
                       onClick={() => {
                         setSelectedRouteId(r.id);
                         setDriverQuote("");
                         setNegotiatedAmount("");
                         setAiCoachResult(null);
                       }}
-                      className={`grid w-full grid-cols-1 gap-2 px-3 py-3 text-left transition-colors sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-4 ${
-                        isActiveRoute ? "bg-primary/5" : "hover:bg-surface"
+                      className={`relative grid w-full grid-cols-1 gap-2 px-3 py-3 text-left transition-colors sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-4 ${
+                        isActiveRoute ? "pl-4" : "hover:bg-surface"
                       }`}
                     >
+                      {isActiveRoute ? (
+                        <span className="absolute left-0 top-2 bottom-2 w-0.5 rounded-full bg-primary" />
+                      ) : null}
                       <div className="min-w-0">
                         <div className="flex min-w-0 flex-wrap items-center gap-2">
-                          <p className="truncate text-xs font-semibold text-foreground">{parts.from}</p>
-                          <SourceBadge label={r.source} />
+                          <p className={`truncate text-xs font-semibold ${isActiveRoute ? "text-primary" : "text-foreground"}`}>{parts.from}</p>
+                          {isActiveRoute ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-primary">
+                              <Check className="h-3 w-3" />
+                              Viewing
+                            </span>
+                          ) : (
+                            <SourceBadge label={r.source} />
+                          )}
                         </div>
                         <p className="mt-0.5 truncate text-[11px] text-muted-foreground">Destination: {parts.to}</p>
                       </div>
@@ -1214,19 +1369,69 @@ function TravelPage() {
         {selectedRoute && (
           <div className="space-y-4 animate-[fadeIn_0.2s_ease-out]">
             <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div>
-                <p className="text-xs text-muted-foreground font-medium">Selected route</p>
-                <h2 className="text-base font-semibold tracking-tight text-foreground">{selectedRouteParts?.from || "Saved route"}</h2>
-                <p className="mt-0.5 text-xs text-muted-foreground">Destination: {selectedRouteParts?.to || "Campus"}</p>
+              <div className="flex min-w-0 flex-1 items-start gap-3">
+                <div className="mt-1 flex w-3 flex-col items-center self-stretch">
+                  <span className="h-2.5 w-2.5 rounded-full bg-primary" />
+                  <span className="my-1 h-8 w-px flex-1 bg-gradient-to-b from-primary to-emerald-500/80" />
+                  <span className="h-2.5 w-2.5 rounded-full border-2 border-emerald-500 bg-background" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">Now viewing</p>
+                  <h2 className="truncate text-base font-semibold tracking-tight text-foreground">{selectedRouteParts?.from || "Saved route"}</h2>
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                    to <span className="font-medium text-foreground">{selectedRouteParts?.to || "Campus"}</span>
+                  </p>
+                </div>
               </div>
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-medium text-muted-foreground">
                 {selectedRoute.distance_km && (
-                  <Badge variant="secondary" className="font-bold font-mono text-xs bg-white/5 border border-border text-foreground">{selectedRoute.distance_km} km</Badge>
+                  <span>{selectedRoute.distance_km} km</span>
                 )}
-                <SourceBadge label={selectedRoute.source} />
-                <ConfidenceBadge confidence={selectedRoute.confidence} />
+                {selectedRoute.duration_mins && (
+                  <span className="border-l border-border pl-2">{selectedRoute.duration_mins} min</span>
+                )}
+                <span className="border-l border-border pl-2 text-foreground">
+                  {(selectedRoute.confidence || "low").toLowerCase() === "high"
+                    ? "High trust"
+                    : (selectedRoute.confidence || "low").toLowerCase() === "medium"
+                    ? "Medium trust"
+                    : "Needs review"}
+                </span>
               </div>
             </div>
+
+            {selectedDecision && (
+              <div className="rounded-lg bg-surface px-3.5 py-3 ring-1 ring-border/80">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                      <span className="text-sm font-semibold text-foreground">{selectedDecision.label}</span>
+                      <span className="text-xs font-medium text-muted-foreground">₹{selectedDecision.fare} around</span>
+                      {selectedDecision.eta ? <span className="text-xs font-medium text-muted-foreground">{selectedDecision.eta}</span> : null}
+                    </div>
+                    <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{selectedDecision.action}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2 sm:justify-end">
+                    <div className="text-left sm:text-right">
+                      <p className="text-[9px] text-muted-foreground">Walk away above</p>
+                      <p className="text-sm font-semibold text-foreground">₹{selectedDecision.acceptUpTo}</p>
+                    </div>
+                    <Select value={travelIntent} onValueChange={(value) => setTravelIntent(value as TravelIntent)}>
+                      <SelectTrigger className="h-8 w-[108px] rounded-md border-border bg-background text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-background border border-border text-foreground">
+                        {TRAVEL_INTENTS.map((intent) => (
+                          <SelectItem key={intent.id} value={intent.id} className="text-xs">
+                            {intent.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Transport Mode Selector */}
             <div className="flex flex-wrap gap-2">
@@ -1587,7 +1792,7 @@ function TravelPage() {
                 {(() => {
                   const directAutoFare = selectedRoute.modes.find((m: any) => m.mode.toLowerCase().includes("auto"))?.median_fare || 150;
                   const sharedAutoFare = selectedRoute.modes.find((m: any) => m.mode.toLowerCase().includes("shared"))?.median_fare || 40;
-                  const splitInfo = getIntermediateData(selectedRoute.name, activeCollege, directAutoFare, sharedAutoFare);
+                  const splitInfo = getIntermediateData(selectedRoute.name, activeCollege, directAutoFare, sharedAutoFare, selectedRoute.split_suggestion);
                   const directFare = splitInfo.directTotal;
                   const splitFare = splitHopMode === "shared"
                     ? (splitInfo.shared1 + splitInfo.shared2)
@@ -1620,18 +1825,19 @@ function TravelPage() {
                             id: "split" as const,
                             title: "Two-hop route",
                             price: splitFare,
-                            note: savings > 0 ? `Can save ₹${savings}` : "Use only if safer",
+                            note: splitInfo.available ? (savings > 0 ? `Can save ₹${savings}` : "Use only if safer") : "No verified split point",
                           },
                         ].map((option) => (
                           <button
                             key={option.id}
                             type="button"
+                            disabled={option.id === "split" && !splitInfo.available}
                             onClick={() => setSplitTravelType(option.id)}
                             className={`text-left transition-colors ${
                               splitTravelType === option.id
                                 ? "border-l-2 border-primary bg-primary/5 pl-3 pr-2 py-2"
                                 : "border-l-2 border-border pl-3 pr-2 py-2 text-muted-foreground hover:border-primary/50 hover:text-foreground"
-                            }`}
+                            } disabled:cursor-not-allowed disabled:opacity-50`}
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div>
@@ -1693,7 +1899,7 @@ function TravelPage() {
                           <div className="divide-y divide-border/70">
                             {[
                               ["Start", selectedRouteParts?.from || "Pickup point"],
-                              ["Ride", `Direct ${selectedMode.split(" ")[0]} · ₹${directFare}`],
+                              ["Ride", `Direct ${selectedMode.split(" ")[0]} for ₹${directFare}`],
                               ["End", selectedRouteParts?.to || "Destination"],
                             ].map(([label, value]) => (
                               <div key={label} className="flex items-center justify-between gap-3 px-3.5 py-3 text-xs">
@@ -1705,9 +1911,9 @@ function TravelPage() {
                         ) : (
                           <div className="relative divide-y divide-border/70">
                             {[
-                              ["Hop 1", `${splitInfo.leg1} · ₹${splitHopMode === "shared" ? splitInfo.shared1 : splitInfo.direct1}`],
+                              ["Hop 1", `${splitInfo.leg1} for ₹${splitHopMode === "shared" ? splitInfo.shared1 : splitInfo.direct1}`],
                               ["Transfer", `Switch at ${splitInfo.stopName}`],
-                              ["Hop 2", `${splitInfo.leg2} · ₹${splitHopMode === "shared" ? splitInfo.shared2 : splitInfo.direct2}`],
+                              ["Hop 2", `${splitInfo.leg2} for ₹${splitHopMode === "shared" ? splitInfo.shared2 : splitInfo.direct2}`],
                             ].map(([label, value]) => (
                               <div key={label} className="grid grid-cols-[72px_minmax(0,1fr)] gap-3 px-3.5 py-3 text-xs">
                                 <span className="text-muted-foreground">{label}</span>
@@ -1717,6 +1923,30 @@ function TravelPage() {
                           </div>
                         )}
                       </div>
+
+                      {splitTravelType === "split" && splitInfo.available ? (
+                        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-3.5 py-3">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                              <p className="text-[10px] font-medium uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Transfer point</p>
+                              <p className="mt-0.5 text-sm font-semibold text-foreground">{splitInfo.stopName}</p>
+                              <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{splitInfo.tip}</p>
+                            </div>
+                            <Badge className="w-fit border border-emerald-500/20 bg-background text-[9px] text-emerald-600 dark:text-emerald-400">
+                              {splitInfo.confidence || "medium"} confidence
+                            </Badge>
+                          </div>
+                          {splitInfo.avoidWhen?.length ? (
+                            <p className="mt-2 text-[10px] text-muted-foreground">
+                              Avoid when: {splitInfo.avoidWhen.join(", ")}.
+                            </p>
+                          ) : null}
+                        </div>
+                      ) : !splitInfo.available ? (
+                        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-3.5 py-3 text-[11px] leading-relaxed text-amber-700 dark:text-amber-300">
+                          {splitInfo.tip}
+                        </div>
+                      ) : null}
 
                       <div className="flex flex-col gap-2 rounded-2xl bg-primary/5 px-3.5 py-3 text-xs sm:flex-row sm:items-center sm:justify-between">
                         <div>
@@ -1784,7 +2014,7 @@ function TravelPage() {
                           <p className="mt-0.5 text-xs text-muted-foreground">Turn the fare anchor into a polite counter-offer you can actually say.</p>
                         </div>
                         <Badge className="w-fit border border-border bg-background text-[10px] font-medium text-muted-foreground">
-                          Anchor ₹{activeMode?.median_fare || "—"} · {fareSourceLabel(activeMode)}
+                          Anchor ₹{activeMode?.median_fare || "—"} from {fareSourceLabel(activeMode)}
                         </Badge>
                       </div>
 

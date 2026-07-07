@@ -15,6 +15,8 @@ class Settings(BaseSettings):
         default="https://router.project-osrm.org",
         validation_alias=AliasChoices("osrm_route_url", "OSRM_ROUTE_URL"),
     )
+    TOMTOM_API_KEY: str = ""
+    TOMTOM_ROUTE_URL: str = "https://api.tomtom.com"
     AWS_ACCESS_KEY_ID: str = ""
     AWS_SECRET_ACCESS_KEY: str = ""
     AWS_SESSION_TOKEN: str = ""
