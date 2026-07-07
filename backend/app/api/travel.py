@@ -16,7 +16,8 @@ from app.services.bedrock import generate_json
 router = APIRouter()
 logger = logging.getLogger("app.api.travel")
 
-MIN_COMMUNITY_REPORTS_FOR_FARE = 3
+TRAVEL_REPORT_THRESHOLD_FLOOR = 5
+TRAVEL_REPORT_THRESHOLD_CEILING = 25
 FARE_MODEL_VERSION = "campus-distance-v2"
 REPORT_TRUST_WINDOW_DAYS = 90
 REPORT_DUPLICATE_WINDOW_HOURS = 12
@@ -131,6 +132,7 @@ def _fare_mode(mode: str, min_fare: int, max_fare: int, median_fare: int, distan
         "fare_basis": f"{distance_km:.1f} km x {rule_name}",
         "fare_model_version": FARE_MODEL_VERSION,
         "report_sample_size": 0,
+        "report_threshold": compute_travel_verification_threshold(),
     }
 
 
@@ -280,9 +282,32 @@ def _to_dict(doc):
     return d
 
 
-def _robust_fare_range(values: list[float]) -> Optional[dict[str, int]]:
+def compute_travel_verification_threshold(active_reporters: int = 0) -> int:
+    """
+    Independent student reports needed before crowdsourced fares affect recommendations.
+
+    Travel fare data has the same trust problem as scanned menus: a fixed three-vote
+    threshold is too easy to game and too weak for busy routes. The floor handles
+    cold starts, then the threshold grows sub-linearly as the route reporter base grows.
+    """
+    try:
+        reporter_count = max(0, int(active_reporters or 0))
+    except (TypeError, ValueError):
+        reporter_count = 0
+    return max(
+        TRAVEL_REPORT_THRESHOLD_FLOOR,
+        min(TRAVEL_REPORT_THRESHOLD_CEILING, math.ceil(1.25 * math.sqrt(max(reporter_count, 10)))),
+    )
+
+
+def travel_dispute_hide_threshold(verification_threshold: int) -> int:
+    return max(3, math.ceil(max(1, verification_threshold) * 0.5))
+
+
+def _robust_fare_range(values: list[float], min_sample_size: Optional[int] = None) -> Optional[dict[str, int]]:
     fares = sorted(float(v) for v in values if isinstance(v, (int, float)) and v > 0)
-    if len(fares) < 3:
+    required = min_sample_size or compute_travel_verification_threshold()
+    if len(fares) < required:
         return None
 
     def percentile(sorted_values: list[float], pct: float) -> float:
@@ -300,14 +325,15 @@ def _robust_fare_range(values: list[float]) -> Optional[dict[str, int]]:
     lower_bound = max(0.0, q1 - 1.5 * iqr)
     upper_bound = q3 + 1.5 * iqr
     filtered = [fare for fare in fares if lower_bound <= fare <= upper_bound]
-    if len(filtered) < 3:
+    if len(filtered) < max(3, math.ceil(required * 0.6)):
         filtered = fares
 
     return {
         "min_fare": int(round(percentile(filtered, 0.15))),
         "max_fare": int(round(percentile(filtered, 0.85))),
         "median_fare": int(round(percentile(filtered, 0.5))),
-        "sample_size": len(filtered),
+        "sample_size": len(fares),
+        "filtered_sample_size": len(filtered),
     }
 
 
@@ -327,13 +353,22 @@ def _report_created_at(report: dict[str, Any]) -> Optional[datetime.datetime]:
 def _is_disputed_report(report: dict[str, Any]) -> bool:
     upvotes = report.get("upvotes") or []
     downvotes = report.get("downvotes") or []
-    return len(downvotes) >= 2 and len(downvotes) > len(upvotes)
+    return len(downvotes) >= travel_dispute_hide_threshold(compute_travel_verification_threshold()) and len(downvotes) > len(upvotes)
+
+
+def _report_identity(report: dict[str, Any], fallback_index: int) -> str:
+    for key in ("user_id", "device_id", "phone_hash", "_id", "id"):
+        value = str(report.get(key) or "").strip()
+        if value:
+            return value
+    created_at = _report_created_at(report)
+    return f"anonymous:{fallback_index}:{created_at.isoformat() if created_at else 'unknown'}"
 
 
 def _trusted_fare_reports(reports: list[dict[str, Any]]) -> list[dict[str, Any]]:
     cutoff = datetime.datetime.utcnow() - datetime.timedelta(days=REPORT_TRUST_WINDOW_DAYS)
-    trusted: list[dict[str, Any]] = []
-    for report in reports:
+    latest_by_reporter: dict[str, dict[str, Any]] = {}
+    for index, report in enumerate(reports):
         if _is_disputed_report(report):
             continue
         created_at = _report_created_at(report)
@@ -341,27 +376,92 @@ def _trusted_fare_reports(reports: list[dict[str, Any]]) -> list[dict[str, Any]]
             continue
         if not isinstance(report.get("final_amount"), (int, float)) or float(report.get("final_amount") or 0) <= 0:
             continue
-        trusted.append(report)
-    return trusted
+        reporter_id = _report_identity(report, index)
+        existing = latest_by_reporter.get(reporter_id)
+        existing_at = _report_created_at(existing) if existing else None
+        if existing is None or (created_at and (not existing_at or created_at > existing_at)):
+            latest_by_reporter[reporter_id] = report
+
+    return sorted(
+        latest_by_reporter.values(),
+        key=lambda item: _report_created_at(item) or datetime.datetime.min,
+        reverse=True,
+    )
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def build_travel_trust_metadata(mode_doc: dict[str, Any]) -> dict[str, Any]:
+    """Expose the same trust lifecycle language as Food Guard, with travel-specific evidence."""
+    sample_size = max(0, _safe_int(mode_doc.get("report_sample_size"), 0))
+    threshold = max(
+        TRAVEL_REPORT_THRESHOLD_FLOOR,
+        _safe_int(mode_doc.get("report_threshold"), compute_travel_verification_threshold(sample_size)),
+    )
+    fare_source = str(mode_doc.get("fare_source") or "distance_model").lower()
+
+    if fare_source == "student_reports" and sample_size >= threshold:
+        return {
+            "trust_stage": "student_verified",
+            "trust_badge": "Student verified",
+            "trust_reason": f"{sample_size} distinct student fare reports confirm this route and mode.",
+            "trust_score": min(95, 80 + min(15, sample_size - threshold)),
+            "report_sample_size": sample_size,
+            "report_threshold": threshold,
+        }
+
+    if sample_size > 0:
+        return {
+            "trust_stage": "learning",
+            "trust_badge": "Learning",
+            "trust_reason": f"{sample_size}/{threshold} trusted student reports collected; fares still use the distance model.",
+            "trust_score": min(70, 40 + math.floor((sample_size / max(1, threshold)) * 25)),
+            "report_sample_size": sample_size,
+            "report_threshold": threshold,
+        }
+
+    return {
+        "trust_stage": "model_estimate",
+        "trust_badge": "Model estimate",
+        "trust_reason": "Distance and campus-local fare model; no trusted student fare cluster yet.",
+        "trust_score": 35,
+        "report_sample_size": sample_size,
+        "report_threshold": threshold,
+    }
+
+
+def _apply_travel_trust_metadata(mode_doc: dict[str, Any]) -> dict[str, Any]:
+    updated = dict(mode_doc)
+    updated.update(build_travel_trust_metadata(updated))
+    return updated
 
 
 def _with_report_fare_meta(mode_doc: dict[str, Any], sample_size: int) -> dict[str, Any]:
     updated = dict(mode_doc)
+    threshold = compute_travel_verification_threshold(sample_size)
     updated["report_sample_size"] = sample_size
+    updated["report_threshold"] = threshold
     updated["fare_source"] = "student_reports"
     updated["fare_source_label"] = "Student reports"
-    updated["fare_basis"] = f"{sample_size} recent student fare reports"
-    return updated
+    updated["fare_basis"] = f"{sample_size} distinct recent student fare reports"
+    return _apply_travel_trust_metadata(updated)
 
 
 def _ensure_fare_meta(mode_doc: dict[str, Any], route_distance_km: Optional[float] = None) -> dict[str, Any]:
     updated = dict(mode_doc)
     sample_size = int(updated.get("report_sample_size") or 0)
-    if sample_size >= MIN_COMMUNITY_REPORTS_FOR_FARE:
+    threshold = compute_travel_verification_threshold(sample_size)
+    updated["report_threshold"] = max(int(updated.get("report_threshold") or 0), threshold)
+    if sample_size >= threshold:
         updated["fare_source"] = "student_reports"
         updated["fare_source_label"] = "Student reports"
-        updated["fare_basis"] = updated.get("fare_basis") or f"{sample_size} recent student fare reports"
-        return updated
+        updated["fare_basis"] = updated.get("fare_basis") or f"{sample_size} distinct recent student fare reports"
+        return _apply_travel_trust_metadata(updated)
 
     updated.setdefault("fare_source", "distance_model")
     updated["fare_source_label"] = "Distance model"
@@ -371,7 +471,7 @@ def _ensure_fare_meta(mode_doc: dict[str, Any], route_distance_km: Optional[floa
         updated["fare_basis"] = updated.get("fare_basis") or "Campus-local fare rule"
     updated["report_sample_size"] = sample_size
     updated.setdefault("fare_model_version", FARE_MODEL_VERSION)
-    return updated
+    return _apply_travel_trust_metadata(updated)
 
 class CustomRouteCreateReq(BaseModel):
     name: str
@@ -454,7 +554,11 @@ async def _refresh_route_mode_fares(db, route_id: str, selected_mode: str) -> No
     cursor = db.travel_reports.find({"route_id": route_id, "mode": {"$regex": f"^{re.escape(selected_mode)}$", "$options": "i"}})
     all_reports = await cursor.to_list(length=1000)
     trusted_reports = _trusted_fare_reports(all_reports)
-    robust_range = _robust_fare_range([r.get("final_amount") for r in trusted_reports])
+    report_threshold = compute_travel_verification_threshold(len(trusted_reports))
+    robust_range = _robust_fare_range(
+        [r.get("final_amount") for r in trusted_reports],
+        min_sample_size=report_threshold,
+    )
 
     model_mode = None
     distance_km = route_doc.get("distance_km")
@@ -477,7 +581,7 @@ async def _refresh_route_mode_fares(db, route_id: str, selected_mode: str) -> No
                     "median_fare": robust_range["median_fare"],
                 }, robust_range["sample_size"]))
             elif model_mode:
-                updated_modes.append({
+                updated_modes.append(_apply_travel_trust_metadata({
                     **mode,
                     "min_fare": model_mode["min_fare"],
                     "max_fare": model_mode["max_fare"],
@@ -487,13 +591,18 @@ async def _refresh_route_mode_fares(db, route_id: str, selected_mode: str) -> No
                     "fare_basis": model_mode.get("fare_basis") or f"{float(distance_km):.1f} km x campus-local fare rule",
                     "fare_model_version": FARE_MODEL_VERSION,
                     "report_sample_size": len(trusted_reports),
-                })
+                    "report_threshold": report_threshold,
+                }))
             else:
-                next_mode = _ensure_fare_meta(mode, distance_km if isinstance(distance_km, (int, float)) else None)
+                next_mode = dict(mode)
                 next_mode["fare_source"] = "distance_model"
                 next_mode["fare_source_label"] = "Distance model"
+                if isinstance(distance_km, (int, float)):
+                    next_mode["fare_basis"] = next_mode.get("fare_basis") or f"{float(distance_km):.1f} km x campus-local fare rule"
                 next_mode["report_sample_size"] = len(trusted_reports)
-                updated_modes.append(next_mode)
+                next_mode["report_threshold"] = report_threshold
+                next_mode.setdefault("fare_model_version", FARE_MODEL_VERSION)
+                updated_modes.append(_apply_travel_trust_metadata(next_mode))
         else:
             updated_modes.append(mode)
 
@@ -642,7 +751,8 @@ async def get_routes(college: Optional[str] = Query(None), user_id: str = Depend
         # Calculate dynamic labels based on report age
         reports_cursor = db.travel_reports.find({"route_id": route_id}).sort("created_at", -1)
         all_reports = await reports_cursor.to_list(length=50)
-        r_reports = _trusted_fare_reports(all_reports)[:10]
+        r_reports = _trusted_fare_reports(all_reports)
+        route_report_threshold = compute_travel_verification_threshold(len(r_reports))
         
         age_days = None
         has_recent = False
@@ -670,7 +780,7 @@ async def get_routes(college: Optional[str] = Query(None), user_id: str = Depend
             elif age_days <= 14:
                 route_dict["source"] = "recent student report"
             else:
-                if len(r_reports) >= 3:
+                if len(r_reports) >= route_report_threshold:
                     route_dict["source"] = "community median"
                 else:
                     route_dict["source"] = "recent student report"
@@ -679,7 +789,7 @@ async def get_routes(college: Optional[str] = Query(None), user_id: str = Depend
                 route_dict["source"] = "distance_model"
 
         # Determine confidence:
-        # - high: official + recent community reports, or community median with >=3 reports and recent report
+        # - high: official + recent community reports, or community median above the adaptive trust threshold
         # - medium: community only (without recent report, or official without recent report)
         # - low: stale or sparse reports
         resolved_source = route_dict.get("source", "")
@@ -692,7 +802,7 @@ async def get_routes(college: Optional[str] = Query(None), user_id: str = Depend
             else:
                 route_dict["confidence"] = "medium"
         elif resolved_source == "recent student report" or resolved_source == "community median":
-            if len(r_reports) >= 3 and has_recent:
+            if len(r_reports) >= route_report_threshold and has_recent:
                 route_dict["confidence"] = "high"
             else:
                 route_dict["confidence"] = "medium"
@@ -1120,6 +1230,50 @@ def generate_rich_fallback_script(college: str, mode: str, situation: str, app_q
             
     return script
 
+
+def build_travel_ai_prompt(
+    *,
+    college: str,
+    region: str,
+    route_name: str,
+    distance_km: float,
+    mode: str,
+    min_fare: float,
+    max_fare: float,
+    median_fare: float,
+    fare_anchor: float,
+    fare_anchor_label: str,
+    report_count: int,
+    surge_context: str,
+    user_situation: Optional[str],
+    dialect: str,
+) -> str:
+    return f"""
+You are PocketBuddy Travel Guard, a student transport fare assistant.
+The student is at {college} in {region}.
+They are travelling on the route: {route_name} ({distance_km} km) via {mode}.
+Target fair range: Rs. {min_fare} to Rs. {max_fare} (median: Rs. {median_fare}).
+Fare anchor: Rs. {fare_anchor} ({fare_anchor_label}; distinct trusted reports counted: {report_count}).
+{surge_context}
+Student's current situation/problems: {user_situation or 'None'}
+
+Hard rules:
+- Use only the fare numbers, route, distance, quote context, and report count provided above.
+- Never invent fare numbers, live traffic, route distances, app prices, report counts, landmarks, or safety claims.
+- Do not imply live Ola, Uber, Rapido, or other ride-app pricing unless the context explicitly says the quote came from a live API. User-entered app quotes are only comparison inputs.
+- If the fare anchor is a Distance model, call it an estimate. If it is Student reports, mention the distinct trusted report count.
+- Keep advice practical and safe; do not encourage unsafe walking, isolated pickups, or late-night shared rides.
+
+Task:
+Generate a JSON object containing three fields:
+1. "script": A localized, realistic negotiation script in local student dialect ({dialect}) to say to the driver. Keep it short and natural. Mention an app quote only if quote context is provided.
+2. "tactics": Array of 3 route-specific tactical tips. Each tip must be grounded in the supplied fare/routing context.
+3. "safety": A 1-sentence quick safety advice for this specific situation.
+
+Output ONLY valid JSON matching this schema, without markdown formatting or trailing text. Do not wrap in ```json.
+"""
+
+
 @router.post("/ai-coach")
 async def get_ai_negotiation_coach(req: AiCoachReq, user_id: str = Depends(get_current_user)):
     db = get_db()
@@ -1167,13 +1321,17 @@ async def get_ai_negotiation_coach(req: AiCoachReq, user_id: str = Depends(get_c
         recent_reports = await report_cursor.to_list(length=200)
         recent_reports = _trusted_fare_reports(recent_reports)
         report_count = len(recent_reports)
-        if report_count >= MIN_COMMUNITY_REPORTS_FOR_FARE:
-            robust_range = _robust_fare_range([r.get("final_amount") for r in recent_reports])
+        report_threshold = compute_travel_verification_threshold(report_count)
+        if report_count >= report_threshold:
+            robust_range = _robust_fare_range(
+                [r.get("final_amount") for r in recent_reports],
+                min_sample_size=report_threshold,
+            )
             if robust_range:
                 fare_anchor = float(robust_range["median_fare"])
                 community_median = fare_anchor
                 fare_anchor_source = "student_reports"
-                fare_anchor_label = f"{robust_range['sample_size']} student reports"
+                fare_anchor_label = f"{robust_range['sample_size']} distinct student reports"
 
     if req.app_quote and req.app_quote > 0 and fare_anchor > 0:
         surge_factor = round(req.app_quote / fare_anchor, 2)
@@ -1234,23 +1392,22 @@ async def get_ai_negotiation_coach(req: AiCoachReq, user_id: str = Depends(get_c
         return fallback_response
 
     try:
-        prompt = f"""
-        You are an expert Indian auto/cab fare negotiator and transit helper.
-        The student is at {college} in {region}.
-        They are travelling on the route: {route_name} ({distance_km} km) via {req.mode}.
-        Target fair range: Rs. {min_fare} to Rs. {max_fare} (median: Rs. {median_fare}).
-        Fare anchor: Rs. {fare_anchor} ({fare_anchor_label}; reports counted: {report_count}).
-        {surge_context}
-        Student's current situation/problems: {req.user_situation or 'None'}
-
-        Task:
-        Generate a JSON object containing three fields:
-        1. "script": A localized, high-impact, realistic negotiation script in local Indian student dialect (using {dialect}) to say to the driver. Keep it short, natural, and street-smart. Mention an app quote only if current app quote context is provided. If a high app quote is provided, factor that into your advice (suggest alternatives if quote ratio > 1.5x, set a harder anchor if mildly high). Incorporate their situation (e.g. rain, luggage, night) if provided.
-        2. "tactics": Array of 3 bullet points of specific tactical advice for negotiating this route/mode/situation. If app quote comparison data is available, include quote-specific tactics.
-        3. "safety": A 1-sentence quick safety advice for this specific situation.
-
-        Output ONLY valid JSON matching this schema, without markdown formatting or trailing text. Do not wrap in ```json.
-        """
+        prompt = build_travel_ai_prompt(
+            college=college,
+            region=region,
+            route_name=route_name,
+            distance_km=distance_km,
+            mode=req.mode,
+            min_fare=min_fare,
+            max_fare=max_fare,
+            median_fare=median_fare,
+            fare_anchor=fare_anchor,
+            fare_anchor_label=fare_anchor_label,
+            report_count=report_count,
+            surge_context=surge_context,
+            user_situation=req.user_situation,
+            dialect=dialect,
+        )
 
         result = generate_json(prompt, max_tokens=500, temperature=0.25)
         return _normalize_ai_coach_response(

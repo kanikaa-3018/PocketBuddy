@@ -290,15 +290,35 @@ function travelModeStyle(mode: string) {
 
 function fareSourceLabel(mode: any) {
   const sampleSize = Number(mode?.report_sample_size || 0);
-  if (mode?.fare_source === "student_reports" && sampleSize >= 3) {
-    return `${sampleSize} student reports`;
+  const threshold = Math.max(5, Number(mode?.report_threshold || 5));
+  if (mode?.trust_stage === "student_verified" || mode?.trust_badge === "Student verified") {
+    return `Student verified · ${sampleSize} reports`;
   }
-  return "Distance model";
+  if (mode?.trust_stage === "learning" || mode?.trust_badge === "Learning") {
+    return `Learning · ${sampleSize}/${threshold} reports`;
+  }
+  if (mode?.trust_stage === "model_estimate" || mode?.trust_badge === "Model estimate") {
+    return "Model estimate";
+  }
+  if (mode?.fare_source === "student_reports" && sampleSize >= threshold) {
+    return `Student verified · ${sampleSize} reports`;
+  }
+  if (sampleSize > 0) {
+    return `Learning · ${sampleSize}/${threshold} reports`;
+  }
+  return "Model estimate: distance and campus-local fare model";
 }
 
 function fareTypicalLabel(mode: any) {
   const sampleSize = Number(mode?.report_sample_size || 0);
-  return mode?.fare_source === "student_reports" && sampleSize >= 3 ? "Student typical" : "Model typical";
+  const threshold = Math.max(5, Number(mode?.report_threshold || 5));
+  if (mode?.trust_stage === "student_verified" || (mode?.fare_source === "student_reports" && sampleSize >= threshold)) {
+    return "Student verified";
+  }
+  if (mode?.trust_stage === "learning" || sampleSize > 0) {
+    return "Learning estimate";
+  }
+  return "Model estimate";
 }
 
 function findModeByIntent(modes: any[] = [], intent: TravelIntent, splitSuggestion?: SplitSuggestion | null) {
@@ -1395,7 +1415,7 @@ function TravelPage() {
                     ? "High trust"
                     : (selectedRoute.confidence || "low").toLowerCase() === "medium"
                     ? "Medium trust"
-                    : "Needs review"}
+                    : "Needs confirmation"}
                 </span>
               </div>
             </div>
