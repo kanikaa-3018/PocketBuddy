@@ -57,4 +57,8 @@ class Settings(BaseSettings):
     AA_FIU_ID: str = ""
     AA_CALLBACK_SECRET: str = ""
     AA_INSTITUTION_REGISTRY_URL: str = ""
+
+    DEMO_MODE: bool = False
+    OCR_PROVIDER: str = "ocrspace"
+    OCR_SPACE_API_KEY: str = ""
 settings = Settings()
