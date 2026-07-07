@@ -3,7 +3,19 @@ import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
 import { AppShell, MobileMenuButton } from "@/components/AppShell";
-import { Smartphone, Edit3, ChevronLeft, ChevronRight, Download, CreditCard } from "lucide-react";
+import {
+  Smartphone,
+  Edit3,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  CreditCard,
+  Server,
+  Landmark,
+  CheckCircle2,
+  AlertTriangle,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -44,6 +56,242 @@ function getCatBadgeStyles(cat?: string): string {
 }
 
 type ViewTab = "daily" | "calendar" | "monthly" | "total";
+type TrustTone = "success" | "warning" | "muted" | "primary";
+type TrustBadge = { label: string; tone: TrustTone; title: string };
+
+function transactionTrustBadges(txn: any): TrustBadge[] {
+  const badges: TrustBadge[] = [];
+  const source = String(txn.source || "").toLowerCase();
+  const isCompanion = source.startsWith("companion");
+  const needsReview = txn.needs_verification === true || txn.verification_status === "needs_review";
+  const bankVerified = txn.verification_status === "aa_verified" || txn.data_origin === "account_aggregator";
+  const userReviewed = Boolean(txn.user_confirmed_at || txn.user_corrected || txn.verification_status === "user_reviewed");
+  const onDevice =
+    txn.data_origin === "android_on_device" ||
+    txn.privacy_mode === "on_device_only" ||
+    (isCompanion && txn.raw_payload_received === false);
+  const legacyMasked = txn.raw_payload_received === true || txn.data_origin === "legacy_android_raw_ingest";
+
+  if (bankVerified) {
+    badges.push({
+      label: "Bank verified",
+      tone: "success",
+      title: "Matched through an Account Aggregator data source.",
+    });
+  } else if (needsReview) {
+    badges.push({
+      label: "Needs review",
+      tone: "warning",
+      title: "Parsed with lower confidence. Confirm or correct this entry.",
+    });
+  } else if (userReviewed) {
+    badges.push({
+      label: "Reviewed",
+      tone: "success",
+      title: "Confirmed or corrected by the user.",
+    });
+  }
+
+  if (onDevice) {
+    badges.push({
+      label: "On-device",
+      tone: "primary",
+      title: "Parsed on the Android phone. Raw notification text was not uploaded.",
+    });
+  } else if (legacyMasked) {
+    badges.push({
+      label: "Masked legacy",
+      tone: "warning",
+      title: "Legacy connector path. Only a masked preview is retained.",
+    });
+  } else if (source === "manual" || txn.data_origin === "user_entered") {
+    badges.push({
+      label: "Manual",
+      tone: "muted",
+      title: "Entered by the user.",
+    });
+  } else if (source) {
+    badges.push({
+      label: "App entry",
+      tone: "muted",
+      title: "Created inside PocketBuddy.",
+    });
+  }
+
+  if (!needsReview && isCompanion && txn.parsing_confidence === "high") {
+    badges.push({
+      label: "High confidence",
+      tone: "success",
+      title: "Amount and merchant were parsed with high confidence.",
+    });
+  }
+
+  return badges.slice(0, 3);
+}
+
+function trustBadgeClass(tone: TrustTone) {
+  if (tone === "success") return "border-success/25 bg-success/10 text-success";
+  if (tone === "warning") return "border-warning/30 bg-warning/10 text-warning";
+  if (tone === "primary") return "border-primary/25 bg-primary/10 text-primary";
+  return "border-border bg-surface-raised/60 text-muted-foreground";
+}
+
+function trustLabelForCSV(txn: any) {
+  const labels = transactionTrustBadges(txn).map((badge) => badge.label);
+  return labels.length ? labels.join(" | ") : "Unlabeled";
+}
+
+function transactionTrustDetail(txn: any) {
+  if (txn.needs_verification || txn.verification_status === "needs_review") {
+    return "Review this entry before relying on it.";
+  }
+  if (txn.data_origin === "android_on_device" || txn.privacy_mode === "on_device_only") {
+    return "Raw alert text stayed on the phone.";
+  }
+  if (txn.raw_payload_received === true || txn.data_origin === "legacy_android_raw_ingest") {
+    return "Legacy alert was stored as masked preview only.";
+  }
+  if (txn.source === "manual" || txn.data_origin === "user_entered") {
+    return "Added manually by you.";
+  }
+  return "Created inside PocketBuddy.";
+}
+
+type TrustPathState = "complete" | "attention" | "pending" | "neutral";
+type TrustPathStep = {
+  label: string;
+  detail: string;
+  state: TrustPathState;
+  icon: "phone" | "server" | "bank";
+};
+
+function transactionTrustPathSteps(txn: any): TrustPathStep[] {
+  const source = String(txn.source || "").toLowerCase();
+  const isCompanion = source.startsWith("companion");
+  const needsReview = txn.needs_verification === true || txn.verification_status === "needs_review";
+  const bankVerified = txn.verification_status === "aa_verified" || txn.data_origin === "account_aggregator";
+  const userReviewed = Boolean(txn.user_confirmed_at || txn.user_corrected || txn.verification_status === "user_reviewed");
+  const onDevice =
+    txn.data_origin === "android_on_device" ||
+    txn.privacy_mode === "on_device_only" ||
+    (isCompanion && txn.raw_payload_received === false);
+  const legacyMasked = txn.raw_payload_received === true || txn.data_origin === "legacy_android_raw_ingest";
+  const manual = source === "manual" || txn.data_origin === "user_entered";
+
+  const firstStep: TrustPathStep = onDevice
+    ? {
+        label: "Phone parsed",
+        detail: "Amount, merchant, direction and confidence were extracted on this phone. Raw alert text was not uploaded.",
+        state: "complete",
+        icon: "phone",
+      }
+    : legacyMasked
+      ? {
+          label: "Legacy phone sync",
+          detail: "This older connector path kept only a masked notification preview. Review the entry if anything looks off.",
+          state: "attention",
+          icon: "phone",
+        }
+      : manual
+        ? {
+            label: "Manual entry",
+            detail: "Added by you inside PocketBuddy. No notification or bank-source record is attached.",
+            state: "neutral",
+            icon: "phone",
+          }
+        : {
+            label: "PocketBuddy entry",
+            detail: "Created inside the app from structured user activity.",
+            state: "neutral",
+            icon: "phone",
+          };
+
+  const recordStep: TrustPathStep = needsReview
+    ? {
+        label: "Needs review",
+        detail: "PocketBuddy saved this as a reviewable transaction because confidence was not strong enough.",
+        state: "attention",
+        icon: "server",
+      }
+    : {
+        label: "Recorded safely",
+        detail: userReviewed
+          ? "You confirmed or corrected this entry before relying on it."
+          : "PocketBuddy stored structured transaction fields and privacy labels.",
+        state: "complete",
+        icon: "server",
+      };
+
+  const bankStep: TrustPathStep = bankVerified
+    ? {
+        label: "Bank verified",
+        detail: "Matched with consented bank-source data through the Account Aggregator path.",
+        state: "complete",
+        icon: "bank",
+      }
+    : onDevice || isCompanion || legacyMasked
+      ? {
+          label: "Bank check optional",
+          detail: "Connect bank consent from Privacy Center to verify transactions without sharing banking passwords.",
+          state: "pending",
+          icon: "bank",
+        }
+      : {
+          label: "No bank check",
+          detail: "This entry is not linked to Account Aggregator verification.",
+          state: "neutral",
+          icon: "bank",
+        };
+
+  return [firstStep, recordStep, bankStep];
+}
+
+function trustPathStateClass(state: TrustPathState) {
+  if (state === "complete") return "border-success/20 bg-success/5 text-success";
+  if (state === "attention") return "border-warning/30 bg-warning/10 text-warning";
+  if (state === "pending") return "border-primary/20 bg-primary/5 text-primary";
+  return "border-border bg-surface-raised/50 text-muted-foreground";
+}
+
+function TrustPathIcon({ step }: { step: TrustPathStep }) {
+  const className = "h-3.5 w-3.5";
+  if (step.icon === "phone") return <Smartphone className={className} />;
+  if (step.icon === "bank") return <Landmark className={className} />;
+  if (step.state === "attention") return <AlertTriangle className={className} />;
+  if (step.state === "complete") return <CheckCircle2 className={className} />;
+  return <Server className={className} />;
+}
+
+function TransactionTrustPath({ txn }: { txn: any }) {
+  const steps = transactionTrustPathSteps(txn);
+
+  return (
+    <div className="mt-3 rounded-xl border border-border/70 bg-background/70 p-3">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+          Transaction trust path
+        </p>
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
+          Phone sync and bank verification are separate sources.
+        </p>
+      </div>
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        {steps.map((step) => (
+          <div key={step.label} className={`rounded-lg border p-2.5 ${trustPathStateClass(step.state)}`}>
+            <div className="flex items-center gap-1.5">
+              <TrustPathIcon step={step} />
+              <p className="text-[11px] font-semibold text-foreground">{step.label}</p>
+            </div>
+            <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+              {step.detail}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function TxnsPage() {
   const { user } = useAuth();
@@ -98,11 +346,11 @@ function TxnsPage() {
   // CSV export
   function exportCSV() {
     if (!stats?.daily_groups) return;
-    const rows: string[] = ["Date,Description,Category,Amount (paise),Source,Type"];
+    const rows: string[] = ["Date,Description,Category,Amount (paise),Source,Trust,Type"];
     for (const day of stats.daily_groups) {
       for (const t of day.transactions) {
         const desc = (t.mapped_merchant_name || t.raw_merchant_string || "").replace(/,/g, ";");
-        rows.push(`${day.date},"${desc}",${t.category || "other"},${t.amount},${t.source},${t.is_income ? "income" : "expense"}`);
+        rows.push(`${day.date},"${desc}",${t.category || "other"},${t.amount},${t.source},"${trustLabelForCSV(t)}",${t.is_income ? "income" : "expense"}`);
       }
     }
     const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8;" });
@@ -344,6 +592,8 @@ function DailyView({
   groups: any[]; month: number; year: number;
   selectedDay: number | null; onClearDay: () => void; onEdit: (t: any) => void;
 }) {
+  const [expandedTrustId, setExpandedTrustId] = useState<string | null>(null);
+
   if (groups.length === 0) {
     return (
       <p className="py-12 text-center text-xs text-zinc-500 font-semibold uppercase tracking-wider">
@@ -382,44 +632,58 @@ function DailyView({
 
           {/* Transactions */}
           <div className="divide-y divide-border/30">
-            {group.transactions.map((t: any) => {
-              const isCompanion = (t.source || "").startsWith("companion");
+            {group.transactions.map((t: any, index: number) => {
+              const trustId = String(t.id ?? `${group.date}-${index}`);
+              const trustOpen = expandedTrustId === trustId;
+              const trustBadges = transactionTrustBadges(t);
               return (
-                <div key={t.id} className="flex items-center gap-3 px-4 py-3 hover:bg-surface-raised/40 transition-colors">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${getCatBadgeStyles(t.category)}`}>
-                        {t.category || "other"}
-                      </span>
-                    </div>
-                    <p className="text-xs font-bold text-foreground truncate">
-                      {t.mapped_merchant_name ?? t.raw_merchant_string}
-                    </p>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className="text-[10px] md:text-xs text-muted-foreground">
-                        {isCompanion ? "Companion" : "Manual"}
-                      </span>
-                      {t.needs_verification && (
-                        <>
-                          <span className="text-[10px] md:text-xs text-zinc-600 font-bold">•</span>
-                          <span className="text-[9px] md:text-xs font-black text-warning bg-warning/10 border border-warning/20 px-1.5 py-0.5 rounded uppercase tracking-wider">
-                            Verify Parser
+                <div key={trustId} className="px-4 py-3 hover:bg-surface-raised/40 transition-colors">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                        <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${getCatBadgeStyles(t.category)}`}>
+                          {t.category || "other"}
+                        </span>
+                        {trustBadges.map((badge) => (
+                          <span
+                            key={`${trustId}-${badge.label}`}
+                            title={badge.title}
+                            className={`text-[9px] font-bold uppercase tracking-[0.08em] px-2 py-0.5 rounded-full border ${trustBadgeClass(badge.tone)}`}
+                          >
+                            {badge.label}
                           </span>
-                        </>
-                      )}
+                        ))}
+                      </div>
+                      <p className="text-xs font-bold text-foreground truncate">
+                        {t.mapped_merchant_name ?? t.raw_merchant_string}
+                      </p>
+                      <p className="mt-0.5 truncate text-[10px] md:text-xs text-muted-foreground">
+                        {transactionTrustDetail(t)}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedTrustId(trustOpen ? null : trustId)}
+                        aria-expanded={trustOpen}
+                        className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-primary hover:text-primary/80"
+                      >
+                        {trustOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                        Trust path
+                      </button>
+                    </div>
+                    <div className="text-right shrink-0 flex items-center gap-2">
+                      <span className={`text-xs font-black tnum ${t.is_income ? "text-[#5DADE2]" : "text-[#FF6B4A]"}`}>
+                        {t.is_income ? "+" : ""}{rupees(t.amount)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => onEdit(t)}
+                        className="rounded-full p-1.5 text-muted-foreground hover:text-foreground hover:bg-surface-raised transition-all cursor-pointer"
+                      >
+                        <Edit3 className="h-3 w-3" />
+                      </button>
                     </div>
                   </div>
-                  <div className="text-right shrink-0 flex items-center gap-2">
-                    <span className={`text-xs font-black tnum ${t.is_income ? "text-[#5DADE2]" : "text-[#FF6B4A]"}`}>
-                      {t.is_income ? "+" : ""}{rupees(t.amount)}
-                    </span>
-                    <button
-                      onClick={() => onEdit(t)}
-                      className="rounded-full p-1.5 text-muted-foreground hover:text-foreground hover:bg-surface-raised transition-all cursor-pointer"
-                    >
-                      <Edit3 className="h-3 w-3" />
-                    </button>
-                  </div>
+                  {trustOpen && <TransactionTrustPath txn={t} />}
                 </div>
               );
             })}
@@ -558,10 +822,10 @@ function MonthlyView({
                 <div className="flex flex-col items-end border-l border-border/40 pl-3">
                   <span className="text-[8px] font-bold uppercase tracking-wider text-muted-foreground">Balance</span>
                   <p className={`text-xs tnum font-black ${
-                    m.net > 0 
-                      ? "text-[#16A34A]" 
-                      : m.net < 0 
-                        ? "text-[#FF6B4A]" 
+                    m.net > 0
+                      ? "text-[#16A34A]"
+                      : m.net < 0
+                        ? "text-[#FF6B4A]"
                         : "text-muted-foreground"
                   }`}>
                     {hasData ? (m.net > 0 ? "+" : "") + rupees(m.net) : "₹0"}
@@ -588,10 +852,10 @@ function MonthlyView({
                       <div className="flex flex-col items-end border-l border-border/30 pl-2.5">
                         <span className="text-[7px] font-bold uppercase tracking-wider text-muted-foreground">Balance</span>
                         <span className={`text-[10px] tnum font-bold ${
-                          w.net > 0 
-                            ? "text-[#16A34A]" 
-                            : w.net < 0 
-                              ? "text-[#FF6B4A]" 
+                          w.net > 0
+                            ? "text-[#16A34A]"
+                            : w.net < 0
+                              ? "text-[#FF6B4A]"
                               : "text-muted-foreground"
                         }`}>
                           {(w.net > 0 ? "+" : "") + rupees(w.net)}
@@ -745,7 +1009,7 @@ function EditTxnForm({ txn, categories, onClose }: { txn: any; categories: { v: 
       <DialogHeader>
         <DialogTitle>Edit Transaction</DialogTitle>
       </DialogHeader>
-      
+
       <div className="space-y-4 py-4">
         <div className="space-y-1">
           <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Original Reference</label>

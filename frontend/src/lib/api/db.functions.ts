@@ -182,6 +182,55 @@ export async function getCompanionSyncLogs() {
   return apiRequest("/api/companion/logs");
 }
 
+export async function getDataConsents() {
+  return apiRequest("/api/companion/consents");
+}
+
+export async function createCompanionPairingToken() {
+  return apiRequest("/api/companion/pairing-token", { method: "POST" });
+}
+
+export async function getAccountAggregatorStatus() {
+  return apiRequest("/api/account-aggregator/status");
+}
+
+export async function getAccountAggregatorInstitutions(q = "") {
+  const qs = q.trim() ? `?q=${encodeURIComponent(q.trim())}` : "";
+  return apiRequest(`/api/account-aggregator/institutions${qs}`);
+}
+
+export async function discoverAccountAggregatorSandboxAccounts({
+  bankCode,
+  bankName,
+}: {
+  bankCode: string;
+  bankName?: string;
+}) {
+  const params = new URLSearchParams({ bank_code: bankCode });
+  if (bankName) params.set("bank_name", bankName);
+  return apiRequest(`/api/account-aggregator/sandbox/accounts?${params.toString()}`);
+}
+
+export async function startAccountAggregatorSandboxConsent({ data }: { data?: any } = {}) {
+  return apiRequest("/api/account-aggregator/sandbox/consents", {
+    method: "POST",
+    body: JSON.stringify(data ?? {}),
+  });
+}
+
+export async function simulateAccountAggregatorSandbox({
+  consentId,
+  data,
+}: {
+  consentId: string;
+  data: { action: "approve" | "reject" | "revoke" | "expire" | "fetch_success" | "fetch_failed"; reason?: string };
+}) {
+  return apiRequest(`/api/account-aggregator/sandbox/consents/${encodeURIComponent(consentId)}/simulate`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
 export async function getDashboardInsights() {
   return apiRequest("/api/insights");
 }
@@ -353,5 +402,3 @@ export async function deleteAccountData() {
 export async function confirmTransaction({ id }: { id: string }) {
   return apiRequest(`/api/transactions/${id}/confirm`, { method: "POST" });
 }
-
-

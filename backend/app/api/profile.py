@@ -1,9 +1,11 @@
 import re
+import datetime
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from typing import Literal, Optional
 from app.core.database import get_db
+from app.core.privacy import connector_token_hash, connector_token_preview
 from app.core.security import get_current_user, map_doc
 
 router = APIRouter()
@@ -51,6 +53,7 @@ async def get_profile(user_id: str = Depends(get_current_user)):
 async def update_profile(req: ProfileUpdateReq, user_id: str = Depends(get_current_user)):
     db = get_db()
     updates = req.model_dump(exclude_unset=True)
+    now = datetime.datetime.utcnow()
     
     if "phone" in updates:
         phone_val = updates.pop("phone")
@@ -64,7 +67,76 @@ async def update_profile(req: ProfileUpdateReq, user_id: str = Depends(get_curre
             profile["phone"] = user.get("phone_number", "")
         return map_doc(profile)
 
-    await db.profiles.update_one({"_id": user_id}, {"$set": updates})
+    pairing_code_supplied = "pairing_code" in updates
+    unset_updates = {}
+
+    if pairing_code_supplied:
+        supplied_pairing_code = updates.pop("pairing_code")
+        updates["pairing_code_updated_at"] = now
+        if supplied_pairing_code:
+            updates["pairing_code_hash"] = connector_token_hash(supplied_pairing_code)
+            updates["pairing_code_preview"] = connector_token_preview(supplied_pairing_code)
+            updates["pairing_token_version"] = 2
+            unset_updates["pairing_code"] = ""
+        else:
+            unset_updates["pairing_code"] = ""
+            unset_updates["pairing_code_hash"] = ""
+            unset_updates["pairing_code_preview"] = ""
+            unset_updates["pairing_token_version"] = ""
+
+    if updates.get("companion_paired") is False:
+        updates.setdefault("companion_device_name", None)
+        updates.setdefault("companion_last_sync", None)
+        updates.setdefault("companion_device_id", None)
+        updates.setdefault("companion_device_fingerprint", None)
+        if not pairing_code_supplied:
+            updates["pairing_code_updated_at"] = now
+            unset_updates["pairing_code"] = ""
+            unset_updates["pairing_code_hash"] = ""
+            unset_updates["pairing_code_preview"] = ""
+            unset_updates["pairing_token_version"] = ""
+
+    mongo_update = {}
+    if updates:
+        mongo_update["$set"] = updates
+    if unset_updates:
+        mongo_update["$unset"] = unset_updates
+    if mongo_update:
+        await db.profiles.update_one({"_id": user_id}, mongo_update)
+
+    if "companion_sync_enabled" in updates:
+        await db.data_consents.update_many(
+            {
+                "user_id": user_id,
+                "source": "android_connector",
+                "status": {"$ne": "revoked"},
+            },
+            {
+                "$set": {
+                    "status": "active" if updates["companion_sync_enabled"] else "paused",
+                    "last_user_control_at": now,
+                    "updated_at": now,
+                }
+            },
+        )
+
+    if updates.get("companion_paired") is False and not pairing_code_supplied:
+        await db.data_consents.update_many(
+            {
+                "user_id": user_id,
+                "source": "android_connector",
+                "status": {"$ne": "revoked"},
+            },
+            {
+                "$set": {
+                    "status": "revoked",
+                    "revoked_at": now,
+                    "last_user_control_at": now,
+                    "updated_at": now,
+                }
+            },
+        )
+
     profile = await db.profiles.find_one({"_id": user_id})
     user = await db.users.find_one({"_id": user_id})
     if user and profile:
@@ -82,6 +154,9 @@ async def delete_account(user_id: str = Depends(get_current_user)):
     await db.transactions.delete_many({"user_id": user_id})
     await db.subscriptions.delete_many({"user_id": user_id})
     await db.companion_sync_log.delete_many({"user_id": user_id})
+    await db.data_consents.delete_many({"user_id": user_id})
+    await db.aa_sync_events.delete_many({"user_id": user_id})
+    await db.aa_financial_snapshots.delete_many({"user_id": user_id})
     await db.parser_corrections.delete_many({"user_id": user_id})
     await db.checkin_logs.delete_many({"user_id": user_id})
     await db.travel_savings.delete_many({"user_id": user_id})
