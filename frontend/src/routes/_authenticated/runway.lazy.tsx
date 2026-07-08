@@ -1402,28 +1402,28 @@ Generated via PocketBuddy Runway.`;
                 </Badge>
               </div>
 
-              <div className="space-y-4">
-                {/* Inputs row */}
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Amount (₹)</label>
-                    <div className="flex h-11 items-center rounded-xl border border-border bg-background px-3 transition focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/30">
-                      <span className="text-sm font-semibold text-muted-foreground">₹</span>
+               <div className="space-y-4">
+                {/* Unified Inset Input Group */}
+                <div className="overflow-hidden rounded-xl border border-border bg-background focus-within:ring-1 focus-within:ring-primary/20 focus-within:border-primary/45 grid grid-cols-2 divide-x divide-border/60">
+                  <div className="p-3 space-y-1">
+                    <label className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Amount</label>
+                    <div className="flex items-center">
+                      <span className="text-xs font-bold text-muted-foreground mr-1">₹</span>
                       <input
                         value={affordAmountRs}
                         onChange={(event) => setAffordAmountRs(event.target.value.replace(/[^\d.]/g, ""))}
                         inputMode="decimal"
-                        placeholder="e.g. 150"
-                        className="ml-2 min-w-0 flex-1 bg-transparent text-sm font-semibold text-foreground outline-none placeholder:text-muted-foreground/40"
+                        placeholder="0.00"
+                        className="w-full bg-transparent text-sm font-black text-foreground outline-none placeholder:text-muted-foreground/35 tnum"
                       />
                     </div>
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Category</label>
+                  <div className="p-3 space-y-1">
+                    <label className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Category</label>
                     <select
                       value={affordCategory}
                       onChange={(event) => setAffordCategory(event.target.value as typeof affordCategory)}
-                      className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm font-semibold text-foreground outline-none transition hover:bg-surface focus:border-primary/50 focus:ring-1 focus:ring-primary/30"
+                      className="w-full bg-transparent text-sm font-bold text-foreground outline-none cursor-pointer"
                     >
                       <option value="food">Food &amp; Drinks</option>
                       <option value="travel">Travel &amp; Auto</option>
@@ -1434,8 +1434,8 @@ Generated via PocketBuddy Runway.`;
                 </div>
 
                 {/* Student Quick Presets */}
-                <div className="space-y-1.5">
-                  <span className="block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Quick Presets</span>
+                <div className="space-y-2">
+                  <span className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Quick Presets</span>
                   <div className="flex flex-wrap gap-1.5">
                     {AFFORD_PRESETS.map((preset) => {
                       const PresetIcon = preset.icon;
@@ -1448,13 +1448,13 @@ Generated via PocketBuddy Runway.`;
                             setAffordAmountRs(preset.amount);
                             setAffordCategory(preset.category);
                           }}
-                          className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all ${
+                          className={`flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-bold transition-all active:scale-95 cursor-pointer ${
                             isActive
-                              ? "border-primary bg-primary/10 text-primary font-semibold shadow-sm"
-                              : "border-border bg-background text-muted-foreground hover:bg-surface hover:text-foreground"
+                              ? "border-primary bg-primary/10 text-primary shadow-sm"
+                              : "border-border/60 bg-background text-muted-foreground hover:bg-surface hover:text-foreground"
                           }`}
                         >
-                          <PresetIcon className="h-3 w-3" />
+                          <PresetIcon className="h-3.5 w-3.5" />
                           <span>{preset.label}</span>
                         </button>
                       );
@@ -1465,91 +1465,89 @@ Generated via PocketBuddy Runway.`;
                 {/* Result panel */}
                 <div className={`rounded-xl p-4 transition-all duration-300 border-l-4 ${
                   affordAmountPaise <= 0
-                    ? "border-border bg-surface-raised/40"
+                    ? "border-border bg-surface-raised/35"
                     : affordCheck.status === "safe"
                       ? "border-pb-green bg-pb-green/5"
                       : affordCheck.status === "tight"
                         ? "border-pb-amber bg-pb-amber/5"
                         : "border-pb-red bg-pb-red/5"
                 }`}>
-                  <div className="flex items-start gap-3">
-                    <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
-                      affordAmountPaise <= 0
-                        ? "bg-muted text-muted-foreground"
-                        : affordCheck.status === "safe"
-                          ? "bg-pb-green/15 text-pb-green"
-                          : affordCheck.status === "tight"
-                            ? "bg-pb-amber/15 text-pb-amber"
-                            : "bg-pb-red/15 text-pb-red"
-                    }`}>
-                      {affordAmountPaise <= 0 ? (
-                        <Calculator className="h-4 w-4" />
-                      ) : affordCheck.status === "safe" ? (
-                        <CheckCircle2 className="h-4 w-4" />
-                      ) : affordCheck.status === "tight" ? (
-                        <AlertTriangle className="h-4 w-4" />
-                      ) : (
-                        <AlertCircle className="h-4 w-4" />
-                      )}
+                  {affordAmountPaise <= 0 ? (
+                    <div className="text-center py-2 space-y-1">
+                      <Calculator className="h-6 w-6 text-muted-foreground/45 mx-auto mb-1.5" />
+                      <h4 className="text-xs font-bold text-foreground">Interactive Runway Calculator</h4>
+                      <p className="text-[10px] text-muted-foreground leading-relaxed max-w-sm mx-auto">
+                        Select a quick preset or type any custom amount above to instantly simulate the impact on your allowance cycle and remaining days.
+                      </p>
                     </div>
-
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <h4 className="text-sm font-bold leading-tight">
-                          {affordAmountPaise <= 0
-                            ? "Enter an amount to check"
-                            : affordCheck.status === "safe"
-                              ? "Safe to spend"
+                  ) : (
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center justify-between gap-2 border-b border-border/40 pb-2.5 mb-2.5">
+                        <div className="flex items-center gap-2">
+                          <div className={`flex h-6 w-6 items-center justify-center rounded-lg ${
+                            affordCheck.status === "safe"
+                              ? "bg-pb-green/15 text-pb-green"
                               : affordCheck.status === "tight"
-                                ? "Spending is tight"
-                                : "Reconsider this"}
-                        </h4>
-                        {affordAmountPaise > 0 && (
-                          <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${
-                            affordCheck.status === "safe" ? "border-pb-green/30 bg-pb-green/10 text-pb-green" :
-                            affordCheck.status === "tight" ? "border-pb-amber/30 bg-pb-amber/10 text-pb-amber" :
-                            "border-pb-red/30 bg-pb-red/10 text-pb-red"
+                                ? "bg-pb-amber/15 text-pb-amber"
+                                : "bg-pb-red/15 text-pb-red"
                           }`}>
-                            {affordCheck.status}
-                          </span>
-                        )}
+                            {affordCheck.status === "safe" ? (
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                            ) : affordCheck.status === "tight" ? (
+                              <AlertTriangle className="h-3.5 w-3.5" />
+                            ) : (
+                              <AlertCircle className="h-3.5 w-3.5" />
+                            )}
+                          </div>
+                          <h4 className="text-xs font-black uppercase tracking-wider text-foreground">
+                            {affordCheck.status === "safe"
+                              ? "Safe purchase"
+                              : affordCheck.status === "tight"
+                                ? "Tight spend range"
+                                : "Reconsider purchase"}
+                          </h4>
+                        </div>
+                        <Badge variant="outline" className={`text-[9px] uppercase font-black px-2 py-0.5 rounded-full ${
+                          affordCheck.status === "safe" ? "border-pb-green/30 bg-pb-green/10 text-pb-green" :
+                          affordCheck.status === "tight" ? "border-pb-amber/30 bg-pb-amber/10 text-pb-amber" :
+                          "border-pb-red/30 bg-pb-red/10 text-pb-red"
+                        }`}>
+                          {affordCheck.status}
+                        </Badge>
                       </div>
-                      <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{affordCheck.detail}</p>
 
-                      {affordAmountPaise > 0 && (
-                        <>
-                          {/* Student comparisons */}
-                          <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/40 pt-3 text-[11px]">
-                            <div>
-                              <span className="block text-muted-foreground">= Chai equivalent</span>
-                              <span className="font-semibold text-foreground">{chaiEquivalent} cups</span>
-                            </div>
-                            <div>
-                              <span className="block text-muted-foreground">= Canteen meals</span>
-                              <span className="font-semibold text-foreground">{mealEquivalent} meals</span>
-                            </div>
-                          </div>
+                      <p className="text-xs leading-relaxed text-muted-foreground">{affordCheck.detail}</p>
 
-                          {/* Runway impact bar */}
-                          <div className="mt-3 space-y-1">
-                            <div className="flex justify-between text-[10px] font-semibold text-muted-foreground">
-                              <span>Runway impact: -{affordCheck.runwayDaysLost.toFixed(1)} days</span>
-                              <span>Remaining: {Math.max(0, 100 - calculatorRunwayPct).toFixed(0)}%</span>
-                            </div>
-                            <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-surface-raised">
-                              <div
-                                className={`h-full transition-all duration-500 ${
-                                  affordCheck.status === "safe" ? "bg-pb-green" :
-                                  affordCheck.status === "tight" ? "bg-pb-amber" : "bg-pb-red"
-                                }`}
-                                style={{ width: `${Math.max(4, 100 - calculatorRunwayPct)}%` }}
-                              />
-                            </div>
-                          </div>
-                        </>
-                      )}
+                      {/* Student analogies */}
+                      <div className="mt-3.5 grid grid-cols-2 gap-3 border-t border-border/40 pt-3 text-[11px]">
+                        <div className="space-y-0.5">
+                          <span className="block text-[9px] uppercase font-bold text-muted-foreground tracking-wider font-semibold">Chai Equivalent</span>
+                          <span className="text-xs font-black text-foreground tnum">{chaiEquivalent} cups</span>
+                        </div>
+                        <div className="space-y-0.5">
+                          <span className="block text-[9px] uppercase font-bold text-muted-foreground tracking-wider font-semibold">Canteen Meals</span>
+                          <span className="text-xs font-black text-foreground tnum">{mealEquivalent} meals</span>
+                        </div>
+                      </div>
+
+                      {/* Runway impact progress bar */}
+                      <div className="mt-4 space-y-1.5">
+                        <div className="flex justify-between text-[9px] font-bold text-muted-foreground uppercase tracking-wider">
+                          <span>Runway impact: &minus;{affordCheck.runwayDaysLost.toFixed(1)} days</span>
+                          <span>Remaining: {Math.max(0, 100 - calculatorRunwayPct).toFixed(0)}%</span>
+                        </div>
+                        <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-surface-raised">
+                          <div
+                            className={`h-full transition-all duration-500 ${
+                              affordCheck.status === "safe" ? "bg-pb-green" :
+                              affordCheck.status === "tight" ? "bg-pb-amber" : "bg-pb-red"
+                            }`}
+                            style={{ width: `${Math.max(4, 100 - calculatorRunwayPct)}%` }}
+                          />
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
             </Card>
