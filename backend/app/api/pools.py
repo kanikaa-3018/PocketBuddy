@@ -382,6 +382,14 @@ def default_cart_status_reason(status: Optional[str]) -> Optional[str]:
     return None
 
 
+def item_edit_reason(is_host: bool, is_host_item: bool) -> Optional[str]:
+    if is_host and not is_host_item:
+        return "Host updated this request. Review the latest quantity, price, or link before checkout."
+    if not is_host:
+        return "Roommate updated this request. Host should review the latest details."
+    return None
+
+
 def parse_expires_at(value: str) -> datetime.datetime:
     try:
         parsed = datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -872,6 +880,7 @@ async def update_pool(pool_id: str, req: PoolUpdateReq, user_id: str = Depends(g
     pool = await db.cart_pools.find_one({"_id": pool_id})
     if not pool:
         raise HTTPException(status_code=404, detail="Pool not found")
+    pool = await expire_pool_if_needed(db, pool)
 
     # Security Guard: Only host can finalize checkout or cancel
     if pool.get("host_id") != user_id:
@@ -885,6 +894,8 @@ async def update_pool(pool_id: str, req: PoolUpdateReq, user_id: str = Depends(g
         updates["status"] = updates["status"].strip().lower()
         if updates["status"] not in ALLOWED_POOL_STATUSES:
             raise HTTPException(status_code=400, detail="Invalid pool status")
+        if updates["status"] in {"completed", "cancelled"} and pool.get("status") != "open":
+            raise HTTPException(status_code=400, detail="Only open pools can be finalized or cancelled")
     if "upi_id" in updates:
         updates["upi_id"] = validate_upi_id(updates["upi_id"])
     if "final_overhead" in updates:
@@ -897,6 +908,16 @@ async def update_pool(pool_id: str, req: PoolUpdateReq, user_id: str = Depends(g
         )
     if "created_by_name" in updates:
         updates["created_by_name"] = clean_text(updates["created_by_name"], "Host name")
+    if "checkout_notes" in updates:
+        updates["checkout_notes"] = clean_optional_text(updates["checkout_notes"], "Checkout notes", max_chars=MAX_DESCRIPTION_CHARS)
+    if "cancellation_reason" in updates:
+        updates["cancellation_reason"] = clean_text(
+            updates["cancellation_reason"], "Cancellation reason", max_chars=MAX_DESCRIPTION_CHARS
+        )
+    if updates.get("status") == "cancelled" and not updates.get("cancellation_reason"):
+        raise HTTPException(status_code=400, detail="Cancellation reason is required")
+    if updates.get("status") == "completed" and not (updates.get("upi_id") or pool.get("upi_id")):
+        raise HTTPException(status_code=400, detail="Host UPI address is required for manual split collection")
 
     # Check if transitioning to 'completed' to auto-log host split transaction
     if updates.get("status") == "completed" and pool.get("status") != "completed":
@@ -1283,8 +1304,11 @@ async def update_pool_item(pool_id: str, item_id: str, req: PoolItemUpdateReq, u
     user_name = user_doc.get("full_name") if user_doc else ""
     is_host = pool.get("host_id") == user_id
     is_owner = item.get("added_by_user_id") == user_id or name_key(user_name) == name_key(item.get("added_by_name"))
+    host_aliases = {name_key(pool.get("created_by_name")), name_key(user_name), "host", "you"}
+    is_host_item = is_host and name_key(item.get("added_by_name")) in host_aliases
 
     # Build updates dict, handling booleans (False is a valid value, not None)
+    requested_keys = set(req.model_dump(exclude_unset=True).keys())
     updates = {}
     nullable_update_fields = {"product_url", "substitute_note", "cart_status_reason"}
     for k, v in req.model_dump(exclude_unset=True).items():
@@ -1293,6 +1317,7 @@ async def update_pool_item(pool_id: str, item_id: str, req: PoolItemUpdateReq, u
 
     host_only_fields = {"is_purchased", "cart_status", "cart_status_reason", "substitute_note"}
     owner_edit_fields = {"estimated_price", "quantity", "unit_price", "item_description", "product_url"}
+    material_item_fields = owner_edit_fields.intersection(requested_keys)
     if host_only_fields.intersection(updates.keys()) and not is_host:
         raise HTTPException(status_code=403, detail="Only the pool host can update cart status")
     if owner_edit_fields.intersection(updates.keys()) and not (is_host or is_owner):
@@ -1329,6 +1354,17 @@ async def update_pool_item(pool_id: str, item_id: str, req: PoolItemUpdateReq, u
         updates["cart_status_reason"] = clean_optional_text(
             updates["cart_status_reason"], "Cart status reason", max_chars=MAX_DESCRIPTION_CHARS
         )
+
+    if material_item_fields and "cart_status" not in requested_keys and "is_purchased" not in requested_keys:
+        updates["is_purchased"] = True
+        updates["cart_status"] = "pending"
+        updates["cart_status_reason"] = None
+
+    if material_item_fields:
+        now = utcnow()
+        updates["item_updated_at"] = now
+        updates["item_updated_by"] = "host" if is_host else "roommate"
+        updates["item_update_reason"] = item_edit_reason(is_host, is_host_item)
 
     if "is_purchased" in updates and "cart_status" not in updates:
         updates["cart_status"] = "pending" if updates["is_purchased"] else "skipped"
@@ -1563,11 +1599,16 @@ async def create_amazon_checkout_session(
     pool = await db.cart_pools.find_one({"_id": pool_id})
     if not pool:
         raise HTTPException(status_code=404, detail="Pool not found")
+    pool = await expire_pool_if_needed(db, pool)
         
     if pool.get("host_id") != user_id:
         raise HTTPException(status_code=403, detail="Only the pool host can initiate Amazon Pay checkout")
     if pool.get("status") != "open":
         raise HTTPException(status_code=400, detail="Amazon Pay sandbox checkout can only start while the pool is open")
+    final_overhead = validate_paise_amount(req.final_overhead, "Final overhead", MAX_FEE_PAISE, allow_zero=True)
+    final_discount = validate_paise_amount(req.final_discount, "Final discount", MAX_FEE_PAISE, allow_zero=True)
+    checkout_notes = clean_optional_text(req.checkout_notes, "Checkout notes", max_chars=MAX_DESCRIPTION_CHARS)
+    upi_id = validate_upi_id(req.upi_id)
         
     # Generate a local sandbox session ID in the same visual family as Amazon Pay.
     checkout_session_id = f"S01-{uuid.uuid4().hex[:14].upper()}"
@@ -1576,7 +1617,7 @@ async def create_amazon_checkout_session(
     items_cursor = db.cart_pool_items.find({"pool_id": pool_id})
     items = await items_cursor.to_list(length=1000)
     items_total = sum(it.get("estimated_price", 0) for it in items if it.get("is_purchased", True))
-    net_total = max(0, items_total + req.final_overhead - req.final_discount)
+    net_total = max(0, items_total + final_overhead - final_discount)
     
     # Store a local sandbox session shaped like the Amazon Pay V2 contract.
     amazon_checkout = {
@@ -1592,10 +1633,10 @@ async def create_amazon_checkout_session(
                 "currencyCode": "INR"
             }
         },
-        "final_overhead": req.final_overhead,
-        "final_discount": req.final_discount,
-        "checkout_notes": req.checkout_notes,
-        "upi_id": req.upi_id,
+        "final_overhead": final_overhead,
+        "final_discount": final_discount,
+        "checkout_notes": checkout_notes,
+        "upi_id": upi_id,
         "created_at": utcnow()
     }
     
@@ -1620,6 +1661,7 @@ async def complete_amazon_checkout_session(
     pool = await db.cart_pools.find_one({"_id": pool_id})
     if not pool:
         raise HTTPException(status_code=404, detail="Pool not found")
+    pool = await expire_pool_if_needed(db, pool)
     if pool.get("host_id") != user_id:
         raise HTTPException(status_code=403, detail="Only the pool host can complete Amazon Pay checkout")
     if pool.get("status") != "open":

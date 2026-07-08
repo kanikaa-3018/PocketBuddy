@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { ChevronLeft, Share2, Trash2, Check, X, AlertCircle, Sparkles, ExternalLink, User, ShoppingBag, Clock, Shield, Link as LinkIcon, Bell, Eye, EyeOff, Smartphone, Plus, Minus, Pencil, CheckCircle2 } from "lucide-react";
+import { ChevronLeft, Share2, Trash2, Check, X, AlertCircle, Sparkles, ExternalLink, User, ShoppingBag, Clock, Shield, Link as LinkIcon, Bell, Eye, EyeOff, Smartphone, Plus, Minus, Pencil, CheckCircle2, ClipboardList } from "lucide-react";
 import { toast } from "sonner";
 import { rupees, relativeTime } from "@/lib/format";
 import { useAuth } from "@/lib/auth-context";
@@ -179,7 +179,23 @@ function cartStatusReason(status?: string) {
 }
 
 function needsRoommateAttention(it: any) {
-  return ["substituted", "unavailable", "skipped"].includes(it?.cart_status || "") || it?.is_purchased === false;
+  return Boolean(it?.item_update_reason) || ["substituted", "unavailable", "skipped"].includes(it?.cart_status || "") || it?.is_purchased === false;
+}
+
+function itemNoticeLabel(it: any) {
+  if (it?.item_update_reason && (!it?.cart_status || it.cart_status === "pending")) return "Updated";
+  return cartStatusLabel(it?.cart_status || "skipped");
+}
+
+function itemNoticeReason(it: any) {
+  if (it?.item_update_reason) return it.item_update_reason;
+  if (it?.cart_status_reason) return it.cart_status_reason;
+  if (it?.is_purchased === false) return "This item is no longer part of the split.";
+  return cartStatusReason(it?.cart_status);
+}
+
+function itemActivityTime(it: any) {
+  return new Date(it?.item_updated_at || it?.cart_status_updated_at || it?.created_at || 0).getTime();
 }
 
 
@@ -259,6 +275,7 @@ function PoolDetail() {
   const [busy, setBusy] = useState(false);
   const [addItemOpen, setAddItemOpen] = useState(false);
   const [expandedRoommates, setExpandedRoommates] = useState<Record<string, boolean>>({});
+  const [cartBuilderExpanded, setCartBuilderExpanded] = useState(false);
   const [editItemOpen, setEditItemOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any | null>(null);
   const [editItemName, setEditItemName] = useState("");
@@ -517,6 +534,9 @@ function PoolDetail() {
   const resolvedCartGroups = cartRunnerGroups.filter((group: any) =>
     group.items.every((it: any) => ["added", "substituted", "unavailable", "skipped"].includes(it.cart_status || "")),
   ).length;
+  const pendingRoommateRequests = roommateRequestItems.filter((i: any) => i.is_purchased !== false && (!i.cart_status || i.cart_status === "pending"));
+  const visibleCartRunnerGroups = cartBuilderExpanded ? cartRunnerGroups : cartRunnerGroups.slice(0, 8);
+  const hiddenCartRunnerGroups = cartRunnerGroups.length - visibleCartRunnerGroups.length;
   const purchasedItems = allItems.filter((i: any) => i.is_purchased !== false);
   const cartTotal = purchasedItems.reduce((s: number, i: any) => s + i.estimated_price, 0);
   const cartPct = Math.min(100, Math.round((cartTotal / pool.min_cart_value) * 100));
@@ -822,6 +842,38 @@ function PoolDetail() {
     }
   }
 
+  async function copyCartPlan() {
+    const linkedLines = cartRunnerGroups.map((group: any) =>
+      `- ${group.title} x${group.totalQty} (${group.url})`,
+    );
+    const missingLines = missingLinkItems.map((it: any) =>
+      `- ${it.item_description} x${itemQuantity(it)} (${it.added_by_name}, no link)`,
+    );
+    const text = [
+      `${theme.name} Pool Cart Plan`,
+      linkedLines.length ? "Linked requests:" : "",
+      ...linkedLines,
+      missingLines.length ? "Manual search:" : "",
+      ...missingLines,
+    ].filter(Boolean).join("\n");
+
+    let copied = false;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        copied = true;
+      } catch (err) {}
+    }
+    if (!copied) {
+      copied = await fallbackCopyText(text);
+    }
+    if (copied) {
+      toast.success("Cart plan copied.");
+    } else {
+      toast.error("Failed to copy cart plan.");
+    }
+  }
+
   async function fallbackCopyText(text: string): Promise<boolean> {
     const textArea = document.createElement("textarea");
     textArea.value = text;
@@ -875,10 +927,28 @@ function PoolDetail() {
   }
 
   async function completeCheckout() {
+    if (!hostUpi.trim()) {
+      toast.error("Enter your UPI address before manual split checkout.");
+      return;
+    }
+
+    const deliveryAmount = parseFloat(finalDeliveryFee || "0");
+    const surgeAmount = parseFloat(finalSurgeFee || "0");
+    const discountAmount = parseFloat(finalDiscount || "0");
+    if (![deliveryAmount, surgeAmount, discountAmount].every((value) => Number.isFinite(value) && value >= 0)) {
+      toast.error("Final fees and discounts must be valid non-negative amounts.");
+      return;
+    }
+
+    if (pendingRoommateRequests.length > 0) {
+      const proceed = confirm(`${pendingRoommateRequests.length} roommate request${pendingRoommateRequests.length === 1 ? "" : "s"} still need host review. Finalize anyway?`);
+      if (!proceed) return;
+    }
+
     setBusy(true);
     try {
-      const overheadValue = Math.round((parseFloat(finalDeliveryFee || "0") + parseFloat(finalSurgeFee || "0")) * 100);
-      const discountValue = Math.round(parseFloat(finalDiscount || "0") * 100);
+      const overheadValue = Math.round((deliveryAmount + surgeAmount) * 100);
+      const discountValue = Math.round(discountAmount * 100);
 
       await updateCartPool({
         id,
@@ -903,10 +973,23 @@ function PoolDetail() {
   }
 
   async function initiateAmazonCheckout() {
+    const deliveryAmount = parseFloat(finalDeliveryFee || "0");
+    const surgeAmount = parseFloat(finalSurgeFee || "0");
+    const discountAmount = parseFloat(finalDiscount || "0");
+    if (![deliveryAmount, surgeAmount, discountAmount].every((value) => Number.isFinite(value) && value >= 0)) {
+      toast.error("Final fees and discounts must be valid non-negative amounts.");
+      return;
+    }
+
+    if (pendingRoommateRequests.length > 0) {
+      const proceed = confirm(`${pendingRoommateRequests.length} roommate request${pendingRoommateRequests.length === 1 ? "" : "s"} still need host review. Continue to sandbox checkout?`);
+      if (!proceed) return;
+    }
+
     setBusy(true);
     try {
-      const overheadValue = Math.round((parseFloat(finalDeliveryFee || "0") + parseFloat(finalSurgeFee || "0")) * 100);
-      const discountValue = Math.round(parseFloat(finalDiscount || "0") * 100);
+      const overheadValue = Math.round((deliveryAmount + surgeAmount) * 100);
+      const discountValue = Math.round(discountAmount * 100);
       
       const res = await createAmazonCheckoutSession({
         pool_id: id,
@@ -1352,6 +1435,20 @@ function PoolDetail() {
           </div>
         )}
 
+        {pool.status === "closed" && (
+          <div className="flex flex-col gap-3 rounded-xl border border-border bg-muted/20 p-4 text-xs">
+            <div className="flex gap-2.5 items-start">
+              <AlertCircle className="h-4.5 w-4.5 shrink-0 mt-0.5 text-muted-foreground" />
+              <div>
+                <p className="font-bold uppercase tracking-wider text-foreground">Pool Closed</p>
+                <p className="text-muted-foreground leading-relaxed mt-1">
+                  The join window has expired. Items remain visible for reference, but checkout and payment collection are not active.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Progress bar to target minimum */}
         {pool.status === "open" && (
           <Card className="p-5 bg-surface border border-border">
@@ -1419,24 +1516,36 @@ function PoolDetail() {
                           Product links are merged so the host adds each item once and tracks progress here.
                         </p>
                       </div>
-                      <div className="grid grid-cols-3 gap-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-muted-foreground sm:min-w-[210px]">
-                        <Badge variant="outline" className="h-7 justify-center border-border bg-muted/20 text-[10px] font-bold text-foreground">
-                          {cartRunnerGroups.length} links
-                        </Badge>
-                        <Badge variant="outline" className="h-7 justify-center border-border bg-muted/20 text-[10px] font-bold text-foreground">
-                          {resolvedCartGroups} done
-                        </Badge>
-                        {missingLinkItems.length > 0 && (
+                      <div className="flex flex-col gap-2 sm:items-end">
+                        <div className="grid grid-cols-3 gap-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-muted-foreground sm:min-w-[210px]">
                           <Badge variant="outline" className="h-7 justify-center border-border bg-muted/20 text-[10px] font-bold text-foreground">
-                            {missingLinkItems.length} missing
+                            {cartRunnerGroups.length} links
                           </Badge>
-                        )}
+                          <Badge variant="outline" className="h-7 justify-center border-border bg-muted/20 text-[10px] font-bold text-foreground">
+                            {resolvedCartGroups} done
+                          </Badge>
+                          {missingLinkItems.length > 0 && (
+                            <Badge variant="outline" className="h-7 justify-center border-border bg-muted/20 text-[10px] font-bold text-foreground">
+                              {missingLinkItems.length} missing
+                            </Badge>
+                          )}
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={copyCartPlan}
+                          className="h-8 w-full gap-1.5 text-[10px] font-bold uppercase tracking-wider sm:w-auto"
+                        >
+                          <ClipboardList className="h-3.5 w-3.5" />
+                          Copy Plan
+                        </Button>
                       </div>
                     </div>
 
                     {cartRunnerGroups.length > 0 && (
                       <div className="overflow-hidden rounded-lg border border-border bg-background/40">
-                        {cartRunnerGroups.map((group: any) => {
+                        {visibleCartRunnerGroups.map((group: any) => {
                           const statuses = Array.from(new Set(group.items.map((it: any) => it.cart_status || "pending")));
                           const status = statuses.length === 1 ? String(statuses[0]) : "mixed";
                           const roommateBreakdown = group.items
@@ -1514,6 +1623,27 @@ function PoolDetail() {
                             </div>
                           );
                         })}
+                        {cartRunnerGroups.length > 8 && (
+                          <div className="border-t border-border/60 bg-muted/10 px-3 py-2.5">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setCartBuilderExpanded((value) => !value)}
+                              className="h-8 w-full justify-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground"
+                            >
+                              {cartBuilderExpanded ? <Minus className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
+                              {cartBuilderExpanded ? "Show fewer links" : `Show ${hiddenCartRunnerGroups} more links`}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {pendingRoommateRequests.length > 0 && (
+                      <div className="rounded-lg border border-border bg-muted/20 p-3 text-xs font-semibold leading-relaxed text-muted-foreground">
+                        <strong className="text-foreground">{pendingRoommateRequests.length} active request{pendingRoommateRequests.length === 1 ? "" : "s"} pending host review.</strong>{" "}
+                        Mark linked requests as added, substituted, unavailable, or skipped before checkout when possible.
                       </div>
                     )}
 
@@ -2053,7 +2183,7 @@ function PoolDetail() {
               const aNeedsAttention = needsRoommateAttention(a) ? 1 : 0;
               const bNeedsAttention = needsRoommateAttention(b) ? 1 : 0;
               if (aNeedsAttention !== bNeedsAttention) return bNeedsAttention - aNeedsAttention;
-              return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+              return itemActivityTime(b) - itemActivityTime(a);
             });
             const isExpanded = expandedRoommates[who] ?? false;
             const visibleItems = isExpanded ? orderedItems : orderedItems.slice(0, 8);
@@ -2099,13 +2229,10 @@ function PoolDetail() {
                           </div>
                           <div className="mt-2 space-y-1.5">
                             {shownUpdates.map((it: any) => {
-                              const status = it.cart_status || "skipped";
-                              const reason = it.cart_status_reason || (it.is_purchased === false ? "This item is no longer part of the split." : cartStatusReason(status));
-
                               return (
                                 <p key={it.id} className="text-xs font-semibold leading-relaxed text-muted-foreground">
                                   <span className="font-bold text-foreground">{it.item_description}</span>
-                                  <span className="text-zinc-500"> - {cartStatusLabel(status)}: {reason}</span>
+                                  <span className="text-zinc-500"> - {itemNoticeLabel(it)}: {itemNoticeReason(it)}</span>
                                 </p>
                               );
                             })}
@@ -2144,6 +2271,11 @@ function PoolDetail() {
                                 {cartStatusLabel(it.cart_status)}
                               </Badge>
                             )}
+                            {it.item_update_reason && (!it.cart_status || it.cart_status === "pending") && (
+                              <Badge variant="outline" className="h-5 border-border bg-muted/20 px-1.5 py-0 text-[10px] font-bold uppercase text-muted-foreground">
+                                Updated
+                              </Badge>
+                            )}
                           </div>
 
                           <p className="flex flex-wrap items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
@@ -2171,7 +2303,7 @@ function PoolDetail() {
                           {itemNeedsAttention && (
                             <p className="flex items-start gap-1.5 text-[10px] font-semibold leading-relaxed text-muted-foreground">
                               <Bell className="mt-0.5 h-3 w-3 shrink-0" />
-                              <span>{it.cart_status_reason || (it.is_purchased === false ? "This item is no longer part of the split." : cartStatusReason(it.cart_status))}</span>
+                              <span>{itemNoticeReason(it)}</span>
                             </p>
                           )}
                         </div>
@@ -2607,6 +2739,18 @@ function PoolDetail() {
           <p className="text-xs text-muted-foreground">
             Complete the checkout by entering final figures from the {theme.name} receipt.
           </p>
+
+          {pendingRoommateRequests.length > 0 && (
+            <div className="rounded-xl border border-border bg-muted/20 p-3 text-xs font-semibold leading-relaxed text-muted-foreground">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <p>
+                  <strong className="text-foreground">{pendingRoommateRequests.length} roommate request{pendingRoommateRequests.length === 1 ? "" : "s"} still pending review.</strong>{" "}
+                  You can still finalize, but marking unavailable or skipped items first keeps the split clearer.
+                </p>
+              </div>
+            </div>
+          )}
 
           <div className="space-y-4 py-2 text-sm">
             <div className="space-y-1.5">
