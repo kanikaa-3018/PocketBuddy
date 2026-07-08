@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { ChevronLeft, Share2, Trash2, Check, X, AlertCircle, Sparkles, ExternalLink, User, ShoppingBag, Clock, Shield, Link as LinkIcon, Bell } from "lucide-react";
+import { ChevronLeft, Share2, Trash2, Check, X, AlertCircle, Sparkles, ExternalLink, User, ShoppingBag, Clock, Shield, Link as LinkIcon, Bell, Eye, EyeOff, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 import { rupees, relativeTime } from "@/lib/format";
 import { useAuth } from "@/lib/auth-context";
@@ -47,9 +47,18 @@ type SplitBreakdownEntry = {
   email?: string;
   paid: boolean;
   paymentStatus: string;
+  paymentLabel?: string;
+  paymentTone?: string;
+  paymentDetail?: string;
+  isOverdue?: boolean;
+  overdueHours?: number;
   utr: string;
   settlementMode?: string | null;
   confidence?: string | null;
+  verificationSource?: string | null;
+  reviewReason?: string | null;
+  expectedAmount?: number;
+  matchedAmount?: number | null;
 };
 
 const BRAND_THEMES: Record<string, { bg: string; text: string; name: string; gradient: string; accent: string }> = {
@@ -115,6 +124,23 @@ function listActiveParticipants(itemsList: any[]) {
         .filter(Boolean),
     ),
   );
+}
+
+function statusToneClass(tone?: string, status?: string) {
+  const key = tone || status;
+  if (key === "success" || status === "verified") return "bg-green-600/10 border-green-600/25 text-green-500";
+  if (key === "danger" || status === "rejected") return "bg-destructive/10 border-destructive/25 text-destructive";
+  if (status === "needs_review") return "bg-orange-500/10 border-orange-500/25 text-orange-400";
+  return "bg-amber-500/10 border-amber-500/25 text-amber-400";
+}
+
+function paymentStatusLabel(status?: string) {
+  if (status === "verified") return "Verified";
+  if (status === "pending") return "UTR pending";
+  if (status === "needs_review") return "Needs review";
+  if (status === "rejected") return "Rejected";
+  if (status === "host") return "Host share";
+  return "Unpaid";
 }
 
 
@@ -237,6 +263,7 @@ function PoolDetail() {
   const [authName, setAuthName] = useState("");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
+  const [showAuthPassword, setShowAuthPassword] = useState(false);
   const [authPhone, setAuthPhone] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
 
@@ -447,6 +474,8 @@ function PoolDetail() {
 
       const payment = (pool.payments ?? []).find((pay: any) => pay.name.trim().toLowerCase() === p.trim().toLowerCase());
       const isHostUser = isHostParticipant(pool, p, user);
+      const serverSplit = (pool.split_breakdown ?? {})[p] ?? {};
+      const fallbackStatus = isHostUser ? "host" : (payment ? payment.status : "unpaid");
 
       splitBreakdown[p] = {
         name: p,
@@ -454,10 +483,19 @@ function PoolDetail() {
         share: overheadShare,
         total: pItemsTotal + overheadShare,
         paid: isHostUser ? true : (payment ? payment.status === "verified" : false),
-        paymentStatus: isHostUser ? "host" : (payment ? payment.status : "unpaid"),
+        paymentStatus: serverSplit.payment_status ?? fallbackStatus,
+        paymentLabel: serverSplit.payment_label ?? paymentStatusLabel(fallbackStatus),
+        paymentTone: serverSplit.payment_tone,
+        paymentDetail: serverSplit.payment_detail,
+        isOverdue: Boolean(serverSplit.is_overdue),
+        overdueHours: serverSplit.overdue_hours ?? 0,
         utr: payment ? payment.utr : "",
         settlementMode: payment?.settlement_mode ?? null,
         confidence: payment?.confidence ?? null,
+        verificationSource: payment?.verification_source ?? serverSplit.verification_source ?? null,
+        reviewReason: payment?.review_reason ?? serverSplit.review_reason ?? null,
+        expectedAmount: serverSplit.expected_amount ?? pItemsTotal + overheadShare,
+        matchedAmount: serverSplit.matched_amount ?? null,
       };
     });
   } else {
@@ -479,9 +517,18 @@ function PoolDetail() {
         total: pItemsTotal + deliveryPerPerson,
         paid: isHostUser ? true : false,
         paymentStatus: isHostUser ? "host" : "unpaid",
+        paymentLabel: isHostUser ? "Host share" : "Unpaid",
+        paymentTone: isHostUser ? "success" : "warning",
+        paymentDetail: "",
+        isOverdue: false,
+        overdueHours: 0,
         utr: "",
         settlementMode: null,
         confidence: null,
+        verificationSource: null,
+        reviewReason: null,
+        expectedAmount: pItemsTotal + deliveryPerPerson,
+        matchedAmount: null,
       };
     });
   }
@@ -784,8 +831,8 @@ function PoolDetail() {
         data: { roommate_name: roommateName }
       });
       toast.dismiss(toastId);
-      if (res && res.success && res.mode === "automated") {
-        toast.success(`Automated WhatsApp nudge sent to ${roommateName}!`);
+      if (res?.success) {
+        toast.success(res.message || `WhatsApp nudge sent to ${roommateName}!`);
         return;
       }
     } catch (err: any) {
@@ -814,6 +861,8 @@ function PoolDetail() {
   const qrCodeUrl = upiPayUrl
     ? `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(upiPayUrl)}`
     : "";
+  const settlementSummary = pool.settlement_summary ?? {};
+  const hostAndroidStatus = pool.host_android_status ?? settlementSummary.host_android_status;
 
   if (!user) {
     return (
@@ -877,15 +926,26 @@ function PoolDetail() {
                 </div>
                 <div className="space-y-1.5">
                   <label htmlFor="auth-password" className="text-xs font-bold text-muted-foreground uppercase tracking-widest pl-0.5">Password</label>
-                  <Input
-                    id="auth-password"
-                    type="password"
-                    value={authPassword}
-                    onChange={(e) => setAuthPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="bg-background text-sm h-10"
-                    required
-                  />
+                  <div className="relative">
+                    <Input
+                      id="auth-password"
+                      type={showAuthPassword ? "text" : "password"}
+                      value={authPassword}
+                      onChange={(e) => setAuthPassword(e.target.value)}
+                      placeholder="********"
+                      className="bg-background text-sm h-10 pr-10"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowAuthPassword((value) => !value)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-foreground focus:outline-none"
+                      aria-label={showAuthPassword ? "Hide password" : "Show password"}
+                      title={showAuthPassword ? "Hide password" : "Show password"}
+                    >
+                      {showAuthPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </div>
 
                 <Button
@@ -1157,9 +1217,64 @@ function PoolDetail() {
               </div>
             ) : pool.status === "completed" ? (
               <div className="space-y-4">
-                <p className="text-xs text-muted-foreground font-semibold">
-                  Order split active. Mark credits only after the host has seen the incoming transfer:
-                </p>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">
+                      {isFullySettled ? "Settlement closed" : "Collection queue"}
+                    </p>
+                    <p className="mt-1 text-xs font-semibold leading-relaxed text-muted-foreground">
+                      {isFullySettled
+                        ? "All roommate splits are verified. This pool is now a receipt."
+                        : "Review pending UTRs, nudge unpaid roommates, or close an agreed in-kind settlement."}
+                    </p>
+                  </div>
+                  {!isFullySettled && (
+                    <Badge variant="outline" className="w-fit border-amber-500/25 bg-amber-500/10 text-amber-400 text-[10px] font-black uppercase tracking-wider">
+                      {settlementSummary.next_action || "Action needed"}
+                    </Badge>
+                  )}
+                </div>
+
+                {!isFullySettled && hostAndroidStatus && (
+                  <div className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 text-xs ${
+                    hostAndroidStatus.can_auto_verify
+                      ? "border-green-500/25 bg-green-500/10 text-green-400"
+                      : "border-amber-500/25 bg-amber-500/10 text-amber-400"
+                  }`}>
+                    <Smartphone className="h-4 w-4 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-black uppercase tracking-wider">{hostAndroidStatus.label}</p>
+                      <p className="mt-0.5 leading-relaxed text-zinc-400">{hostAndroidStatus.detail}</p>
+                    </div>
+                    {!hostAndroidStatus.can_auto_verify && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => nav({ to: "/companion" })}
+                        className="h-8 shrink-0 border-amber-500/30 text-amber-400 hover:bg-amber-500/10 text-[10px] font-bold uppercase"
+                      >
+                        Setup
+                      </Button>
+                    )}
+                  </div>
+                )}
+
+                {settlementSummary.total_roommates > 0 && (
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div className="rounded-xl border border-border bg-surface p-3">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Outstanding</p>
+                      <p className="mt-1 text-base font-black text-foreground tnum">{rupees(settlementSummary.outstanding_total ?? 0)}</p>
+                    </div>
+                    <div className="rounded-xl border border-border bg-surface p-3">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Review</p>
+                      <p className="mt-1 text-base font-black text-foreground tnum">{(settlementSummary.pending ?? 0) + (settlementSummary.needs_review ?? 0) + (settlementSummary.rejected ?? 0)}</p>
+                    </div>
+                    <div className="rounded-xl border border-border bg-surface p-3">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Overdue</p>
+                      <p className="mt-1 text-base font-black text-foreground tnum">{settlementSummary.overdue ?? 0}</p>
+                    </div>
+                  </div>
+                )}
 
                 {/* Host Payment Verification Checklist */}
                 <div className="space-y-2.5 max-h-60 overflow-auto pr-1">
@@ -1176,7 +1291,13 @@ function PoolDetail() {
 
                     return roommates.map((rName) => {
                       const details = breakdown[rName];
-                      const rel = (pool.reliability_scores ?? {})[rName] ?? { score: 90, label: "New roommate", color: "blue" };
+                      const rel = (pool.reliability_scores ?? {})[rName] ?? {
+                        score: 60,
+                        label: "New roommate",
+                        color: "blue",
+                        explanation: "No completed split history yet.",
+                        signals: { completed_splits: 0, unsettled_splits: 0, late_splits: 0 },
+                      };
                       
                       let badgeColor = "bg-blue-500/10 text-blue-500 border-blue-500/20";
                       if (rel.color === "green") badgeColor = "bg-green-500/10 text-green-500 border-green-500/20";
@@ -1184,75 +1305,94 @@ function PoolDetail() {
                       else if (rel.color === "red") badgeColor = "bg-red-500/10 text-red-500 border-red-500/20";
 
                       return (
-                        <div key={rName} className="flex flex-col gap-2.5 bg-surface p-3.5 rounded-xl border border-border text-xs">
-                          <div className="flex items-center justify-between">
-                            <div className="space-y-0.5">
-                              <p className="font-bold capitalize text-foreground flex flex-wrap items-center gap-1.5">
-                                {rName}
+                        <div key={rName} className="rounded-lg border border-border bg-surface px-3.5 py-3 text-xs">
+                          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                            <div className="min-w-0 space-y-1">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="font-bold capitalize text-foreground">{rName}</span>
                                 <span className={`text-[9px] px-1.5 py-0.5 rounded-full border ${badgeColor} font-bold`}>
-                                  {rel.label} ({rel.score}%)
+                                  {rel.label} ({rel.score ?? 60}%)
                                 </span>
+                                {!details.paid && (
+                                  <span className={`text-[9px] px-1.5 py-0.5 rounded-full border font-bold ${statusToneClass(details.payment_tone, details.payment_status)}`}>
+                                    {details.payment_label || paymentStatusLabel(details.payment_status)}
+                                  </span>
+                                )}
+                                {details.is_overdue && (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded-full border border-destructive/25 bg-destructive/10 text-destructive font-bold">
+                                    Overdue {Math.round(details.overdue_hours || 0)}h
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-sm font-black text-foreground tnum">{rupees(details.total)}</p>
+                              <p className="text-[10px] md:text-xs text-zinc-500 font-semibold leading-relaxed">
+                                {rel.explanation}
                               </p>
+                              {rel.signals && (
+                                <p className="text-[10px] md:text-xs text-zinc-600 font-semibold">
+                                  {rel.signals.completed_splits ?? 0} settled / {rel.signals.unsettled_splits ?? 0} open / {rel.signals.late_splits ?? 0} late
+                                </p>
+                              )}
                               {details.email && (
                                 <p className="text-[10px] md:text-xs text-zinc-500 font-semibold lowercase">
                                   {details.email}
                                 </p>
                               )}
-                              <p className="text-xs text-muted-foreground font-semibold">
-                                Share: {rupees(details.total)}
-                              </p>
                               {details.utr && (
                                 <p className="text-[10px] md:text-xs text-muted-foreground font-mono">
                                   UTR: {details.utr}
                                 </p>
                               )}
+                              {details.payment_detail && !details.paid && (
+                                <p className="text-[10px] md:text-xs text-zinc-400 font-semibold leading-relaxed max-w-[320px]">
+                                  {details.payment_detail}
+                                </p>
+                              )}
                             </div>
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex w-full items-center md:w-auto">
                               {details.paid ? (
-                                <div className="flex flex-col items-end gap-1">
+                                <div className="flex w-full flex-wrap items-center justify-between gap-2 md:w-auto md:justify-end">
                                   <Badge className="bg-green-600/10 border border-green-600/20 text-green-500 font-bold py-1 px-2.5">
                                     VERIFIED
                                   </Badge>
-                                  {details.settlementMode === "settle_in_kind" && (
+                                  {(details.settlementMode === "settle_in_kind" || details.settlement_mode === "settle_in_kind") && (
                                     <span className="text-[10px] md:text-xs text-amber-500 font-bold bg-amber-500/10 border border-amber-500/20 px-1.5 rounded">
                                       Settled In Kind
                                     </span>
                                   )}
                                 </div>
                               ) : (
-                                <div className="flex flex-col gap-1.5">
-                                  <div className="flex items-center gap-1.5">
-                                    <Button
-                                      size="sm"
-                                      onClick={() => handleVerifyPayment(rName, "verify")}
-                                      className="h-8 bg-green-600 text-white hover:bg-green-700 py-1 px-2 text-[10px] md:text-xs uppercase font-bold tracking-wider"
-                                    >
-                                      Credit Seen
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => handleVerifyPayment(rName, "settle_in_kind")}
-                                      className="h-8 border-amber-500/20 text-amber-500 hover:bg-amber-500/5 py-1 px-2 text-[10px] md:text-xs uppercase font-bold tracking-wider"
-                                    >
-                                      In Kind
-                                    </Button>
-                                  </div>
+                                <div className="grid w-full grid-cols-2 gap-1.5 md:w-[260px]">
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleVerifyPayment(rName, "verify")}
+                                    className="h-8 bg-green-600 text-white hover:bg-green-700 py-1 px-2 text-[10px] md:text-xs uppercase font-bold tracking-wider"
+                                  >
+                                    Credit Seen
+                                  </Button>
                                   <Button
                                     size="sm"
                                     variant="outline"
                                     onClick={() => handleNudgeRoommate(rName, details.total)}
-                                    className="h-8 border-primary/20 text-primary hover:bg-primary/5 py-1 px-2 text-[10px] md:text-xs uppercase font-bold tracking-wider flex items-center justify-center gap-1.5 w-full"
+                                    className="h-8 border-primary/20 text-primary hover:bg-primary/5 py-1 px-2 text-[10px] md:text-xs uppercase font-bold tracking-wider flex items-center justify-center gap-1.5"
                                   >
                                     <Bell className="h-3.5 w-3.5 shrink-0" />
-                                    <span>Nudge Roommate</span>
+                                    <span>Nudge</span>
                                   </Button>
-                                  {details.payment_status === "pending" && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleVerifyPayment(rName, "settle_in_kind")}
+                                    className="h-8 border-amber-500/20 text-amber-500 hover:bg-amber-500/5 py-1 px-2 text-[10px] md:text-xs uppercase font-bold tracking-wider"
+                                  >
+                                    In Kind
+                                  </Button>
+                                  {(details.payment_status === "pending" || details.payment_status === "needs_review") && (
                                     <Button
                                       size="sm"
                                       variant="outline"
                                       onClick={() => handleVerifyPayment(rName, "reject")}
-                                      className="h-7 border-destructive/20 text-destructive hover:bg-destructive/5 py-1 px-2 text-[10px] md:text-xs uppercase font-bold tracking-wider w-full"
+                                      className="h-8 border-destructive/20 text-destructive hover:bg-destructive/5 py-1 px-2 text-[10px] md:text-xs uppercase font-bold tracking-wider"
                                     >
                                       Reject
                                     </Button>
@@ -1299,9 +1439,13 @@ function PoolDetail() {
                         <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${
                           details.paymentStatus === "verified" || details.paymentStatus === "host"
                             ? "bg-green-500"
-                            : details.paymentStatus === "pending"
+                            : details.paymentStatus === "pending" || details.paymentStatus === "needs_review"
                               ? "bg-amber-500 animate-pulse"
-                              : "bg-destructive"
+                              : details.paymentStatus === "rejected"
+                                ? "bg-destructive"
+                                : details.isOverdue
+                                  ? "bg-destructive"
+                                  : "bg-zinc-500"
                         }`} />
                       ) : (
                         <span className="h-1.5 w-1.5 rounded-full bg-zinc-500 shrink-0" />
@@ -1322,9 +1466,15 @@ function PoolDetail() {
                         {details.paymentStatus === "verified" ? (
                           <span className="text-green-500 font-bold">Paid</span>
                         ) : details.paymentStatus === "pending" ? (
-                          <span className="text-amber-500 font-bold animate-pulse">Pending</span>
+                          <span className="text-amber-500 font-bold animate-pulse">UTR Pending</span>
+                        ) : details.paymentStatus === "needs_review" ? (
+                          <span className="text-orange-400 font-bold animate-pulse">Needs Review</span>
+                        ) : details.paymentStatus === "rejected" ? (
+                          <span className="text-destructive font-bold">Rejected</span>
                         ) : details.paymentStatus === "host" ? (
                           <span className="text-green-500 font-bold">HOST (OWN SHARE)</span>
+                        ) : details.isOverdue ? (
+                          <span className="text-destructive font-bold">Overdue</span>
                         ) : (
                           <span className="text-destructive font-bold">Unpaid</span>
                         )}
@@ -1367,19 +1517,27 @@ function PoolDetail() {
                   <option value="" disabled>-- Choose Roommate --</option>
                   {participants.filter(p => splitBreakdown[p]).map(p => (
                     <option key={p} value={p}>
-                      {p} ({rupees(splitBreakdown[p].total)}) - {
-                        splitBreakdown[p].paymentStatus === "verified"
-                          ? "Verified"
-                          : splitBreakdown[p].paymentStatus === "pending"
-                            ? "Pending Verify"
-                            : splitBreakdown[p].paymentStatus === "host"
-                              ? "Host Mode"
-                              : "Unpaid"
-                      }
+                      {p} ({rupees(splitBreakdown[p].total)}) - {splitBreakdown[p].paymentLabel || paymentStatusLabel(splitBreakdown[p].paymentStatus)}
                     </option>
                   ))}
                 </select>
               </div>
+
+              {hostAndroidStatus && (
+                <div className={`flex items-start gap-2.5 rounded-xl border p-3 text-xs ${
+                  hostAndroidStatus.can_auto_verify
+                    ? "border-green-500/20 bg-green-500/10 text-green-400"
+                    : "border-amber-500/25 bg-amber-500/10 text-amber-400"
+                }`}>
+                  <Smartphone className="h-4 w-4 shrink-0 mt-0.5" />
+                  <p className="leading-relaxed text-zinc-300">
+                    <span className="font-bold text-current">{hostAndroidStatus.label}: </span>
+                    {hostAndroidStatus.can_auto_verify
+                      ? "host credits can auto-match when sender or UTR is clear."
+                      : "UTRs will wait for host review until the host Android connector is active."}
+                  </p>
+                </div>
+              )}
 
               {payeeDetails ? (
                 <div className="bg-surface rounded-xl p-5 border border-border flex flex-col items-center justify-center text-center space-y-4">
@@ -1401,6 +1559,17 @@ function PoolDetail() {
                         Pending Verification
                       </div>
                       <p className="text-xs text-muted-foreground font-mono">UTR: {payeeDetails.utr}</p>
+                      {payeeDetails.paymentDetail && (
+                        <p className="text-xs text-muted-foreground leading-relaxed">{payeeDetails.paymentDetail}</p>
+                      )}
+                    </div>
+                  ) : payeeDetails.paymentStatus === "needs_review" ? (
+                    <div className="text-center space-y-1.5">
+                      <div className="inline-flex items-center gap-1.5 text-xs text-orange-400 bg-orange-500/10 border border-orange-500/20 px-4 py-2 rounded-full font-bold">
+                        Needs Host Review
+                      </div>
+                      {payeeDetails.utr && <p className="text-xs text-muted-foreground font-mono">UTR: {payeeDetails.utr}</p>}
+                      <p className="text-xs text-muted-foreground leading-relaxed">{payeeDetails.paymentDetail || payeeDetails.reviewReason}</p>
                     </div>
                   ) : payeeDetails.paymentStatus === "host" ? (
                     <div className="flex items-center gap-1.5 text-xs text-green-500 bg-green-600/10 border border-green-600/20 px-4 py-2 rounded-full font-bold">

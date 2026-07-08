@@ -16,6 +16,10 @@ MAX_ITEM_PRICE_PAISE = 500_000
 MAX_NAME_CHARS = 80
 MAX_DESCRIPTION_CHARS = 200
 MAX_URL_CHARS = 2048
+PAYMENT_AMOUNT_TOLERANCE_PAISE = 500
+PAYMENT_OVERDUE_HOURS = 24
+PAYMENT_ESCALATED_HOURS = 48
+PAYMENT_ACTIVE_STATUSES = {"pending", "needs_review", "verified"}
 
 class PoolReq(BaseModel):
     wing_label: str
@@ -81,6 +85,207 @@ def clean_text(value: Optional[str], field_name: str, max_chars: int = MAX_NAME_
 
 def name_key(value: Optional[str]) -> str:
     return " ".join((value or "").strip().split()).casefold()
+
+
+def parse_datetime(value) -> Optional[datetime.datetime]:
+    if not value:
+        return None
+    if isinstance(value, datetime.datetime):
+        return to_utc_naive(value)
+    try:
+        return to_utc_naive(datetime.datetime.fromisoformat(str(value).replace("Z", "+00:00")))
+    except (TypeError, ValueError):
+        return None
+
+
+def hours_since(value, now: Optional[datetime.datetime] = None) -> Optional[float]:
+    parsed = parse_datetime(value)
+    if not parsed:
+        return None
+    return max(0.0, ((now or utcnow()) - parsed).total_seconds() / 3600.0)
+
+
+def is_host_name(pool: dict, participant_name: Optional[str]) -> bool:
+    participant_key = name_key(participant_name)
+    return participant_key in {"you", "host"} or participant_key == name_key(pool.get("created_by_name"))
+
+
+def build_host_android_status(host_profile: Optional[dict]) -> dict:
+    if not host_profile or not host_profile.get("companion_paired"):
+        return {
+            "state": "not_paired",
+            "label": "Manual verification",
+            "detail": "Host has not paired the Android connector, so incoming split credits cannot auto-verify.",
+            "can_auto_verify": False,
+        }
+
+    if host_profile.get("companion_sync_enabled") is False:
+        return {
+            "state": "paused",
+            "label": "Auto-verification paused",
+            "detail": "Host Android connector is paired but sync is paused.",
+            "can_auto_verify": False,
+        }
+
+    last_sync_hours = hours_since(host_profile.get("companion_last_sync"))
+    if last_sync_hours is None:
+        return {
+            "state": "paired_waiting",
+            "label": "Waiting for first sync",
+            "detail": "Host Android connector is paired, but no payment alert has synced yet.",
+            "can_auto_verify": False,
+        }
+
+    if last_sync_hours > 24:
+        return {
+            "state": "stale",
+            "label": "Sync stale",
+            "detail": "Host Android connector has not synced in the last 24 hours.",
+            "can_auto_verify": False,
+            "last_sync_hours": round(last_sync_hours, 1),
+        }
+
+    return {
+        "state": "active",
+        "label": "Auto-verification ready",
+        "detail": "Host Android connector is active and can match incoming split credits.",
+        "can_auto_verify": True,
+        "last_sync_hours": round(last_sync_hours, 1),
+    }
+
+
+def build_payment_state(
+    pool: dict,
+    participant_name: str,
+    payment: Optional[dict],
+    expected_amount: int,
+    now: Optional[datetime.datetime] = None,
+) -> dict:
+    now = now or utcnow()
+    if is_host_name(pool, participant_name):
+        return {
+            "status": "host",
+            "label": "Host share",
+            "tone": "success",
+            "detail": "Host share is settled by the checkout payment.",
+            "is_overdue": False,
+            "overdue_hours": 0,
+        }
+
+    completed_at = parse_datetime(pool.get("completed_at"))
+    elapsed_hours = max(0.0, (now - completed_at).total_seconds() / 3600.0) if completed_at else 0.0
+    status = (payment or {}).get("status") or "unpaid"
+
+    if status == "verified":
+        source = (payment or {}).get("verification_source") or (payment or {}).get("settlement_mode") or "host_verified"
+        if source == "auto_host_credit":
+            detail = "Matched to an incoming host credit from Android sync."
+        elif source == "host_manual_review":
+            detail = "Host manually confirmed the incoming credit."
+        elif source == "host_settle_in_kind" or (payment or {}).get("settlement_mode") == "settle_in_kind":
+            detail = "Host settled this split outside cash transfer."
+        else:
+            detail = "Payment has been verified."
+        return {
+            "status": "verified",
+            "label": "Verified",
+            "tone": "success",
+            "detail": detail,
+            "is_overdue": False,
+            "overdue_hours": 0,
+        }
+
+    if status == "pending":
+        return {
+            "status": "pending",
+            "label": "UTR pending",
+            "tone": "warning",
+            "detail": "Roommate submitted a UTR; waiting for host credit match or host review.",
+            "is_overdue": elapsed_hours >= PAYMENT_OVERDUE_HOURS,
+            "overdue_hours": round(elapsed_hours, 1) if elapsed_hours >= PAYMENT_OVERDUE_HOURS else 0,
+        }
+
+    if status == "needs_review":
+        return {
+            "status": "needs_review",
+            "label": "Needs review",
+            "tone": "warning",
+            "detail": (payment or {}).get("review_reason") or "A possible payment matched, but PocketBuddy needs host confirmation before trusting it.",
+            "is_overdue": elapsed_hours >= PAYMENT_OVERDUE_HOURS,
+            "overdue_hours": round(elapsed_hours, 1) if elapsed_hours >= PAYMENT_OVERDUE_HOURS else 0,
+        }
+
+    if status == "rejected":
+        return {
+            "status": "rejected",
+            "label": "Rejected",
+            "tone": "danger",
+            "detail": (payment or {}).get("rejection_reason") or "Host rejected this reference because no matching credit was found.",
+            "is_overdue": True,
+            "overdue_hours": round(elapsed_hours, 1),
+        }
+
+    label = "Overdue" if elapsed_hours >= PAYMENT_OVERDUE_HOURS else "Unpaid"
+    detail = (
+        f"No payment recorded for this Rs {expected_amount / 100:.2f} split after checkout."
+        if elapsed_hours >= PAYMENT_OVERDUE_HOURS
+        else f"Waiting for Rs {expected_amount / 100:.2f} split settlement."
+    )
+    return {
+        "status": "unpaid",
+        "label": label,
+        "tone": "danger" if elapsed_hours >= PAYMENT_ESCALATED_HOURS else "warning",
+        "detail": detail,
+        "is_overdue": elapsed_hours >= PAYMENT_OVERDUE_HOURS,
+        "overdue_hours": round(elapsed_hours, 1) if elapsed_hours >= PAYMENT_OVERDUE_HOURS else 0,
+    }
+
+
+def build_settlement_summary(split_breakdown: dict, host_android_status: dict) -> dict:
+    roommate_rows = [
+        row for row in split_breakdown.values()
+        if row.get("payment_status") != "host"
+    ]
+    counts = {
+        "total_roommates": len(roommate_rows),
+        "verified": 0,
+        "pending": 0,
+        "needs_review": 0,
+        "rejected": 0,
+        "unpaid": 0,
+        "overdue": 0,
+    }
+    outstanding_total = 0
+    review_total = 0
+
+    for row in roommate_rows:
+        status = row.get("payment_status") or "unpaid"
+        if status not in counts:
+            status = "unpaid"
+        counts[status] += 1
+        if row.get("is_overdue"):
+            counts["overdue"] += 1
+        if status != "verified":
+            outstanding_total += int(row.get("total") or 0)
+        if status in {"pending", "needs_review", "rejected"}:
+            review_total += int(row.get("total") or 0)
+
+    if counts["needs_review"] or counts["pending"]:
+        next_action = "Review submitted UTRs against host credits."
+    elif counts["overdue"]:
+        next_action = "Nudge overdue roommates or settle in kind after confirming with them."
+    elif outstanding_total:
+        next_action = "Collect unpaid splits from roommates."
+    else:
+        next_action = "All roommate splits are settled."
+
+    return {
+        **counts,
+        "outstanding_total": outstanding_total,
+        "review_total": review_total,
+        "next_action": next_action,
+        "host_android_status": host_android_status,
+    }
 
 
 def validate_paise_amount(
@@ -176,6 +381,7 @@ async def get_roommate_reliability(db, wing_label: str) -> dict:
                 "total_pools": 0,
                 "verified_pools": 0,
                 "pending_pools": 0,
+                "late_pools": 0,
                 "total_repayment_time_sec": 0.0,
             })
             stats["total_pools"] += 1
@@ -185,12 +391,14 @@ async def get_roommate_reliability(db, wing_label: str) -> dict:
             
             if pm and pm.get("status") == "verified":
                 stats["verified_pools"] += 1
-                pay_time_str = pm.get("submitted_at") or pm.get("verified_at")
+                pay_time_str = pm.get("verified_at") or pm.get("submitted_at")
                 if pay_time_str:
                     try:
                         pay_time = datetime.datetime.fromisoformat(pay_time_str.replace("Z", "+00:00")).replace(tzinfo=None)
                         diff_sec = max(0.0, (pay_time - completed_at).total_seconds())
                         stats["total_repayment_time_sec"] += diff_sec
+                        if diff_sec > PAYMENT_OVERDUE_HOURS * 3600:
+                            stats["late_pools"] += 1
                     except:
                         pass
             else:
@@ -218,7 +426,7 @@ async def get_roommate_reliability(db, wing_label: str) -> dict:
             pm = next((p for p in payments if name_key(p["name"]) == r_key), None)
             
             if pm and pm.get("status") == "verified":
-                pay_time_str = pm.get("submitted_at") or pm.get("verified_at")
+                pay_time_str = pm.get("verified_at") or pm.get("submitted_at")
                 if pay_time_str:
                     try:
                         pay_time = datetime.datetime.fromisoformat(pay_time_str.replace("Z", "+00:00")).replace(tzinfo=None)
@@ -250,21 +458,31 @@ async def get_roommate_reliability(db, wing_label: str) -> dict:
         if avg_score >= 95:
             label = "Instant payer"
             color = "green"
+            explanation = "Usually settles within an hour after checkout."
         elif avg_score >= 85:
             label = "Pays in hours"
             color = "blue"
+            explanation = "Usually settles the same day after checkout."
         elif avg_score >= 70:
             label = "Usually next day"
             color = "yellow"
+            explanation = "Has paid before, but may need a reminder."
         else:
             label = "Needs reminder"
             color = "red"
+            explanation = "Often remains unpaid or takes more than a day to settle."
             
         reliability[stats["name"]] = {
             "name": stats["name"],
             "score": avg_score,
             "label": label,
             "color": color,
+            "explanation": explanation,
+            "signals": {
+                "completed_splits": stats["verified_pools"],
+                "unsettled_splits": stats["pending_pools"],
+                "late_splits": stats["late_pools"],
+            },
             "total_pools": total_pools,
             "pending_pools": stats["pending_pools"],
             "avg_repayment_time_hours": round((stats["total_repayment_time_sec"] / stats["verified_pools"] / 3600.0) if stats["verified_pools"] > 0 else 0.0, 1)
@@ -277,7 +495,10 @@ async def enrich_pool_document(db, p: dict, current_user_id: Optional[str] = Non
     pool_id = p["_id"] if "_id" in p else p.get("id")
     host_id = p.get("host_id")
     host_user = await db.users.find_one({"_id": host_id}) if host_id else None
+    host_profile = await db.profiles.find_one({"_id": host_id}) if host_id else None
     p["host_phone"] = host_user.get("phone_number", "") if host_user else ""
+    host_android_status = build_host_android_status(host_profile)
+    p["host_android_status"] = host_android_status
     
     items_cursor = db.cart_pool_items.find({"pool_id": pool_id})
     items = await items_cursor.to_list(length=200)
@@ -297,8 +518,10 @@ async def enrich_pool_document(db, p: dict, current_user_id: Optional[str] = Non
         
         for name in active_participants:
             p_items_total = sum(it["estimated_price"] for it in grouped[name] if it.get("is_purchased", True))
-            payment = next((pay for pay in p.get("payments", []) if pay["name"].lower() == name.lower()), None)
+            payment = next((pay for pay in p.get("payments", []) if name_key(pay.get("name")) == name_key(name)), None)
             is_host = (name.lower() == "you" or name_key(name) == name_key(p.get("created_by_name")))
+            expected_total = p_items_total + overhead_share
+            payment_state = build_payment_state(p, name, payment, expected_total)
             
             usr = await db.users.find_one({"full_name": {"$regex": f"^{re.escape(name)}$", "$options": "i"}})
             r_email = usr.get("email", "") if usr else ""
@@ -308,12 +531,21 @@ async def enrich_pool_document(db, p: dict, current_user_id: Optional[str] = Non
                 "email": r_email,
                 "items_total": p_items_total,
                 "share": overhead_share,
-                "total": p_items_total + overhead_share,
+                "total": expected_total,
                 "paid": True if is_host else (payment["status"] == "verified" if payment else False),
-                "payment_status": "host" if is_host else (payment["status"] if payment else "unpaid"),
+                "payment_status": payment_state["status"],
+                "payment_label": payment_state["label"],
+                "payment_tone": payment_state["tone"],
+                "payment_detail": payment_state["detail"],
+                "is_overdue": payment_state["is_overdue"],
+                "overdue_hours": payment_state["overdue_hours"],
                 "utr": payment["utr"] if payment else "",
                 "settlement_mode": payment.get("settlement_mode") if payment else None,
-                "confidence": payment.get("confidence") if payment else None
+                "confidence": payment.get("confidence") if payment else None,
+                "verification_source": payment.get("verification_source") if payment else None,
+                "review_reason": payment.get("review_reason") if payment else None,
+                "expected_amount": payment.get("expected_amount", expected_total) if payment else expected_total,
+                "matched_amount": payment.get("matched_amount") if payment else None,
             }
     else:
         num_people = len(participants)
@@ -340,7 +572,21 @@ async def enrich_pool_document(db, p: dict, current_user_id: Optional[str] = Non
     p["split_breakdown"] = split_breakdown
     
     reliability_map = await get_roommate_reliability(db, p.get("wing_label", ""))
-    p["reliability_scores"] = {name: reliability_map.get(name, {"score": 90, "label": "New roommate", "color": "blue"}) for name in participants}
+    p["reliability_scores"] = {
+        name: reliability_map.get(name, {
+            "score": 60,
+            "label": "New roommate",
+            "color": "blue",
+            "explanation": "No completed split history yet; this is a neutral starting score.",
+            "signals": {
+                "completed_splits": 0,
+                "unsettled_splits": 0,
+                "late_splits": 0,
+            },
+        })
+        for name in participants
+    }
+    p["settlement_summary"] = build_settlement_summary(split_breakdown, host_android_status)
     
     wing_label = p.get("wing_label")
     wing_members = []
@@ -672,6 +918,8 @@ async def payment_confirm(pool_id: str, req: PaymentConfirmReq):
     participant_keys = {name_key(item.get("added_by_name")) for item in items if item.get("is_purchased", True)}
     if participant_keys and name_key(roommate_name) not in participant_keys:
         raise HTTPException(status_code=400, detail="Roommate is not part of this pool")
+    if is_host_name(pool, roommate_name):
+        raise HTTPException(status_code=400, detail="Host share does not need roommate payment confirmation")
 
     # Resolve exact casing of the roommate's name from active pool items to avoid case mismatches in db query
     exact_roommate_name = next(
@@ -679,11 +927,53 @@ async def payment_confirm(pool_id: str, req: PaymentConfirmReq):
         roommate_name
     )
 
+    payments = pool.get("payments", [])
+    same_pool_duplicate = next(
+        (
+            payment for payment in payments
+            if payment.get("utr") == utr
+            and name_key(payment.get("name")) != name_key(exact_roommate_name)
+            and payment.get("status") in PAYMENT_ACTIVE_STATUSES
+        ),
+        None,
+    )
+    if same_pool_duplicate:
+        raise HTTPException(status_code=409, detail="This UTR is already attached to another roommate split")
+
+    duplicate_pool = await db.cart_pools.find_one({
+        "_id": {"$ne": pool_id},
+        "host_id": pool.get("host_id"),
+        "payments": {
+            "$elemMatch": {
+                "utr": utr,
+                "status": {"$in": list(PAYMENT_ACTIVE_STATUSES)}
+            }
+        }
+    })
+    if duplicate_pool:
+        raise HTTPException(status_code=409, detail="This UTR was already used in another pool settlement")
+
+    active_participants = [item for item in items if item.get("is_purchased", True)]
+    active_count = len({name_key(item.get("added_by_name")) for item in active_participants})
+    net_overhead = (pool.get("final_overhead") or 0) - (pool.get("final_discount") or 0)
+    overhead_share = int(net_overhead / active_count) if active_count > 0 else 0
+    roommate_items_total = sum(
+        item["estimated_price"]
+        for item in active_participants
+        if name_key(item.get("added_by_name")) == name_key(exact_roommate_name)
+    )
+    expected_amount = roommate_items_total + overhead_share
+
     payment_entry = {
         "name": exact_roommate_name,
         "utr": utr,
         "status": "pending",
-        "submitted_at": utcnow().isoformat()
+        "submitted_at": utcnow().isoformat(),
+        "expected_amount": expected_amount,
+        "amount_tolerance": PAYMENT_AMOUNT_TOLERANCE_PAISE,
+        "confidence": "manual_claim",
+        "verification_source": "manual_utr",
+        "review_reason": "Manual UTR submitted; waiting for a matching host credit or host review.",
     }
 
     # Remove any existing payment record for this roommate
@@ -734,6 +1024,8 @@ async def payment_verify(pool_id: str, req: PaymentVerifyReq, user_id: str = Dep
     if action in ("verify", "settle_in_kind"):
         status = "verified"
         settlement_mode = "settle_in_kind" if action == "settle_in_kind" else "manual"
+        verification_source = "host_settle_in_kind" if action == "settle_in_kind" else "host_manual_review"
+        confidence = "host_confirmed"
         
         # Check if roommate already has a payment log
         has_payment = any(name_key(p["name"]) == name_key(exact_roommate_name) for p in payments)
@@ -744,7 +1036,10 @@ async def payment_verify(pool_id: str, req: PaymentVerifyReq, user_id: str = Dep
                 {"$set": {
                     "payments.$.status": status,
                     "payments.$.verified_at": utcnow().isoformat(),
-                    "payments.$.settlement_mode": settlement_mode
+                    "payments.$.settlement_mode": settlement_mode,
+                    "payments.$.verification_source": verification_source,
+                    "payments.$.confidence": confidence,
+                    "payments.$.review_reason": None,
                 }}
             )
             if result.matched_count == 0:
@@ -756,7 +1051,9 @@ async def payment_verify(pool_id: str, req: PaymentVerifyReq, user_id: str = Dep
                 "status": status,
                 "submitted_at": utcnow().isoformat(),
                 "verified_at": utcnow().isoformat(),
-                "settlement_mode": settlement_mode
+                "settlement_mode": settlement_mode,
+                "verification_source": verification_source,
+                "confidence": confidence,
             }
             await db.cart_pools.update_one(
                 {"_id": pool_id},
@@ -765,10 +1062,17 @@ async def payment_verify(pool_id: str, req: PaymentVerifyReq, user_id: str = Dep
             
     elif action == "reject":
         result = await db.cart_pools.update_one(
-            {"_id": pool_id},
-            {"$pull": {"payments": {"name": exact_roommate_name}}}
+            {"_id": pool_id, "payments.name": exact_roommate_name},
+            {"$set": {
+                "payments.$.status": "rejected",
+                "payments.$.rejected_at": utcnow().isoformat(),
+                "payments.$.verification_source": "host_rejected",
+                "payments.$.confidence": "rejected",
+                "payments.$.rejection_reason": "Host did not find a matching incoming credit for this reference.",
+                "payments.$.review_reason": "Rejected by host; roommate should recheck the UTR or pay again.",
+            }}
         )
-        if result.modified_count == 0:
+        if result.matched_count == 0:
             raise HTTPException(status_code=404, detail="Payment confirmation not found")
     else:
         raise HTTPException(status_code=400, detail="Invalid action")
@@ -908,6 +1212,8 @@ async def nudge_roommate_api(pool_id: str, req: NudgeReq, user_id: str = Depends
     pool = await db.cart_pools.find_one({"_id": pool_id})
     if not pool:
         raise HTTPException(status_code=404, detail="Pool not found")
+    if pool.get("host_id") != user_id:
+        raise HTTPException(status_code=403, detail="Only the pool host can nudge roommates")
         
     roommate_name = req.roommate_name
     
@@ -1289,7 +1595,9 @@ async def process_amazon_roommate_payment(
         "submitted_at": utcnow().isoformat(),
         "verified_at": utcnow().isoformat(),
         "settlement_mode": "amazon_pay_sandbox",
-        "confidence": 1.0
+        "confidence": "sandbox_confirmed",
+        "verification_source": "amazon_pay_sandbox",
+        "expected_amount": expected_amount,
     }
     
     # Pull old payment record and push new one
