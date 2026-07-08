@@ -2408,7 +2408,7 @@ function Dashboard() {
                         </span>
                       </div>
                       <div className="h-1.5 w-full bg-muted border border-border/40 rounded-full overflow-hidden">
-                        <div 
+                        <div
                           className={`h-full rounded-full transition-all duration-300 ${
                             coveragePct === 100 ? "bg-pb-green" : "bg-pb-amber"
                           }`}
@@ -2419,8 +2419,8 @@ function Dashboard() {
 
                     {/* Actionable Advice Card */}
                     <div className={`rounded-xl border p-3 text-[11px] font-medium leading-normal transition-all duration-300 ${
-                      gapPaise === 0 
-                        ? "border-pb-green/20 bg-pb-green/5 text-pb-green" 
+                      gapPaise === 0
+                        ? "border-pb-green/20 bg-pb-green/5 text-pb-green"
                         : "border-pb-amber/20 bg-pb-amber/5 text-pb-amber"
                     }`}>
                       {gapPaise === 0 ? (

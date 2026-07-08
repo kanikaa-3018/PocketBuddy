@@ -4,7 +4,7 @@ import { useAuth } from "@/lib/auth-context";
 import { AppShell, MobileMenuButton } from "@/components/AppShell";
 import { getRunwayForecast, getRunwayIntel } from "@/lib/api/db.functions";
 import { rupees } from "@/lib/format";
-import { 
+import {
   TrendingUp, TrendingDown, AlertTriangle, AlertCircle, CheckCircle2,
   Calendar, CreditCard, PieChart, Info, HelpCircle, ChevronRight,
   ShieldCheck, ArrowRight, Activity, Wallet,
@@ -216,7 +216,7 @@ function RunwayPage() {
     let totalFunding = forecast.current_cycle.available_funding;
     let spent = adjustedSpent;
     let commitments = adjustedCommitmentsTotal;
-    
+
     let baseDiscretionary = totalFunding - spent - commitments;
     if (scenarioFoodSwitch && canUseMealLever) {
       baseDiscretionary += mealPlanLeverAmount;
@@ -314,8 +314,8 @@ function RunwayPage() {
 * Simulated Daily Pace: ${formatRs(activeSimulatedSpend * 100)}/day
 * Estimated Runway: ${simulatedDays} days (survival until ${simulatedBrokeDate})
 * Cycle Remaining: ${daysLeftInCycle} days
-${isSimulatedSafe 
-  ? "* Plan: Staying under budget. On track to complete the allowance cycle safely." 
+${isSimulatedSafe
+  ? "* Plan: Staying under budget. On track to complete the allowance cycle safely."
   : `* Simulation gap: This sandbox setting runs out ${daysLeftInCycle - simulatedDays} days early with a gap of ${formatRs(simulatedGapPaise)}. The real ask-home amount is ${actualAskHomeAmount > 0 ? formatRs(actualAskHomeAmount) : "not required in the base forecast"}.`}
 * Committed Reserve: ${formatRs(adjustedCommitmentsTotal)}
 
@@ -1228,7 +1228,7 @@ Generated via PocketBuddy Runway.`;
                   <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">What changed?</h3>
                   <p className="mt-0.5 text-[11px] text-muted-foreground">Main factors affecting today’s runway estimate.</p>
                 </div>
-                
+
                 {/* Included in Forecast Dialog Trigger */}
                 <button
                   type="button"
@@ -1939,7 +1939,7 @@ Generated via PocketBuddy Runway.`;
                   <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">Runway Actions</h3>
                   <p className="text-[10px] text-muted-foreground font-medium">Configure settings and habits to stretch your cash runway.</p>
                 </div>
-                
+
                 <Select value={selectedActionId} onValueChange={setSelectedActionId}>
                   <SelectTrigger className="h-8.5 w-full sm:w-[240px] rounded-lg border-border/70 bg-background text-xs text-left focus:ring-1 focus:ring-primary/20">
                     <SelectValue placeholder="Select action step" />
@@ -1958,15 +1958,15 @@ Generated via PocketBuddy Runway.`;
               {(() => {
                 const selectedAction = runwayActions.find((a) => a.id === selectedActionId) || runwayActions[0];
                 if (!selectedAction) return null;
-                
-                const actionPath = 
+
+                const actionPath =
                   selectedAction.id === "priority" && activeActionType === "slow_down" ? "/pool" :
                   selectedAction.id === "action-2" && forecast.status === "shortfall" ? "/settings" : // Subscriptions
                   selectedAction.id === "action-1" ? "/settings" : // Buffer / Reserve
                   selectedAction.id === "action-3" ? "/settings" : // Food cap settings
                   null;
 
-                const actionButtonText = 
+                const actionButtonText =
                   selectedAction.id === "priority" && activeActionType === "slow_down" ? "Open pool dues" :
                   selectedAction.id === "action-2" && forecast.status === "shortfall" ? "Manage subscriptions" :
                   selectedAction.id === "action-1" ? "Configure safety buffer" :
@@ -2259,14 +2259,14 @@ Generated via PocketBuddy Runway.`;
                   </Badge>
                 </div>
               </div>
-              
+
               <div className="h-64 w-full text-xs">
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                     <XAxis dataKey="name" stroke="var(--muted-foreground)" fontSize={10} fontWeight={700} />
                     <YAxis stroke="var(--muted-foreground)" fontSize={10} fontWeight={700} />
-                    <Tooltip 
+                    <Tooltip
                       contentStyle={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }}
                       labelStyle={{ fontWeight: "bold", color: "var(--foreground)" }}
                     />
@@ -2294,7 +2294,7 @@ Generated via PocketBuddy Runway.`;
                           {isNegative ? "Deficit" : "Surplus"}
                         </Badge>
                       </div>
-                      
+
                       <div className="grid grid-cols-3 gap-2 border-b border-border/50 pb-3 mb-3 text-center">
                         <div>
                           <span className="text-[9px] md:text-xs text-zinc-500 uppercase tracking-wider block">Income</span>
