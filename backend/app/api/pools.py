@@ -16,6 +16,7 @@ MAX_ITEM_PRICE_PAISE = 500_000
 MAX_NAME_CHARS = 80
 MAX_DESCRIPTION_CHARS = 200
 MAX_URL_CHARS = 2048
+MAX_ITEM_QUANTITY = 50
 PAYMENT_AMOUNT_TOLERANCE_PAISE = 500
 PAYMENT_OVERDUE_HOURS = 24
 PAYMENT_ESCALATED_HOURS = 48
@@ -55,13 +56,20 @@ class PoolItemReq(BaseModel):
     added_by_name: str
     item_description: str
     estimated_price: int
+    quantity: int = 1
+    unit_price: Optional[int] = None
     product_url: Optional[str] = None
 
 class PoolItemUpdateReq(BaseModel):
     is_purchased: Optional[bool] = None
     estimated_price: Optional[int] = None
+    quantity: Optional[int] = None
+    unit_price: Optional[int] = None
     item_description: Optional[str] = None
     product_url: Optional[str] = None
+    cart_status: Optional[str] = None
+    substitute_note: Optional[str] = None
+    cart_status_reason: Optional[str] = None
 
 
 def utcnow() -> datetime.datetime:
@@ -78,6 +86,17 @@ def clean_text(value: Optional[str], field_name: str, max_chars: int = MAX_NAME_
     cleaned = " ".join((value or "").strip().split())
     if not cleaned:
         raise HTTPException(status_code=400, detail=f"{field_name} is required")
+    if len(cleaned) > max_chars:
+        raise HTTPException(status_code=400, detail=f"{field_name} is too long")
+    return cleaned
+
+
+def clean_optional_text(value: Optional[str], field_name: str, max_chars: int = MAX_DESCRIPTION_CHARS) -> Optional[str]:
+    if value is None:
+        return None
+    cleaned = " ".join(value.strip().split())
+    if not cleaned:
+        return None
     if len(cleaned) > max_chars:
         raise HTTPException(status_code=400, detail=f"{field_name} is too long")
     return cleaned
@@ -329,6 +348,38 @@ def validate_product_url(value: Optional[str]) -> Optional[str]:
     if len(url) > MAX_URL_CHARS or any(ch.isspace() for ch in url):
         raise HTTPException(status_code=400, detail="Invalid product URL")
     return url
+
+
+def validate_item_quantity(value: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise HTTPException(status_code=400, detail="Quantity must be an integer")
+    if value < 1 or value > MAX_ITEM_QUANTITY:
+        raise HTTPException(status_code=400, detail=f"Quantity must be between 1 and {MAX_ITEM_QUANTITY}")
+    return value
+
+
+def validate_cart_status(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    status = value.strip().lower()
+    allowed = {"pending", "added", "substituted", "unavailable", "skipped"}
+    if status not in allowed:
+        raise HTTPException(status_code=400, detail="Invalid cart status")
+    return status
+
+
+def default_cart_status_reason(status: Optional[str]) -> Optional[str]:
+    if status == "added":
+        return "Host added this product to the cart."
+    if status == "substituted":
+        return "Host added a substitute for this product."
+    if status == "unavailable":
+        return "This product was unavailable in the app."
+    if status == "skipped":
+        return "Host skipped this item before checkout."
+    if status == "pending":
+        return "Host moved this item back to the active cart."
+    return None
 
 
 def parse_expires_at(value: str) -> datetime.datetime:
@@ -1115,7 +1166,7 @@ async def match_wing_roommate(db, pool: dict, input_name: str) -> str:
     return cleaned
 
 @router.post("/{pool_id}/items")
-async def insert_pool_item(pool_id: str, req: PoolItemReq):
+async def insert_pool_item(pool_id: str, req: PoolItemReq, user_id: str = Depends(get_current_user)):
     db = get_db()
 
     # Verify pool exists and is open
@@ -1131,20 +1182,32 @@ async def insert_pool_item(pool_id: str, req: PoolItemReq):
     # Robustness Limit Validation
     if req.estimated_price <= 0 or req.estimated_price > MAX_ITEM_PRICE_PAISE:
          raise HTTPException(status_code=400, detail="Estimated price must be between ₹1 and ₹5,000")
+    quantity = validate_item_quantity(req.quantity)
+    unit_price = req.unit_price if req.unit_price is not None else int(round(req.estimated_price / quantity))
+    validate_paise_amount(unit_price, "Unit price", MAX_ITEM_PRICE_PAISE)
+    line_total = unit_price * quantity
+    validate_paise_amount(line_total, "Estimated price", MAX_ITEM_PRICE_PAISE)
+
+    user_doc = await db.users.find_one({"_id": user_id})
+    item_owner_name = user_doc.get("full_name") if user_doc and user_doc.get("full_name") else req.added_by_name
 
     # Match against registered wing roommates to avoid name collisions/typos
-    matched_name = await match_wing_roommate(db, pool, req.added_by_name)
+    matched_name = await match_wing_roommate(db, pool, item_owner_name)
 
     item_id = str(uuid.uuid4())
 
     new_item = {
         "_id": item_id,
         "pool_id": pool_id,
+        "added_by_user_id": user_id,
         "added_by_name": matched_name,
         "item_description": clean_text(req.item_description, "Item description", max_chars=MAX_DESCRIPTION_CHARS),
-        "estimated_price": req.estimated_price,
+        "estimated_price": line_total,
+        "quantity": quantity,
+        "unit_price": unit_price,
         "product_url": validate_product_url(req.product_url),
         "is_purchased": True,
+        "cart_status": "pending",
         "created_at": utcnow()
     }
 
@@ -1152,7 +1215,7 @@ async def insert_pool_item(pool_id: str, req: PoolItemReq):
     return map_doc(new_item)
 
 @router.delete("/{pool_id}/items/{item_id}")
-async def delete_pool_item(pool_id: str, item_id: str):
+async def delete_pool_item(pool_id: str, item_id: str, user_id: str = Depends(get_current_user)):
     db = get_db()
     pool = await db.cart_pools.find_one({"_id": pool_id})
     if not pool:
@@ -1161,13 +1224,41 @@ async def delete_pool_item(pool_id: str, item_id: str):
     if pool.get("status") != "open":
         raise HTTPException(status_code=400, detail="This pool is no longer editable.")
 
+    item = await db.cart_pool_items.find_one({"_id": item_id, "pool_id": pool_id})
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    user_doc = await db.users.find_one({"_id": user_id})
+    user_name = user_doc.get("full_name") if user_doc else ""
+    is_host = pool.get("host_id") == user_id
+    is_owner = item.get("added_by_user_id") == user_id or name_key(user_name) == name_key(item.get("added_by_name"))
+    host_aliases = {name_key(pool.get("created_by_name")), name_key(user_name), "host", "you"}
+    is_host_item = is_host and name_key(item.get("added_by_name")) in host_aliases
+
+    if not is_host and not is_owner:
+        raise HTTPException(status_code=403, detail="Only the item owner or host can remove this item")
+
+    if is_host and not is_host_item:
+        now = utcnow()
+        await db.cart_pool_items.update_one(
+            {"_id": item_id, "pool_id": pool_id},
+            {"$set": {
+                "is_purchased": False,
+                "cart_status": "skipped",
+                "cart_status_reason": "Host removed this item from the cart.",
+                "cart_status_updated_at": now,
+                "cart_status_updated_by": "host",
+            }},
+        )
+        return {"success": True, "mode": "skipped"}
+
     res = await db.cart_pool_items.delete_one({"_id": item_id, "pool_id": pool_id})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Item not found")
     return {"success": True}
 
 @router.patch("/{pool_id}/items/{item_id}")
-async def update_pool_item(pool_id: str, item_id: str, req: PoolItemUpdateReq):
+async def update_pool_item(pool_id: str, item_id: str, req: PoolItemUpdateReq, user_id: str = Depends(get_current_user)):
     db = get_db()
 
     pool = await db.cart_pools.find_one({"_id": pool_id})
@@ -1179,16 +1270,33 @@ async def update_pool_item(pool_id: str, item_id: str, req: PoolItemUpdateReq):
 
     if req.estimated_price is not None and (req.estimated_price <= 0 or req.estimated_price > MAX_ITEM_PRICE_PAISE):
          raise HTTPException(status_code=400, detail="Estimated price must be between ₹1 and ₹5,000")
+    if req.quantity is not None:
+        validate_item_quantity(req.quantity)
+    if req.unit_price is not None:
+        validate_paise_amount(req.unit_price, "Unit price", MAX_ITEM_PRICE_PAISE)
 
     item = await db.cart_pool_items.find_one({"_id": item_id, "pool_id": pool_id})
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
 
+    user_doc = await db.users.find_one({"_id": user_id})
+    user_name = user_doc.get("full_name") if user_doc else ""
+    is_host = pool.get("host_id") == user_id
+    is_owner = item.get("added_by_user_id") == user_id or name_key(user_name) == name_key(item.get("added_by_name"))
+
     # Build updates dict, handling booleans (False is a valid value, not None)
     updates = {}
+    nullable_update_fields = {"product_url", "substitute_note", "cart_status_reason"}
     for k, v in req.model_dump(exclude_unset=True).items():
-        if isinstance(v, bool) or v is not None:
+        if isinstance(v, bool) or v is not None or k in nullable_update_fields:
             updates[k] = v
+
+    host_only_fields = {"is_purchased", "cart_status", "cart_status_reason", "substitute_note"}
+    owner_edit_fields = {"estimated_price", "quantity", "unit_price", "item_description", "product_url"}
+    if host_only_fields.intersection(updates.keys()) and not is_host:
+        raise HTTPException(status_code=403, detail="Only the pool host can update cart status")
+    if owner_edit_fields.intersection(updates.keys()) and not (is_host or is_owner):
+        raise HTTPException(status_code=403, detail="Only the item owner or host can edit this item")
 
     if "item_description" in updates:
         updates["item_description"] = clean_text(
@@ -1196,6 +1304,40 @@ async def update_pool_item(pool_id: str, item_id: str, req: PoolItemUpdateReq):
         )
     if "product_url" in updates:
         updates["product_url"] = validate_product_url(updates["product_url"])
+    if "quantity" in updates:
+        updates["quantity"] = validate_item_quantity(updates["quantity"])
+    if "unit_price" in updates:
+        updates["unit_price"] = validate_paise_amount(updates["unit_price"], "Unit price", MAX_ITEM_PRICE_PAISE)
+    if "quantity" in updates or "unit_price" in updates:
+        effective_quantity = validate_item_quantity(updates.get("quantity", item.get("quantity", 1)))
+        effective_unit_price = updates.get("unit_price", item.get("unit_price"))
+        if not effective_unit_price:
+            effective_unit_price = int(round(item.get("estimated_price", 0) / effective_quantity))
+        effective_unit_price = validate_paise_amount(effective_unit_price, "Unit price", MAX_ITEM_PRICE_PAISE)
+        updates["quantity"] = effective_quantity
+        updates["unit_price"] = effective_unit_price
+        updates["estimated_price"] = validate_paise_amount(
+            effective_unit_price * effective_quantity,
+            "Estimated price",
+            MAX_ITEM_PRICE_PAISE,
+        )
+    if "cart_status" in updates:
+        updates["cart_status"] = validate_cart_status(updates["cart_status"])
+    if "substitute_note" in updates:
+        updates["substitute_note"] = clean_optional_text(updates["substitute_note"], "Substitute note", max_chars=MAX_DESCRIPTION_CHARS)
+    if "cart_status_reason" in updates:
+        updates["cart_status_reason"] = clean_optional_text(
+            updates["cart_status_reason"], "Cart status reason", max_chars=MAX_DESCRIPTION_CHARS
+        )
+
+    if "is_purchased" in updates and "cart_status" not in updates:
+        updates["cart_status"] = "pending" if updates["is_purchased"] else "skipped"
+
+    if "cart_status" in updates:
+        updates["cart_status_updated_at"] = utcnow()
+        updates["cart_status_updated_by"] = "host" if is_host else "roommate"
+        if not updates.get("cart_status_reason"):
+            updates["cart_status_reason"] = default_cart_status_reason(updates["cart_status"])
 
     if updates:
         await db.cart_pool_items.update_one({"_id": item_id, "pool_id": pool_id}, {"$set": updates})

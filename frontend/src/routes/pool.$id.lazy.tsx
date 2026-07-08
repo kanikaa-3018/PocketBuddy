@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { ChevronLeft, Share2, Trash2, Check, X, AlertCircle, Sparkles, ExternalLink, User, ShoppingBag, Clock, Shield, Link as LinkIcon, Bell, Eye, EyeOff, Smartphone } from "lucide-react";
+import { ChevronLeft, Share2, Trash2, Check, X, AlertCircle, Sparkles, ExternalLink, User, ShoppingBag, Clock, Shield, Link as LinkIcon, Bell, Eye, EyeOff, Smartphone, Plus, Minus, Pencil, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { rupees, relativeTime } from "@/lib/format";
 import { useAuth } from "@/lib/auth-context";
@@ -131,7 +131,7 @@ function statusToneClass(tone?: string, status?: string) {
   if (key === "success" || status === "verified") return "bg-green-600/10 border-green-600/25 text-green-500";
   if (key === "danger" || status === "rejected") return "bg-destructive/10 border-destructive/25 text-destructive";
   if (status === "needs_review") return "bg-orange-500/10 border-orange-500/25 text-orange-400";
-  return "bg-amber-500/10 border-amber-500/25 text-amber-400";
+  return "bg-orange-600/10 border-orange-600/25 text-orange-600";
 }
 
 function paymentStatusLabel(status?: string) {
@@ -141,6 +141,45 @@ function paymentStatusLabel(status?: string) {
   if (status === "rejected") return "Rejected";
   if (status === "host") return "Host share";
   return "Unpaid";
+}
+
+function itemQuantity(it: any) {
+  const qty = Number(it?.quantity ?? 1);
+  return Number.isFinite(qty) && qty > 0 ? qty : 1;
+}
+
+function itemUnitPrice(it: any) {
+  const unit = Number(it?.unit_price ?? 0);
+  if (Number.isFinite(unit) && unit > 0) return unit;
+  return Math.round(Number(it?.estimated_price ?? 0) / itemQuantity(it));
+}
+
+function cartStatusLabel(status?: string) {
+  if (status === "added") return "Added";
+  if (status === "substituted") return "Substitute";
+  if (status === "unavailable") return "Unavailable";
+  if (status === "skipped") return "Skipped";
+  if (status === "mixed") return "Mixed";
+  return "Pending";
+}
+
+function cartStatusClass(status?: string) {
+  if (status === "added") return "border-green-600/25 bg-green-600/10 text-green-600";
+  if (status === "substituted") return "border-blue-600/20 bg-blue-600/5 text-blue-600";
+  if (status === "unavailable" || status === "skipped") return "border-destructive/25 bg-destructive/10 text-destructive";
+  if (status === "mixed") return "border-border bg-muted/30 text-muted-foreground";
+  return "border-border bg-muted/20 text-muted-foreground";
+}
+
+function cartStatusReason(status?: string) {
+  if (status === "substituted") return "Host added a substitute for this product.";
+  if (status === "unavailable") return "This product was unavailable in the app.";
+  if (status === "skipped") return "Host skipped this item before checkout.";
+  return "This item was updated by the host.";
+}
+
+function needsRoommateAttention(it: any) {
+  return ["substituted", "unavailable", "skipped"].includes(it?.cart_status || "") || it?.is_purchased === false;
 }
 
 
@@ -215,9 +254,17 @@ function PoolDetail() {
   );
   const [item, setItem] = useState("");
   const [price, setPrice] = useState("");
+  const [itemQty, setItemQty] = useState(1);
   const [productUrl, setProductUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [addItemOpen, setAddItemOpen] = useState(false);
+  const [expandedRoommates, setExpandedRoommates] = useState<Record<string, boolean>>({});
+  const [editItemOpen, setEditItemOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<any | null>(null);
+  const [editItemName, setEditItemName] = useState("");
+  const [editPrice, setEditPrice] = useState("");
+  const [editItemQty, setEditItemQty] = useState(1);
+  const [editProductUrl, setEditProductUrl] = useState("");
 
   // Host checkout modal state
   const [checkoutOpen, setCheckoutOpen] = useState(false);
@@ -445,7 +492,31 @@ function PoolDetail() {
   };
 
   // Group items by roommate
-  const itemsWithLinks = allItems.filter((i: any) => i.product_url && i.is_purchased !== false);
+  const roommateRequestItems = allItems.filter((i: any) => !isHostParticipant(pool, i.added_by_name, user));
+  const hostRunnerItems = roommateRequestItems.filter((i: any) => i.product_url);
+  const missingLinkItems = roommateRequestItems.filter((i: any) => !i.product_url && i.is_purchased !== false);
+  const cartRunnerGroups = Object.values(
+    hostRunnerItems.reduce((acc: Record<string, any>, it: any) => {
+      const url = formatExternalUrl(it.product_url);
+      if (!url) return acc;
+      const key = url.toLowerCase();
+      const group = acc[key] ??= {
+        key,
+        url,
+        title: it.item_description,
+        items: [],
+        totalQty: 0,
+        totalEstimate: 0,
+      };
+      group.items.push(it);
+      group.totalQty += itemQuantity(it);
+      group.totalEstimate += Number(it.estimated_price ?? 0);
+      return acc;
+    }, {}),
+  ) as any[];
+  const resolvedCartGroups = cartRunnerGroups.filter((group: any) =>
+    group.items.every((it: any) => ["added", "substituted", "unavailable", "skipped"].includes(it.cart_status || "")),
+  ).length;
   const purchasedItems = allItems.filter((i: any) => i.is_purchased !== false);
   const cartTotal = purchasedItems.reduce((s: number, i: any) => s + i.estimated_price, 0);
   const cartPct = Math.min(100, Math.round((cartTotal / pool.min_cart_value) * 100));
@@ -542,7 +613,16 @@ function PoolDetail() {
 
     const numericPrice = parseFloat(price.trim());
     if (isNaN(numericPrice) || numericPrice <= 0 || numericPrice > 5000) {
-      toast.error("Estimated price must be between ₹1 and ₹5,000");
+      toast.error("Unit price must be between ₹1 and ₹5,000");
+      return;
+    }
+    if (!Number.isInteger(itemQty) || itemQty < 1 || itemQty > 50) {
+      toast.error("Quantity must be between 1 and 50");
+      return;
+    }
+    const totalPrice = numericPrice * itemQty;
+    if (totalPrice <= 0 || totalPrice > 5000) {
+      toast.error("Total item estimate must be between ₹1 and ₹5,000");
       return;
     }
 
@@ -562,12 +642,15 @@ function PoolDetail() {
           pool_id: id,
           added_by_name: name.trim(),
           item_description: item.trim(),
-          estimated_price: Math.round(numericPrice * 100),
-          product_url: productUrl.trim() || null,
+          estimated_price: Math.round(totalPrice * 100),
+          quantity: itemQty,
+          unit_price: Math.round(numericPrice * 100),
+          product_url: isHost ? null : productUrl.trim() || null,
         },
       });
       setItem("");
       setPrice("");
+      setItemQty(1);
       setProductUrl("");
       setAddItemOpen(false);
       toast.success("Item added!");
@@ -579,8 +662,75 @@ function PoolDetail() {
     }
   }
 
+  function openEditItem(it: any) {
+    const unitPrice = itemUnitPrice(it) / 100;
+    setEditingItem(it);
+    setEditItemName(it.item_description || "");
+    setEditPrice(Number.isInteger(unitPrice) ? String(unitPrice) : unitPrice.toFixed(2).replace(/\.?0+$/, ""));
+    setEditItemQty(itemQuantity(it));
+    setEditProductUrl(it.product_url || "");
+    setEditItemOpen(true);
+  }
+
+  function resetEditItem() {
+    setEditingItem(null);
+    setEditItemName("");
+    setEditPrice("");
+    setEditItemQty(1);
+    setEditProductUrl("");
+    setEditItemOpen(false);
+  }
+
+  async function saveEditedItem() {
+    if (!editingItem) return;
+    if (!editItemName.trim()) {
+      toast.error("Please enter an item name");
+      return;
+    }
+
+    const numericPrice = parseFloat(editPrice.trim());
+    if (isNaN(numericPrice) || numericPrice <= 0 || numericPrice > 5000) {
+      toast.error("Unit price must be between ₹1 and ₹5,000");
+      return;
+    }
+    if (!Number.isInteger(editItemQty) || editItemQty < 1 || editItemQty > 50) {
+      toast.error("Quantity must be between 1 and 50");
+      return;
+    }
+
+    const totalPrice = numericPrice * editItemQty;
+    if (totalPrice <= 0 || totalPrice > 5000) {
+      toast.error("Total item estimate must be between ₹1 and ₹5,000");
+      return;
+    }
+
+    const editingHostItem = isHostParticipant(pool, editingItem.added_by_name, user);
+    setBusy(true);
+    try {
+      await updateCartPoolItem({
+        pool_id: id,
+        item_id: editingItem.id,
+        data: {
+          item_description: editItemName.trim(),
+          estimated_price: Math.round(totalPrice * 100),
+          quantity: editItemQty,
+          unit_price: Math.round(numericPrice * 100),
+          product_url: editingHostItem ? null : editProductUrl.trim() || null,
+        },
+      });
+      toast.success("Item updated");
+      resetEditItem();
+      qc.invalidateQueries({ queryKey: ["pool-items", id] });
+      qc.invalidateQueries({ queryKey: ["pool", id] });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update item");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function deleteItem(itemId: string) {
-    if (!confirm("Remove this item?")) return;
+    if (!confirm("Remove this item from your cart?")) return;
     try {
       await deleteCartPoolItem({ pool_id: id, item_id: itemId });
       toast.success("Item removed");
@@ -591,16 +741,84 @@ function PoolDetail() {
   }
 
   async function toggleAvailability(itemId: string, currentStatus: boolean) {
+    const nextStatus = currentStatus ? "unavailable" : "pending";
     try {
       await updateCartPoolItem({
         pool_id: id,
         item_id: itemId,
-        data: { is_purchased: !currentStatus }
+        data: {
+          is_purchased: !currentStatus,
+          cart_status: nextStatus,
+          cart_status_reason: currentStatus
+            ? "Host marked this product unavailable in the delivery app."
+            : "Host moved this product back to the active cart.",
+        }
       });
-      toast.success("Item updated");
+      toast.success(currentStatus ? "Roommate will see this item as unavailable." : "Item restored to the active cart.");
       qc.invalidateQueries({ queryKey: ["pool-items", id] });
     } catch (err: any) {
       toast.error("Failed to update item availability");
+    }
+  }
+
+  async function skipRoommateItem(it: any) {
+    if (!confirm(`Skip "${it.item_description}" and notify ${it.added_by_name}?`)) return;
+    try {
+      await updateCartPoolItem({
+        pool_id: id,
+        item_id: it.id,
+        data: {
+          is_purchased: false,
+          cart_status: "skipped",
+          cart_status_reason: "Host removed this item from the shared cart.",
+        },
+      });
+      toast.success(`${it.added_by_name} will see this item as skipped.`);
+      qc.invalidateQueries({ queryKey: ["pool-items", id] });
+      qc.invalidateQueries({ queryKey: ["pool", id] });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to skip item");
+    }
+  }
+
+  async function updateCartRunnerGroup(groupItems: any[], status: "added" | "substituted" | "unavailable" | "skipped") {
+    const isPurchased = status === "added" || status === "substituted";
+    const reason =
+      status === "added"
+        ? "Host added this product to the delivery cart."
+        : status === "substituted"
+          ? "Host added a substitute or equivalent product."
+          : status === "unavailable"
+            ? "This product was unavailable in the delivery app."
+            : "Host skipped this product before checkout.";
+    setBusy(true);
+    try {
+      await Promise.all(groupItems.map((it) =>
+        updateCartPoolItem({
+          pool_id: id,
+          item_id: it.id,
+          data: {
+            cart_status: status,
+            is_purchased: isPurchased,
+            cart_status_reason: reason,
+          },
+        }),
+      ));
+      toast.success(
+        status === "added"
+          ? "Marked product as added."
+          : status === "substituted"
+            ? "Marked product as substituted. Roommates will see the update."
+            : status === "unavailable"
+              ? "Marked product unavailable and notified roommates in the cart."
+              : "Skipped product and notified roommates in the cart.",
+      );
+      qc.invalidateQueries({ queryKey: ["pool-items", id] });
+      qc.invalidateQueries({ queryKey: ["pool", id] });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update cart runner");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -863,6 +1081,7 @@ function PoolDetail() {
     : "";
   const settlementSummary = pool.settlement_summary ?? {};
   const hostAndroidStatus = pool.host_android_status ?? settlementSummary.host_android_status;
+  const editingHostItem = editingItem ? isHostParticipant(pool, editingItem.added_by_name, user) : false;
 
   if (!user) {
     return (
@@ -1000,7 +1219,7 @@ function PoolDetail() {
             <ChevronLeft className="h-5 w-5" />
           </button>
           <span className="text-base sm:text-lg font-black tracking-wider flex items-center gap-2 uppercase truncate text-foreground">
-            <span className="h-2.5 w-2.5 rounded-full bg-green-500 animate-pulse shrink-0" />
+            <span className="h-2.5 w-2.5 rounded-full bg-green-500 shrink-0" />
             Pooler
           </span>
         </div>
@@ -1029,10 +1248,7 @@ function PoolDetail() {
           jiomart: "border-t-[#0078AD]",
           amazon_now: "border-t-[#FF9900]",
         } as Record<string, string>)[pool.platform] || "border-t-primary"
-      } px-6 py-8 text-foreground flex flex-col justify-between relative overflow-hidden rounded-2xl shadow-lg shadow-black/30`}>
-        <div className="absolute right-0 top-0 opacity-5 transform translate-x-4 -translate-y-4 pointer-events-none">
-          <Sparkles className="h-32 w-32 text-foreground" />
-        </div>
+      } px-6 py-8 text-foreground flex flex-col justify-between relative overflow-hidden rounded-2xl shadow-sm`}>
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-zinc-500">Cart Pooling</p>
           <div className="flex items-center gap-3 mt-2">
@@ -1071,20 +1287,20 @@ function PoolDetail() {
       <div className="space-y-4 px-4 py-4 pb-96">
         {/* Status Callouts */}
         {pool.status === "completed" && isFullySettled && (
-          <div className="flex flex-col gap-3 p-4 bg-gradient-to-r from-green-500/15 to-emerald-500/5 border border-green-500/30 text-green-400 rounded-xl text-xs shadow-lg shadow-green-950/20">
+          <div className="flex flex-col gap-3 rounded-xl border border-green-600/25 bg-green-600/10 p-4 text-xs text-green-600">
             <div className="flex gap-2.5 items-start">
-              <Sparkles className="h-5 w-5 shrink-0 mt-0.5 text-green-500" />
+              <CheckCircle2 className="h-5 w-5 shrink-0 mt-0.5 text-green-600" />
               <div>
-                <p className="font-black uppercase tracking-wider text-green-400 text-sm">Pool Fully Settled</p>
-                <p className="text-zinc-300 leading-relaxed mt-1">
-                  Congratulations! All roommate splits for this {theme.name} pool have been paid and verified. No outstanding balances remain.
+                <p className="font-black uppercase tracking-wider text-green-600 text-sm">Pool Fully Settled</p>
+                <p className="text-muted-foreground leading-relaxed mt-1">
+                  All roommate splits for this {theme.name} pool are paid and verified. No outstanding balances remain.
                 </p>
               </div>
             </div>
             {pool.checkout_notes && (
-              <div className="bg-green-600/5 border border-green-500/10 rounded-lg p-3 text-xs">
-                <span className="font-bold text-green-500 uppercase tracking-widest text-[9px] md:text-xs block mb-1">Host Note / Message</span>
-                <p className="text-zinc-300 leading-relaxed font-semibold">
+              <div className="bg-background/50 border border-green-600/15 rounded-lg p-3 text-xs">
+                <span className="font-bold text-green-600 uppercase tracking-widest text-[9px] md:text-xs block mb-1">Host Note / Message</span>
+                <p className="text-muted-foreground leading-relaxed font-semibold">
                   "{pool.checkout_notes}"
                 </p>
               </div>
@@ -1191,27 +1407,122 @@ function PoolDetail() {
                   </Button>
                 </div>
 
-                {itemsWithLinks.length > 0 && (
-                  <div className="bg-surface p-4 rounded-xl border border-border space-y-3">
-                    <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 pl-0.5">
-                      <LinkIcon className="h-3 w-3 text-zinc-600" />
-                      <span>Roommate Item Links</span>
-                      <span className="bg-white/5 border border-border px-2 py-0.5 rounded-full text-xs font-bold text-foreground">{itemsWithLinks.length}</span>
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {itemsWithLinks.map((it: any) => (
-                        <a
-                          key={it.id}
-                          href={formatExternalUrl(it.product_url)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-surface-raised hover:bg-surface-interactive text-xs font-bold transition-all text-foreground hover:border-white/15"
-                        >
-                          <span className="max-w-[150px] truncate capitalize">{it.added_by_name}: {it.item_description}</span>
-                          <ExternalLink className="h-3 w-3 shrink-0 opacity-80" />
-                        </a>
-                      ))}
+                {(cartRunnerGroups.length > 0 || missingLinkItems.length > 0) && (
+                  <div className="rounded-xl border border-border bg-surface p-4 space-y-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5">
+                          <LinkIcon className="h-3.5 w-3.5 text-zinc-500" />
+                          <span>Cart Builder</span>
+                        </p>
+                        <p className="mt-1 text-xs font-semibold leading-relaxed text-muted-foreground">
+                          Product links are merged so the host adds each item once and tracks progress here.
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-3 gap-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-muted-foreground sm:min-w-[210px]">
+                        <Badge variant="outline" className="h-7 justify-center border-border bg-muted/20 text-[10px] font-bold text-foreground">
+                          {cartRunnerGroups.length} links
+                        </Badge>
+                        <Badge variant="outline" className="h-7 justify-center border-border bg-muted/20 text-[10px] font-bold text-foreground">
+                          {resolvedCartGroups} done
+                        </Badge>
+                        {missingLinkItems.length > 0 && (
+                          <Badge variant="outline" className="h-7 justify-center border-border bg-muted/20 text-[10px] font-bold text-foreground">
+                            {missingLinkItems.length} missing
+                          </Badge>
+                        )}
+                      </div>
                     </div>
+
+                    {cartRunnerGroups.length > 0 && (
+                      <div className="overflow-hidden rounded-lg border border-border bg-background/40">
+                        {cartRunnerGroups.map((group: any) => {
+                          const statuses = Array.from(new Set(group.items.map((it: any) => it.cart_status || "pending")));
+                          const status = statuses.length === 1 ? String(statuses[0]) : "mixed";
+                          const roommateBreakdown = group.items
+                            .map((it: any) => `${it.added_by_name} x${itemQuantity(it)}`)
+                            .join(" / ");
+
+                          return (
+                            <div key={group.key} className="border-b border-border/60 p-3 last:border-b-0">
+                              <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                                <div className="min-w-0 space-y-1">
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <p className="max-w-[300px] truncate text-xs font-bold text-foreground capitalize">
+                                      {group.title}
+                                    </p>
+                                    <Badge variant="outline" className={`h-5 px-1.5 text-[10px] font-bold uppercase ${cartStatusClass(status)}`}>
+                                      {cartStatusLabel(status)}
+                                    </Badge>
+                                  </div>
+                                  <p className="text-xs font-semibold text-muted-foreground leading-relaxed">
+                                    Qty <strong className="text-foreground">{group.totalQty}</strong> - Est. <strong className="text-foreground">{rupees(group.totalEstimate)}</strong> - <span className="text-zinc-500">{roommateBreakdown}</span>
+                                  </p>
+                                </div>
+
+                                <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5 xl:flex xl:items-center">
+                                  <a
+                                    href={group.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-[10px] font-bold uppercase tracking-wider text-foreground hover:bg-muted/40"
+                                  >
+                                    Open <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => updateCartRunnerGroup(group.items, "added")}
+                                    disabled={busy}
+                                    className="h-8 border-green-600/25 px-2.5 text-[10px] font-bold uppercase tracking-wider text-green-600 hover:bg-green-600/10"
+                                  >
+                                    Added
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => updateCartRunnerGroup(group.items, "substituted")}
+                                    disabled={busy}
+                                    className="h-8 border-border px-2.5 text-[10px] font-bold uppercase tracking-wider text-foreground hover:bg-muted/40"
+                                  >
+                                    Substitute
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => updateCartRunnerGroup(group.items, "unavailable")}
+                                    disabled={busy}
+                                    className="h-8 border-destructive/25 px-2.5 text-[10px] font-bold uppercase tracking-wider text-destructive hover:bg-destructive/10"
+                                  >
+                                    Unavailable
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => updateCartRunnerGroup(group.items, "skipped")}
+                                    disabled={busy}
+                                    className="h-8 border-border px-2.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:bg-muted/40"
+                                  >
+                                    Skip
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {missingLinkItems.length > 0 && (
+                      <div className="rounded-lg border border-border bg-muted/20 p-3 text-xs font-semibold leading-relaxed text-muted-foreground">
+                        <strong className="text-foreground">{missingLinkItems.length} active item{missingLinkItems.length === 1 ? "" : "s"} missing links.</strong>{" "}
+                        Ask roommates to add product links, or search them manually from the list below.
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1229,7 +1540,7 @@ function PoolDetail() {
                     </p>
                   </div>
                   {!isFullySettled && (
-                    <Badge variant="outline" className="w-fit border-amber-500/25 bg-amber-500/10 text-amber-400 text-[10px] font-black uppercase tracking-wider">
+                    <Badge variant="outline" className="w-fit border-orange-600/25 bg-orange-600/10 text-orange-600 text-[10px] font-black uppercase tracking-wider">
                       {settlementSummary.next_action || "Action needed"}
                     </Badge>
                   )}
@@ -1239,7 +1550,7 @@ function PoolDetail() {
                   <div className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 text-xs ${
                     hostAndroidStatus.can_auto_verify
                       ? "border-green-500/25 bg-green-500/10 text-green-400"
-                      : "border-amber-500/25 bg-amber-500/10 text-amber-400"
+                      : "border-orange-600/25 bg-orange-600/10 text-orange-600"
                   }`}>
                     <Smartphone className="h-4 w-4 shrink-0" />
                     <div className="min-w-0 flex-1">
@@ -1251,7 +1562,7 @@ function PoolDetail() {
                         size="sm"
                         variant="outline"
                         onClick={() => nav({ to: "/companion" })}
-                        className="h-8 shrink-0 border-amber-500/30 text-amber-400 hover:bg-amber-500/10 text-[10px] font-bold uppercase"
+                        className="h-8 shrink-0 border-orange-600/30 text-orange-600 hover:bg-orange-600/10 text-[10px] font-bold uppercase"
                       >
                         Setup
                       </Button>
@@ -1356,7 +1667,7 @@ function PoolDetail() {
                                     VERIFIED
                                   </Badge>
                                   {(details.settlementMode === "settle_in_kind" || details.settlement_mode === "settle_in_kind") && (
-                                    <span className="text-[10px] md:text-xs text-amber-500 font-bold bg-amber-500/10 border border-amber-500/20 px-1.5 rounded">
+                                    <span className="text-[10px] md:text-xs text-muted-foreground font-bold bg-muted/20 border border-border px-1.5 rounded">
                                       Settled In Kind
                                     </span>
                                   )}
@@ -1383,7 +1694,7 @@ function PoolDetail() {
                                     size="sm"
                                     variant="outline"
                                     onClick={() => handleVerifyPayment(rName, "settle_in_kind")}
-                                    className="h-8 border-amber-500/20 text-amber-500 hover:bg-amber-500/5 py-1 px-2 text-[10px] md:text-xs uppercase font-bold tracking-wider"
+                                    className="h-8 border-border text-muted-foreground hover:bg-muted/40 py-1 px-2 text-[10px] md:text-xs uppercase font-bold tracking-wider"
                                   >
                                     In Kind
                                   </Button>
@@ -1440,7 +1751,7 @@ function PoolDetail() {
                           details.paymentStatus === "verified" || details.paymentStatus === "host"
                             ? "bg-green-500"
                             : details.paymentStatus === "pending" || details.paymentStatus === "needs_review"
-                              ? "bg-amber-500 animate-pulse"
+                              ? "bg-orange-500"
                               : details.paymentStatus === "rejected"
                                 ? "bg-destructive"
                                 : details.isOverdue
@@ -1466,9 +1777,9 @@ function PoolDetail() {
                         {details.paymentStatus === "verified" ? (
                           <span className="text-green-500 font-bold">Paid</span>
                         ) : details.paymentStatus === "pending" ? (
-                          <span className="text-amber-500 font-bold animate-pulse">UTR Pending</span>
+                          <span className="text-orange-600 font-bold">UTR Pending</span>
                         ) : details.paymentStatus === "needs_review" ? (
-                          <span className="text-orange-400 font-bold animate-pulse">Needs Review</span>
+                          <span className="text-orange-400 font-bold">Needs Review</span>
                         ) : details.paymentStatus === "rejected" ? (
                           <span className="text-destructive font-bold">Rejected</span>
                         ) : details.paymentStatus === "host" ? (
@@ -1501,7 +1812,7 @@ function PoolDetail() {
           <Card className="p-5 border border-border bg-surface-raised/40 space-y-4">
             <div className="flex items-center justify-between border-b border-border pb-3">
               <h3 className="text-xs font-bold text-zinc-400 tracking-[0.2em] uppercase flex items-center gap-1.5">
-                <Sparkles className="h-4 w-4 text-primary" /> UPI Split Settlement
+                <Shield className="h-4 w-4 text-primary" /> UPI Split Settlement
               </h3>
               <Badge className="bg-white/5 border border-border text-foreground text-xs font-bold uppercase tracking-wider px-2 py-0.5">VPA Direct</Badge>
             </div>
@@ -1527,7 +1838,7 @@ function PoolDetail() {
                 <div className={`flex items-start gap-2.5 rounded-xl border p-3 text-xs ${
                   hostAndroidStatus.can_auto_verify
                     ? "border-green-500/20 bg-green-500/10 text-green-400"
-                    : "border-amber-500/25 bg-amber-500/10 text-amber-400"
+                    : "border-orange-600/25 bg-orange-600/10 text-orange-600"
                 }`}>
                   <Smartphone className="h-4 w-4 shrink-0 mt-0.5" />
                   <p className="leading-relaxed text-zinc-300">
@@ -1555,7 +1866,7 @@ function PoolDetail() {
                     </div>
                   ) : payeeDetails.paymentStatus === "pending" ? (
                     <div className="text-center space-y-1.5">
-                      <div className="inline-flex items-center gap-1.5 text-xs text-amber-500 bg-amber-500/10 border border-amber-500/20 px-4 py-2 rounded-full font-bold">
+                      <div className="inline-flex items-center gap-1.5 text-xs text-orange-600 bg-orange-600/10 border border-orange-600/20 px-4 py-2 rounded-full font-bold">
                         Pending Verification
                       </div>
                       <p className="text-xs text-muted-foreground font-mono">UTR: {payeeDetails.utr}</p>
@@ -1703,10 +2014,17 @@ function PoolDetail() {
         {/* List of items inside pool */}
         <div id="list-pool-items" className="space-y-4">
           <div className="flex items-center justify-between gap-3 border-b border-border pb-2">
-            <h3 className="text-xs font-bold text-zinc-500 tracking-[0.25em] uppercase flex items-center gap-1.5 min-w-0">
-              <ShoppingBag className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">Roommate Carts</span>
-            </h3>
+            <div className="min-w-0">
+              <h3 className="text-xs font-bold text-zinc-500 tracking-[0.25em] uppercase flex items-center gap-1.5 min-w-0">
+                <ShoppingBag className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">Cart Requests</span>
+              </h3>
+              {participants.length > 0 && (
+                <p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {participants.length} roommate{participants.length === 1 ? "" : "s"} - {purchasedItems.length} active item{purchasedItems.length === 1 ? "" : "s"}
+                </p>
+              )}
+            </div>
             {pool.status === "open" && (
               <Button
                 id="btn-open-add-pool-item"
@@ -1729,79 +2047,161 @@ function PoolDetail() {
           {Object.entries(grouped).map(([who, its]) => {
             const whoActiveItems = its.filter(it => it.is_purchased !== false);
             const whoTotal = whoActiveItems.reduce((s, it) => s + it.estimated_price, 0);
+            const whoQuantity = whoActiveItems.reduce((s, it) => s + itemQuantity(it), 0);
+            const attentionItems = its.filter(needsRoommateAttention);
+            const orderedItems = [...its].sort((a, b) => {
+              const aNeedsAttention = needsRoommateAttention(a) ? 1 : 0;
+              const bNeedsAttention = needsRoommateAttention(b) ? 1 : 0;
+              if (aNeedsAttention !== bNeedsAttention) return bNeedsAttention - aNeedsAttention;
+              return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+            });
+            const isExpanded = expandedRoommates[who] ?? false;
+            const visibleItems = isExpanded ? orderedItems : orderedItems.slice(0, 8);
+            const hiddenCount = orderedItems.length - visibleItems.length;
+            const shownUpdates = attentionItems.slice(0, 3);
 
             return (
-              <Card key={who} className="p-4 bg-surface border border-border space-y-3">
-                <div className="flex justify-between items-center border-b border-border/80 pb-2">
-                  <span className="font-bold text-xs text-foreground capitalize flex flex-col items-start min-w-0">
-                    <span className="flex items-center gap-1.5 font-bold">
-                      <User className="h-3.5 w-3.5 text-zinc-500" />
-                      <span>{who}</span>
-                    </span>
+              <Card key={who} className="overflow-hidden border border-border bg-surface">
+                <div className="flex flex-col gap-2 border-b border-border/80 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <User className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+                      <span className="truncate text-xs font-bold capitalize text-foreground">{who}</span>
+                      <Badge variant="outline" className="h-5 border-border bg-muted/20 px-1.5 text-[10px] font-bold text-muted-foreground">
+                        {whoActiveItems.length} item{whoActiveItems.length === 1 ? "" : "s"}
+                      </Badge>
+                    </div>
                     {splitBreakdown[who]?.email && (
-                      <span className="text-[10px] md:text-xs text-zinc-500 font-semibold lowercase mt-0.5 block truncate max-w-[200px]">
+                      <p className="mt-0.5 truncate text-[10px] font-semibold lowercase text-zinc-500">
                         {splitBreakdown[who].email}
-                      </span>
+                      </p>
                     )}
-                  </span>
-                  <span className="font-black text-xs text-foreground tnum">
-                    {rupees(whoTotal)}
-                  </span>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs font-semibold text-muted-foreground">
+                    <span>{whoQuantity} unit{whoQuantity === 1 ? "" : "s"}</span>
+                    <span className="font-black text-foreground tnum">{rupees(whoTotal)}</span>
+                  </div>
                 </div>
 
+                {attentionItems.length > 0 && (
+                  <div className="border-b border-border/60 px-4 py-3">
+                    <div className="rounded-lg border border-border bg-muted/20 p-3">
+                      <div className="flex items-start gap-2.5">
+                        <Bell className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-foreground">
+                              Item Updates
+                            </p>
+                            <Badge variant="outline" className="h-5 border-border bg-background px-1.5 text-[10px] font-bold text-muted-foreground">
+                              {attentionItems.length} update{attentionItems.length === 1 ? "" : "s"}
+                            </Badge>
+                          </div>
+                          <div className="mt-2 space-y-1.5">
+                            {shownUpdates.map((it: any) => {
+                              const status = it.cart_status || "skipped";
+                              const reason = it.cart_status_reason || (it.is_purchased === false ? "This item is no longer part of the split." : cartStatusReason(status));
+
+                              return (
+                                <p key={it.id} className="text-xs font-semibold leading-relaxed text-muted-foreground">
+                                  <span className="font-bold text-foreground">{it.item_description}</span>
+                                  <span className="text-zinc-500"> - {cartStatusLabel(status)}: {reason}</span>
+                                </p>
+                              );
+                            })}
+                            {attentionItems.length > shownUpdates.length && (
+                              <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                                +{attentionItems.length - shownUpdates.length} more update{attentionItems.length - shownUpdates.length === 1 ? "" : "s"} in this cart
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="divide-y divide-border/50">
-                  {its.map((it) => {
+                  {visibleItems.map((it) => {
                     const isOwnItem = name && it.added_by_name === name;
                     const canEditItem = (pool.status === "open") && (isHost || isOwnItem);
+                    const itemBelongsToHost = isHostParticipant(pool, it.added_by_name, user);
+                    const hostManagingRoommateItem = Boolean(isHost && !itemBelongsToHost);
+                    const itemNeedsAttention = needsRoommateAttention(it);
 
                     return (
-                      <div key={it.id} className={`flex items-center justify-between py-3 transition-opacity ${it.is_purchased === false ? "opacity-30 line-through" : ""}`}>
-                        <div className="flex-1 min-w-0 pr-3 flex flex-col items-start gap-1">
-                          <p className="text-xs font-bold text-foreground truncate">{it.item_description}</p>
+                      <div key={it.id} className={`flex items-center justify-between gap-3 px-4 py-3 transition-opacity ${it.is_purchased === false ? "opacity-50" : ""}`}>
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <div className="flex max-w-full flex-wrap items-center gap-1.5">
+                            <p className={`truncate text-xs font-bold text-foreground ${it.is_purchased === false ? "line-through" : ""}`}>{it.item_description}</p>
+                            {itemQuantity(it) > 1 && (
+                              <Badge variant="outline" className="h-5 border-border bg-muted/20 px-1.5 py-0 text-[10px] font-bold text-muted-foreground">
+                                x{itemQuantity(it)}
+                              </Badge>
+                            )}
+                            {it.cart_status && it.cart_status !== "pending" && (
+                              <Badge variant="outline" className={`h-5 px-1.5 py-0 text-[10px] font-bold uppercase ${cartStatusClass(it.cart_status)}`}>
+                                {cartStatusLabel(it.cart_status)}
+                              </Badge>
+                            )}
+                          </div>
 
-                          {it.product_url && (
-                            <a
-                              href={formatExternalUrl(it.product_url)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 mt-0.5 px-2 py-0.5 rounded text-xs font-black uppercase tracking-wider transition-all border border-border bg-white/5 text-muted-foreground hover:text-foreground"
-                              title={`Open on ${theme.name}`}
-                            >
-                              <ExternalLink className="h-2.5 w-2.5 text-current" />
-                              <span>View Item ↗</span>
-                            </a>
-                          )}
-
-                          <p className="text-xs text-zinc-500 font-semibold flex items-center gap-1.5 mt-0.5 uppercase tracking-wider">
+                          <p className="flex flex-wrap items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
                             {relativeTime(it.created_at)}
+                            {itemQuantity(it) > 1 && (
+                              <span className="text-zinc-600">- {rupees(itemUnitPrice(it))} each</span>
+                            )}
+                            {it.product_url && !itemBelongsToHost && (
+                              <a
+                                href={formatExternalUrl(it.product_url)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 rounded border border-border bg-muted/20 px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground hover:text-foreground"
+                                title={`Open on ${theme.name}`}
+                              >
+                                Link <ExternalLink className="h-2.5 w-2.5" />
+                              </a>
+                            )}
                             {it.is_purchased === false && (
-                              <Badge className="bg-destructive/10 text-destructive border-none text-[11px] md:text-xs py-0.5 px-2 hover:bg-destructive/10">Out of Stock</Badge>
+                              <Badge variant="outline" className="h-5 border-border bg-muted/20 px-1.5 py-0 text-[10px] font-bold text-muted-foreground">
+                                Excluded
+                              </Badge>
                             )}
                           </p>
+                          {itemNeedsAttention && (
+                            <p className="flex items-start gap-1.5 text-[10px] font-semibold leading-relaxed text-muted-foreground">
+                              <Bell className="mt-0.5 h-3 w-3 shrink-0" />
+                              <span>{it.cart_status_reason || (it.is_purchased === false ? "This item is no longer part of the split." : cartStatusReason(it.cart_status))}</span>
+                            </p>
+                          )}
                         </div>
-                        <div className="flex items-center gap-4">
-                          <span className="font-black text-xs text-foreground tnum">{rupees(it.estimated_price)}</span>
+                        <div className="flex shrink-0 items-center gap-3">
+                          <span className="text-xs font-black text-foreground tnum">{rupees(it.estimated_price)}</span>
 
                           {/* Item Actions */}
                           {canEditItem && (
                             <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => openEditItem(it)}
+                                className="cursor-pointer rounded-md border border-border p-1.5 text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+                                title="Edit item"
+                                aria-label="Edit item"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
                               {isHost && (
                                 <button
                                   onClick={() => toggleAvailability(it.id, it.is_purchased !== false)}
-                                  className={`p-1 rounded border text-xs font-semibold cursor-pointer ${
-                                    it.is_purchased !== false
-                                      ? "text-green-500 hover:text-green-600 border-green-500/10 bg-green-500/5"
-                                      : "text-red-500 hover:text-red-600 border-red-500/10 bg-red-500/5"
-                                  }`}
-                                  title={it.is_purchased !== false ? "Mark Out of Stock" : "Mark Available"}
+                                  className={`cursor-pointer rounded-md border border-border p-1.5 text-muted-foreground hover:bg-muted/40 ${it.is_purchased !== false ? "hover:text-destructive" : "hover:text-green-600"}`}
+                                  title={it.is_purchased !== false ? "Mark unavailable and notify roommate" : "Restore item to active cart"}
                                 >
-                                  {it.is_purchased !== false ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
+                                  {it.is_purchased !== false ? <X className="h-3 w-3" /> : <Check className="h-3 w-3" />}
                                 </button>
                               )}
                               <button
-                                onClick={() => deleteItem(it.id)}
-                                className="p-1 rounded text-destructive hover:text-destructive/80 hover:bg-destructive/5 cursor-pointer"
-                                title="Remove Item"
+                                onClick={() => hostManagingRoommateItem ? skipRoommateItem(it) : deleteItem(it.id)}
+                                className="cursor-pointer rounded-md border border-border p-1.5 text-muted-foreground hover:bg-muted/40 hover:text-destructive"
+                                title={hostManagingRoommateItem ? "Skip item and notify roommate" : "Remove item"}
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
                               </button>
@@ -1812,13 +2212,27 @@ function PoolDetail() {
                     );
                   })}
                 </div>
+                {orderedItems.length > 8 && (
+                  <div className="border-t border-border/60 bg-muted/10 px-4 py-2.5">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setExpandedRoommates((current) => ({ ...current, [who]: !isExpanded }))}
+                      className="h-8 w-full justify-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground"
+                    >
+                      {isExpanded ? <Minus className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
+                      {isExpanded ? "Show less" : `Show ${hiddenCount} more`}
+                    </Button>
+                  </div>
+                )}
               </Card>
             );
           })}
         </div>
       </div>
 
-      {/* Floating fast, registration-free item entry canvas form */}
+      {/* Floating quick item entry form */}
       {pool.status === "open" && (
         <form
           id="form-add-item"
@@ -1830,7 +2244,7 @@ function PoolDetail() {
         >
           <div className="flex justify-between items-center pb-0.5">
             <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">Quick Add Item</h4>
-            <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Registration Free</span>
+            <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">{isHost ? "Qty" : "Qty + Link"}</span>
           </div>
           <div className="space-y-2">
             <div className="flex items-center gap-2 bg-muted/30 border border-border px-3 py-2 rounded-xl text-xs text-zinc-400">
@@ -1860,16 +2274,46 @@ function PoolDetail() {
                 />
               </div>
             </div>
-            <div className="relative">
-              <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
-              <Input
-                id="input-pool-link"
-                value={productUrl}
-                onChange={(e) => setProductUrl(e.target.value)}
-                placeholder="Product Link (Optional)"
-                className="bg-background text-xs h-10 pl-9"
-              />
+            <div className="flex items-center justify-between rounded-xl border border-border bg-muted/20 px-3 py-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Quantity</span>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  onClick={() => setItemQty((qty) => Math.max(1, qty - 1))}
+                  className="h-8 w-8 rounded-md"
+                  aria-label="Decrease quantity"
+                >
+                  <Minus className="h-3.5 w-3.5" />
+                </Button>
+                <span className="grid h-8 min-w-9 place-items-center rounded-md border border-border bg-background px-2 text-sm font-black text-foreground tnum">
+                  {itemQty}
+                </span>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  onClick={() => setItemQty((qty) => Math.min(50, qty + 1))}
+                  className="h-8 w-8 rounded-md"
+                  aria-label="Increase quantity"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              </div>
             </div>
+            {!isHost && (
+              <div className="relative">
+                <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                <Input
+                  id="input-pool-link"
+                  value={productUrl}
+                  onChange={(e) => setProductUrl(e.target.value)}
+                  placeholder="Product link, optional"
+                  className="bg-background text-xs h-10 pl-9"
+                />
+              </div>
+            )}
             <Button
               id="btn-add-pool-item"
               type="submit"
@@ -1925,10 +2369,10 @@ function PoolDetail() {
                 </div>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-[120px_1fr]">
+              <div className={`grid gap-3 ${isHost ? "" : "sm:grid-cols-[120px_1fr]"}`}>
                 <div className="space-y-1.5">
                   <label htmlFor="input-pool-price-dialog" className="text-xs font-semibold text-muted-foreground">
-                    Price
+                    Unit price
                   </label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-zinc-500">₹</span>
@@ -1943,20 +2387,56 @@ function PoolDetail() {
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label htmlFor="input-pool-link-dialog" className="text-xs font-semibold text-muted-foreground">
-                    Product link, optional
-                  </label>
-                  <div className="relative">
-                    <LinkIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-                    <Input
-                      id="input-pool-link-dialog"
-                      value={productUrl}
-                      onChange={(e) => setProductUrl(e.target.value)}
-                      placeholder="Paste item URL"
-                      className="h-10 bg-background pl-9 text-sm"
-                    />
+                {!isHost && (
+                  <div className="space-y-1.5">
+                    <label htmlFor="input-pool-link-dialog" className="text-xs font-semibold text-muted-foreground">
+                      Product link, optional
+                    </label>
+                    <div className="relative">
+                      <LinkIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                      <Input
+                        id="input-pool-link-dialog"
+                        value={productUrl}
+                        onChange={(e) => setProductUrl(e.target.value)}
+                        placeholder="Paste item URL"
+                        className="h-10 bg-background pl-9 text-sm"
+                      />
+                    </div>
                   </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between rounded-xl border border-border bg-muted/20 px-3 py-2.5">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Quantity</p>
+                  <p className="text-xs font-semibold text-zinc-500">
+                    Line total: {price ? rupees(Math.round((parseFloat(price) || 0) * itemQty * 100)) : "Not set"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    onClick={() => setItemQty((qty) => Math.max(1, qty - 1))}
+                    className="h-9 w-9 rounded-md"
+                    aria-label="Decrease quantity"
+                  >
+                    <Minus className="h-4 w-4" />
+                  </Button>
+                  <span className="grid h-9 min-w-10 place-items-center rounded-md border border-border bg-background px-2 text-base font-black text-foreground tnum">
+                    {itemQty}
+                  </span>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    onClick={() => setItemQty((qty) => Math.min(50, qty + 1))}
+                    className="h-9 w-9 rounded-md"
+                    aria-label="Increase quantity"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
                 </div>
               </div>
             </div>
@@ -1972,6 +2452,146 @@ function PoolDetail() {
                 className="bg-primary text-primary-foreground hover:opacity-95"
               >
                 {busy ? "Adding..." : "Add to Cart Split"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editItemOpen} onOpenChange={(open) => open ? setEditItemOpen(true) : resetEditItem()}>
+        <DialogContent id="dialog-edit-pool-item" className="max-w-[440px]">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              saveEditedItem();
+            }}
+            className="space-y-4"
+          >
+            <DialogHeader>
+              <DialogTitle>Edit Item</DialogTitle>
+            </DialogHeader>
+            <p className="text-xs font-semibold leading-relaxed text-muted-foreground">
+              Update the item before checkout. The split recalculates from quantity and unit price.
+            </p>
+
+            <div className="space-y-3 text-sm">
+              {editingItem && (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-500 uppercase tracking-widest pl-0.5">
+                    Owner
+                  </label>
+                  <div className="flex items-center justify-between gap-2.5 rounded-xl border border-border bg-muted/30 px-3 py-2.5 text-sm text-zinc-400">
+                    <span className="min-w-0 truncate">
+                      <strong className="text-foreground capitalize">{editingItem.added_by_name}</strong>
+                    </span>
+                    {editingHostItem && (
+                      <Badge variant="outline" className="h-5 border-border bg-background px-1.5 text-[10px] font-bold text-muted-foreground">
+                        Host item
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <label htmlFor="input-edit-pool-item" className="text-xs font-semibold text-muted-foreground">
+                  Item
+                </label>
+                <div className="relative">
+                  <ShoppingBag className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                  <Input
+                    id="input-edit-pool-item"
+                    value={editItemName}
+                    onChange={(e) => setEditItemName(e.target.value)}
+                    placeholder="Item name"
+                    className="h-10 bg-background pl-9 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className={`grid gap-3 ${editingHostItem ? "" : "sm:grid-cols-[120px_1fr]"}`}>
+                <div className="space-y-1.5">
+                  <label htmlFor="input-edit-pool-price" className="text-xs font-semibold text-muted-foreground">
+                    Unit price
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-zinc-500">₹</span>
+                    <Input
+                      id="input-edit-pool-price"
+                      type="number"
+                      value={editPrice}
+                      onChange={(e) => setEditPrice(e.target.value)}
+                      placeholder="80"
+                      className="h-10 bg-background pl-6 pr-3 text-right text-sm font-bold text-foreground"
+                    />
+                  </div>
+                </div>
+
+                {!editingHostItem && (
+                  <div className="space-y-1.5">
+                    <label htmlFor="input-edit-pool-link" className="text-xs font-semibold text-muted-foreground">
+                      Product link, optional
+                    </label>
+                    <div className="relative">
+                      <LinkIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                      <Input
+                        id="input-edit-pool-link"
+                        value={editProductUrl}
+                        onChange={(e) => setEditProductUrl(e.target.value)}
+                        placeholder="Paste item URL"
+                        className="h-10 bg-background pl-9 text-sm"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between rounded-xl border border-border bg-muted/20 px-3 py-2.5">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Quantity</p>
+                  <p className="text-xs font-semibold text-zinc-500">
+                    Line total: {editPrice ? rupees(Math.round((parseFloat(editPrice) || 0) * editItemQty * 100)) : "Not set"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    onClick={() => setEditItemQty((qty) => Math.max(1, qty - 1))}
+                    className="h-9 w-9 rounded-md"
+                    aria-label="Decrease quantity"
+                  >
+                    <Minus className="h-4 w-4" />
+                  </Button>
+                  <span className="grid h-9 min-w-10 place-items-center rounded-md border border-border bg-background px-2 text-base font-black text-foreground tnum">
+                    {editItemQty}
+                  </span>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    onClick={() => setEditItemQty((qty) => Math.min(50, qty + 1))}
+                    className="h-9 w-9 rounded-md"
+                    aria-label="Increase quantity"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-2">
+              <Button type="button" variant="outline" onClick={resetEditItem} disabled={busy}>
+                Cancel
+              </Button>
+              <Button
+                id="btn-save-pool-item-dialog"
+                type="submit"
+                disabled={busy}
+                className="bg-primary text-primary-foreground hover:opacity-95"
+              >
+                {busy ? "Saving..." : "Save Changes"}
               </Button>
             </DialogFooter>
           </form>
@@ -2169,28 +2789,28 @@ function PoolDetail() {
         </DialogContent>
       </Dialog>
 
-      {/* Settlement Complete Celebration Modal */}
+      {/* Settlement complete receipt modal */}
       <Dialog open={settledPopupOpen} onOpenChange={setSettledPopupOpen}>
-        <DialogContent id="dialog-settlement-complete" className="max-w-[400px] text-center p-6 space-y-4">
-          <div className="mx-auto w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center border border-green-500/30 text-green-500 animate-bounce">
-            <Sparkles className="h-8 w-8 animate-pulse" />
+        <DialogContent id="dialog-settlement-complete" className="max-w-[400px] p-6 space-y-4">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-green-600/25 bg-green-600/10 text-green-600">
+            <CheckCircle2 className="h-7 w-7" />
           </div>
-          <DialogHeader className="text-center">
-            <DialogTitle className="text-xl font-black uppercase tracking-tight text-foreground text-center">
-              Settlement Complete!
+          <DialogHeader>
+            <DialogTitle className="text-center text-lg font-black uppercase tracking-tight text-foreground">
+              Settlement Complete
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-2 text-xs">
-            <p className="text-zinc-300 leading-relaxed font-semibold">
-              All roommates have paid their splits, and all payments are fully verified!
+          <div className="space-y-2 text-center text-xs">
+            <p className="text-foreground leading-relaxed font-semibold">
+              All roommate splits are paid and verified.
             </p>
             <p className="text-muted-foreground leading-normal">
-              This pool is now fully settled. The transactions have been logged into your personal finance ledger.
+              This pool is now a settled receipt in your PocketBuddy ledger.
             </p>
           </div>
           <DialogFooter className="sm:justify-center">
-            <Button onClick={() => setSettledPopupOpen(false)} className="bg-green-600 hover:bg-green-700 text-white font-bold uppercase tracking-wider text-xs px-6 py-2.5">
-              Awesome
+            <Button onClick={() => setSettledPopupOpen(false)} className="bg-primary text-primary-foreground hover:opacity-95 font-bold uppercase tracking-wider text-xs px-6 py-2.5">
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>
