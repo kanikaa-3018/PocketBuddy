@@ -27,7 +27,8 @@ async def get_insights(user_id: str = Depends(get_current_user)):
     # Fetch last 60 days of transactions
     since = datetime.datetime.utcnow() - datetime.timedelta(days=60)
     cursor = db.transactions.find({"user_id": user_id, "created_at": {"$gte": since}}).sort("created_at", -1)
-    txns = await cursor.to_list(length=2000)
+    all_txns = await cursor.to_list(length=2000)
+    txns = [t for t in all_txns if t.get("direction", "debit") != "credit"]
 
     # Fetch profile for exam dates
     profile = await db.profiles.find_one({"_id": user_id})
@@ -120,95 +121,8 @@ async def get_insights(user_id: str = Depends(get_current_user)):
         or any(kw in (t.get("mapped_merchant_name") or "").lower() for kw in delivery_keywords)
     ]
     delivery_count = len(delivery_txns)
-    campus_direct_txns = [t for t in food_txns if t not in delivery_txns]
-    mess_count = max(0, len(campus_direct_txns))
+    mess_count = max(0, len(food_txns) - delivery_count)
     delivery_spend_paise = sum(t.get("amount", 0) for t in delivery_txns)
-    food_30 = [t for t in food_txns if t.get("created_at", now) >= since_30]
-    avg_meal_cost_paise = round(sum(t.get("amount", 0) for t in food_30) / len(food_30)) if food_30 else 0
-
-    grocery_keywords = ["grocery", "groceries", "kirana", "blinkit", "zepto", "dmart", "bigbasket", "vegetable", "milk"]
-    cooking_txns = [
-        t for t in txns
-        if t.get("created_at", now) >= since_30 and (
-            (t.get("category") or "").lower() in {"grocery", "groceries"}
-            or any(kw in ((t.get("mapped_merchant_name") or t.get("raw_merchant_string") or "").lower()) for kw in grocery_keywords)
-        )
-    ]
-    hostel_hint = (profile or {}).get("hostel_block", "")
-    hostel_hint_l = str(hostel_hint or "").lower()
-    if (profile or {}).get("mess_enrolled"):
-        routine_type = "hostel_mess"
-        routine_label = "Hostel mess + campus food"
-    elif any(k in hostel_hint_l for k in ("pg", "paying guest", "flat", "rented")):
-        routine_type = "pg_cooking"
-        routine_label = "PG cooking + campus food"
-    elif any(k in hostel_hint_l for k in ("day scholar", "commuter", "none")):
-        routine_type = "day_scholar"
-        routine_label = "Day scholar routine"
-    elif cooking_txns and len(cooking_txns) >= max(2, delivery_count):
-        routine_type = "pg_cooking"
-        routine_label = "Cooking-led routine"
-    else:
-        routine_type = "mixed"
-        routine_label = "Mixed meal routine"
-
-    # ── Price spikes detection ─────────────────────────────────────────────
-    price_spikes = []
-    active_foods = await db.campus_food.find({"status": "active"}).to_list(length=1000)
-    pending_menu_count = await db.campus_food.count_documents({"status": "pending_verification"})
-    trusted_menu_count = sum(1 for item in active_foods if item.get("verification_votes", 0) >= item.get("verification_threshold", 3))
-    fresh_menu_count = 0
-    for item in active_foods:
-        history = item.get("price_history") or []
-        if not history:
-            continue
-        last_changed = history[-1].get("changed_at")
-        if not last_changed:
-            continue
-        try:
-            last_changed_dt = datetime.datetime.fromisoformat(str(last_changed).replace("Z", "+00:00")).replace(tzinfo=None)
-            if (now - last_changed_dt).days <= 30:
-                fresh_menu_count += 1
-        except Exception:
-            continue
-    venue_items = {}
-    for item in active_foods:
-        v_name = item.get("venue_name")
-        if v_name:
-            venue_items.setdefault(v_name.lower().strip(), []).append(item)
-
-    food_txns_7d = [t for t in food_txns if t.get("created_at", now) >= since_7]
-    merchant_txns = {}
-    for t in food_txns_7d:
-        m_name = t.get("mapped_merchant_name") or t.get("raw_merchant_string")
-        if m_name:
-            merchant_txns.setdefault(m_name.lower().strip(), []).append(t)
-
-    for m_name_lower, txs in merchant_txns.items():
-        matching_venue = None
-        for v_name in venue_items.keys():
-            if v_name in m_name_lower or m_name_lower in v_name:
-                matching_venue = v_name
-                break
-
-        if matching_venue:
-            catalog_items = venue_items[matching_venue]
-            for tx in txs:
-                amount_rs = tx.get("amount", 0) / 100.0
-                for cat_it in catalog_items:
-                    cat_price_rs = cat_it.get("price", 0) / 100.0
-                    if cat_price_rs > 0 and 1.05 < (amount_rs / cat_price_rs) <= 1.50:
-                        pct_diff = round(((amount_rs - cat_price_rs) / cat_price_rs) * 100)
-                        if not any(ps["item_name"] == cat_it["item_name"] and ps["venue_name"] == cat_it["venue_name"] for ps in price_spikes):
-                            price_spikes.append({
-                                "id": str(cat_it.get("_id") or cat_it.get("id")),
-                                "venue_name": cat_it.get("venue_name"),
-                                "item_name": cat_it.get("item_name"),
-                                "old_price": cat_price_rs,
-                                "new_price": amount_rs,
-                                "pct_increase": pct_diff
-                            })
-                        break
 
     # Calculate unpaid pool debts (committed spend runway impact)
     unpaid_pool_debt_paise = 0
@@ -253,18 +167,9 @@ async def get_insights(user_id: str = Depends(get_current_user)):
         "food": {
             "gap_hours": round(food_gap_hours, 1),
             "avg_daily_paise": round(avg_daily_food),
-            "avg_meal_cost_paise": avg_meal_cost_paise,
-            "routine_type": routine_type,
-            "routine_label": routine_label,
             "delivery_count_30d": delivery_count,
             "mess_count_30d": mess_count,
-            "campus_direct_count_30d": len(campus_direct_txns),
-            "cooking_signal_count_30d": len(cooking_txns),
             "delivery_spend_paise": delivery_spend_paise,
-            "trusted_menu_count": trusted_menu_count,
-            "fresh_menu_count": fresh_menu_count,
-            "pending_menu_count": pending_menu_count,
-            "price_spikes": price_spikes[:3],
         },
         "velocity": {
             "pct_change": velocity_pct,
@@ -719,9 +624,7 @@ async def get_wellness_insights(user_id: str = Depends(get_current_user)):
         "message": message,
         "signals": signals,
         "generated_by": "local_rules",
-        "avg_food_gap_hours_7d": round(avg_food_gap_hours_7d, 1),
-        "safe_daily_limit_rs": round(safe_daily_limit_rs, 2),
-        "remaining_allowance_rs": round(remaining_rs, 2)
+        "avg_food_gap_hours_7d": round(avg_food_gap_hours_7d, 1)
     }
 
 
