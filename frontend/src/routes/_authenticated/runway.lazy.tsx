@@ -1120,68 +1120,82 @@ Generated via PocketBuddy Runway.`;
             <Card className="overflow-hidden border border-border bg-surface shadow-sm rounded-2xl">
               <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_300px]">
                 <div className="p-5 sm:p-6">
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-                    <div className={`w-14 h-14 rounded-full flex items-center justify-center shrink-0 border-2 shadow-sm font-black text-2xl tracking-tight select-none transition-all duration-200 ${safetyGrade.bg} ${safetyGrade.border} ${safetyGrade.color}`}>
-                      {safetyGrade.grade}
+                  {/* Header row: badge always inline-left of meta labels */}
+                  <div className="flex items-start gap-3 mb-4">
+                    {/* Grade badge — smaller on mobile, with glow */}
+                    <div className="relative shrink-0 mt-0.5">
+                      <div className={`absolute inset-0 rounded-full blur-md opacity-30 ${safetyGrade.bg}`} />
+                      <div className={`relative w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center border-2 shadow-md font-black text-xl sm:text-2xl tracking-tight select-none ${safetyGrade.bg} ${safetyGrade.border} ${safetyGrade.color}`}>
+                        {safetyGrade.grade}
+                      </div>
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Runway overview</p>
-                        <Badge variant="outline" className={`text-[9px] uppercase font-bold py-0.5 ${safetyGrade.color} ${safetyGrade.bg} ${safetyGrade.border}`}>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <p className="text-[10px] font-black uppercase tracking-[0.14em] text-muted-foreground">Runway overview</p>
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border ${safetyGrade.color} ${safetyGrade.bg} ${safetyGrade.border}`}>
                           {safetyGrade.text}
-                        </Badge>
-                        <Badge variant="outline" className="border-border bg-surface text-[9px] uppercase font-bold py-0.5 text-muted-foreground">
+                        </span>
+                        <span className="inline-flex items-center rounded-full border border-border bg-muted/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
                           {forecast.confidence.level} confidence
-                        </Badge>
+                        </span>
                       </div>
-
-                      <h2 className="mt-3 text-xl sm:text-2xl font-bold tracking-tight text-foreground">
-                        Expected runway: {expectedRunwayDays} days
+                      <h2 className="mt-2 text-lg sm:text-2xl font-black tracking-tight text-foreground leading-snug">
+                        Expected runway: <span className="text-primary">{expectedRunwayDays}</span> days
                       </h2>
-                      <p className="mt-2 max-w-2xl text-xs sm:text-sm text-muted-foreground leading-relaxed font-medium">
-                        {safeDailyIsZero
-                          ? "Your current balance is tied up by committed costs. Treat this as a pause signal for discretionary spending."
-                          : noSpendHistory
-                            ? "Allowance is configured, but recent payment history is still thin. Use the safe/day limit as a temporary guardrail."
-                            : safetyGrade.description}
+                    </div>
+                  </div>
+
+                  <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                    {safeDailyIsZero
+                      ? "Your current balance is tied up by committed costs. Treat this as a pause signal for discretionary spending."
+                      : noSpendHistory
+                        ? "Allowance is configured, but recent payment history is still thin. Use the safe/day limit as a temporary guardrail."
+                        : safetyGrade.description}
+                  </p>
+
+                  {/* Metrics — 2-col on mobile, 3-col on sm+ */}
+                  <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-4 border-t border-border/40 pt-4">
+                    <div className="space-y-1">
+                      <p className="text-[9px] font-black uppercase tracking-[0.13em] text-muted-foreground">Daily Limit</p>
+                      <p className="text-base sm:text-lg font-black text-primary tnum leading-none">
+                        {safeDailyDisplay}
+                        {!safeDailyIsZero && <span className="text-[10px] font-semibold text-muted-foreground ml-0.5">/day</span>}
                       </p>
-                      
-                      {/* Unified Runway Metrics Dashboard */}
-                      <div className="mt-5 grid grid-cols-3 gap-4 border-t border-border/40 pt-5">
-                        <div className="space-y-1">
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Daily Limit</p>
-                          <p className="text-base sm:text-lg font-black text-primary tnum leading-none">
-                            {safeDailyDisplay}
-                            {!safeDailyIsZero && <span className="text-[10px] font-normal text-muted-foreground">/day</span>}
-                          </p>
-                          <p className="text-[10px] text-muted-foreground font-semibold leading-tight">{paceMessage}</p>
-                        </div>
-                        
-                        <div className="space-y-1 border-l border-border/30 pl-4">
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Flexible Pool</p>
-                          <p className="text-base sm:text-lg font-black text-foreground tnum leading-none">
-                            {formatRs(remainingDiscretionary)}
-                          </p>
-                          <p className="text-[10px] text-muted-foreground font-semibold leading-tight">Discretionary pool</p>
-                        </div>
+                      <p className="text-[10px] text-muted-foreground leading-tight">{paceMessage}</p>
+                    </div>
 
-                        <div className="space-y-1 border-l border-border/30 pl-4">
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Scenario Range</p>
-                          <p className="text-base sm:text-lg font-black text-foreground tnum leading-none">
-                            {stressRunwayDays} - {calmRunwayDays} days
-                          </p>
-                          <p className="text-[10px] text-muted-foreground font-semibold leading-tight">Stress to Calm</p>
-                        </div>
-                      </div>
+                    <div className="space-y-1 border-l border-border/30 pl-3">
+                      <p className="text-[9px] font-black uppercase tracking-[0.13em] text-muted-foreground">Flexible Pool</p>
+                      <p className="text-base sm:text-lg font-black text-foreground tnum leading-none">
+                        {formatRs(remainingDiscretionary)}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground leading-tight">Discretionary pool</p>
+                    </div>
 
-                      {/* Discretionary Fuel Gauge */}
-                      <div className="mt-5 space-y-1.5">
-                        <div className="flex justify-between text-[9px] md:text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                          <span>Discretionary Fuel</span>
-                          <span>{discretionaryFuelPct}% remaining ({daysLeftInCycle} days to reset)</span>
-                        </div>
-                        <Progress value={discretionaryFuelPct} className="h-1.5" />
-                      </div>
+                    <div className="space-y-1 col-span-2 sm:col-span-1 sm:border-l sm:border-border/30 sm:pl-3 border-t sm:border-t-0 border-border/30 pt-3 sm:pt-0">
+                      <p className="text-[9px] font-black uppercase tracking-[0.13em] text-muted-foreground">Scenario Range</p>
+                      <p className="text-base sm:text-lg font-black text-foreground tnum leading-none">
+                        {stressRunwayDays} – {calmRunwayDays} days
+                      </p>
+                      <p className="text-[10px] text-muted-foreground leading-tight">Stress to Calm</p>
+                    </div>
+                  </div>
+
+                  {/* Color-coded Fuel Gauge */}
+                  <div className="mt-4 space-y-1.5">
+                    <div className="flex justify-between text-[9px] font-bold text-muted-foreground uppercase tracking-[0.12em]">
+                      <span>Discretionary Fuel</span>
+                      <span className={discretionaryFuelPct <= 20 ? "text-pb-red" : discretionaryFuelPct <= 50 ? "text-pb-amber" : "text-pb-green"}>
+                        {discretionaryFuelPct}% &middot; {daysLeftInCycle}d left
+                      </span>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-muted/40 border border-border/30 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          discretionaryFuelPct <= 20 ? "bg-pb-red" : discretionaryFuelPct <= 50 ? "bg-pb-amber" : "bg-pb-green"
+                        }`}
+                        style={{ width: `${discretionaryFuelPct}%` }}
+                      />
                     </div>
                   </div>
                 </div>
