@@ -892,7 +892,8 @@ function DiscoveredAccountRow({
 }
 
 const BANKS_WITH_LOGOS = new Set([
-  "sbi", "hdfc", "icici", "axis", "kotak", "pnb", "bob", "canara", "indian-bank", "yes-bank", "federal", "rbl"
+  "sbi", "hdfc", "icici", "axis", "kotak", "pnb", "bob", "canara", "indian-bank", "yes-bank", "federal", "rbl",
+  "union-bank", "bank-of-india", "central-bank", "idfc-first", "indusind", "bank-of-maharashtra"
 ]);
 
 function InstitutionMark({
