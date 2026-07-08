@@ -931,8 +931,11 @@ function Dashboard() {
   const [identifying, setIdentifying] = useState<Txn | null>(null);
   const [editingTxn, setEditingTxn] = useState<Txn | null>(null);
   const [adding, setAdding] = useState(false);
-  const [showFoodSheet, setShowFoodSheet] = useState(false);
   const [isWellnessExpanded, setIsWellnessExpanded] = useState(false);
+
+  // Student Fuel Swapper State
+  const [showFoodSheet, setShowFoodSheet] = useState(false);
+  const [activeFuelItem, setActiveFuelItem] = useState<'exam' | 'mess' | 'commute' | 'stationery'>('exam');
 
   // Food scanner and crowdsourced verification state & hooks
   const [foodTab, setFoodTab] = useState<"menus" | "scan" | "verify">("menus");
@@ -2024,38 +2027,106 @@ function Dashboard() {
               </div>
             )}
 
-            {/* ── Survive Until Broke Card ─────────────────── */}
-            <Link to="/runway" className="block group">
-              <div className="bg-surface border border-border rounded-2xl p-5 relative overflow-hidden transition-all duration-300 hover:border-primary/40 hover:scale-[1.01] active:scale-[0.99] cursor-pointer">
-                <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at top right, rgba(255,107,0,0.05), transparent 65%)" }} />
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-                  <p className="text-xs font-bold tracking-[0.12em] text-zinc-500 uppercase group-hover:text-primary transition-colors">Runway Range</p>
-                  <span className="text-[11px] md:text-xs font-black px-2.5 py-1 rounded-full border text-primary border-primary/30 bg-primary/5 flex items-center gap-1">
-                    LIVE FORECAST
-                    <ChevronRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
-                  </span>
-                </div>
-                <div className="space-y-3">
-                  {runwayView && !runwayView.setupRequired ? (
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Expected</p>
-                        <p className="mt-1 text-2xl font-semibold leading-none text-foreground tnum">{runwayView.expectedDays}d</p>
+            {/* ── Interactive Student Allocation Planner ─────────────────── */}
+            {(() => {
+              const plannerTargets = {
+                exam: { label: "Exam Safety", cost: 150000, description: "Semester exam registration fee reserve" },
+                mess: { label: "Hostel Mess", cost: 400000, description: "Monthly campus food & dining hall dues" },
+                commute: { label: "Commute Pass", cost: 250000, description: "Transit & local travel allowance" },
+                stationery: { label: "Academic Prep", cost: 100000, description: "Books, lab manuals & study materials" }
+              };
+              const discPaise = runwayForecast?.commitments?.discretionary_left_paise ?? runwayForecast?.current_cycle?.remaining ?? 80000;
+              const activeKey = (["exam", "mess", "commute", "stationery"].includes(activeFuelItem) ? activeFuelItem : "exam") as keyof typeof plannerTargets;
+              const selectedTarget = plannerTargets[activeKey];
+              const coveragePct = Math.min(100, Math.round((discPaise / selectedTarget.cost) * 100));
+              const gapPaise = Math.max(0, selectedTarget.cost - discPaise);
+
+              return (
+                <div className="bg-surface border border-border rounded-2xl p-5 relative overflow-hidden transition-all duration-300 hover:border-primary/20">
+                  <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at top right, rgba(255,107,0,0.04), transparent 65%)" }} />
+                  <div className="flex items-center justify-between gap-2 mb-4">
+                    <p className="text-xs font-bold tracking-[0.12em] text-zinc-500 uppercase">Allocation planner</p>
+                    <Link to="/runway" className="text-[10px] font-black uppercase tracking-wider text-primary flex items-center gap-0.5 hover:underline">
+                      View Forecast
+                      <ChevronRight className="h-3 w-3" />
+                    </Link>
+                  </div>
+
+                  <div className="space-y-4">
+                    <p className="text-xs text-zinc-400 leading-normal font-medium">
+                      Select a student reserve target to check funding coverage from your discretionary cash.
+                    </p>
+
+                    {/* Selector Tabs */}
+                    <div className="grid grid-cols-4 gap-1 p-1 bg-muted/20 border border-border/30 rounded-xl">
+                      {(Object.keys(plannerTargets) as Array<keyof typeof plannerTargets>).map((key) => {
+                        const active = activeKey === key;
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => setActiveFuelItem(key)}
+                            className={`py-1.5 rounded-lg text-center text-[10px] font-bold select-none transition-all cursor-pointer truncate px-1 border ${
+                              active
+                                ? "bg-primary/10 text-primary border-primary/20"
+                                : "border-transparent text-zinc-400 hover:text-foreground hover:bg-white/5"
+                            }`}
+                          >
+                            {plannerTargets[key].label.split(" ")[0]}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Target Detail Panel */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-baseline">
+                        <span className="text-xs font-bold text-foreground">{selectedTarget.label} Target</span>
+                        <span className="text-sm font-black text-foreground tnum">{rupees(selectedTarget.cost)}</span>
                       </div>
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Stress</p>
-                        <p className="mt-1 text-2xl font-semibold leading-none text-foreground tnum">{runwayView.stressDays}d</p>
+                      <p className="text-[11px] text-zinc-500 font-medium leading-relaxed">
+                        {selectedTarget.description}
+                      </p>
+                    </div>
+
+                    {/* Progress Bar & Status */}
+                    <div className="space-y-1.5 pt-1.5 border-t border-border/30">
+                      <div className="flex justify-between text-[10px] font-bold uppercase tracking-wider">
+                        <span className="text-zinc-500">Coverage</span>
+                        <span className={coveragePct === 100 ? "text-pb-green" : "text-pb-amber"}>
+                          {coveragePct}% Funded
+                        </span>
+                      </div>
+                      <div className="h-1.5 w-full bg-muted border border-border/40 rounded-full overflow-hidden">
+                        <div 
+                          className={`h-full rounded-full transition-all duration-300 ${
+                            coveragePct === 100 ? "bg-pb-green" : "bg-pb-amber"
+                          }`}
+                          style={{ width: `${coveragePct}%` }}
+                        />
                       </div>
                     </div>
-                  ) : (
-                    <p className="text-[13px] font-black text-zinc-400">—</p>
-                  )}
-                  <p className="text-xs text-zinc-400 leading-relaxed mt-2">
-                    Range-based estimate from recent pace, commitments, and high-spend days.
-                  </p>
+
+                    {/* Actionable Advice Card */}
+                    <div className={`rounded-xl border p-3 text-[11px] font-medium leading-normal transition-all duration-300 ${
+                      gapPaise === 0 
+                        ? "border-pb-green/20 bg-pb-green/5 text-pb-green" 
+                        : "border-pb-amber/20 bg-pb-amber/5 text-pb-amber"
+                    }`}>
+                      {gapPaise === 0 ? (
+                        <span>
+                          Target fully covered. Your discretionary pool is sufficient to cover this category reserve.
+                        </span>
+                      ) : (
+                        <span>
+                          Deficit of <span className="font-bold text-foreground">{rupees(gapPaise)}</span>. Reduce discretionary daily spending to build this reserve.
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </Link>
+              );
+            })()}
 
             {/* ── AI Campus Intelligence (Bedrock) ──────────────────── */}
             <div className="bg-surface border border-border rounded-2xl p-5 relative overflow-hidden">

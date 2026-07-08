@@ -19,6 +19,11 @@ import { useState, useMemo } from "react";
 import { toast } from "sonner";
 import { Tooltip as UITooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -45,7 +50,6 @@ function RunwayPage() {
   const [activeTab, setActiveTab] = useState<"overview" | "commitments" | "horizons">("overview");
   const [showGuideModal, setShowGuideModal] = useState(false);
   const [showForecastInputs, setShowForecastInputs] = useState(false);
-  const [showMethodology, setShowMethodology] = useState(false);
   const [affordAmountRs, setAffordAmountRs] = useState("");
   const [affordCategory, setAffordCategory] = useState<"food" | "travel" | "shopping" | "other">("food");
 
@@ -968,23 +972,25 @@ Generated via PocketBuddy Runway.`;
                   </p>
                 </div>
 
-                <div className="mt-5 grid gap-2 sm:grid-cols-3">
+                <div className="mt-4 grid grid-cols-3 gap-2">
                   {modeCards.map((mode) => (
                     <button
                       key={mode.key}
                       onClick={() => selectRunwayMode(mode.key)}
-                      className={`rounded-xl border p-3 text-left transition-all ${
+                      className={`rounded-xl border p-2.5 text-left transition-all cursor-pointer flex flex-col justify-between ${
                         flightProtocol === mode.key
-                          ? "border-primary bg-primary/10 text-foreground"
-                          : "border-border bg-surface/60 text-muted-foreground hover:border-primary/40 hover:bg-surface"
+                          ? "border-primary bg-primary/5 text-foreground"
+                          : "border-border/60 bg-surface/60 text-muted-foreground hover:border-primary/45 hover:bg-surface"
                       }`}
                     >
-                      <p className="text-xs font-semibold text-foreground">{mode.title}</p>
-                      <p className="mt-1 text-lg font-semibold tracking-tight tnum">
-                        {mode.amount === null ? (mode.key === "normal" ? "No history" : "Pause") : formatRs(mode.amount)}
-                        {mode.amount !== null && <span className="text-[11px] text-muted-foreground">/day</span>}
-                      </p>
-                      <p className="mt-1 text-[11px] leading-snug">{mode.text}</p>
+                      <div>
+                        <span className="block text-[10px] sm:text-xs font-bold text-foreground truncate">{mode.title}</span>
+                        <span className="mt-1 block text-xs sm:text-sm font-black text-foreground tnum">
+                          {mode.amount === null ? (mode.key === "normal" ? "—" : "Pause") : formatRs(mode.amount)}
+                          {mode.amount !== null && <span className="text-[9px] font-normal text-muted-foreground">/day</span>}
+                        </span>
+                      </div>
+                      <span className="mt-1 hidden sm:block text-[10px] text-muted-foreground leading-snug">{mode.text}</span>
                     </button>
                   ))}
                 </div>
@@ -1115,12 +1121,12 @@ Generated via PocketBuddy Runway.`;
               <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_300px]">
                 <div className="p-5 sm:p-6">
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-                    <div className={`w-14 h-14 rounded-full flex items-center justify-center shrink-0 border-4 ${safetyGrade.border} ${safetyGrade.bg}`}>
-                      <span className={`text-2xl font-semibold tracking-tight ${safetyGrade.color}`}>{safetyGrade.grade}</span>
+                    <div className={`w-14 h-14 rounded-full flex items-center justify-center shrink-0 border-2 shadow-sm font-black text-2xl tracking-tight select-none transition-all duration-200 ${safetyGrade.bg} ${safetyGrade.border} ${safetyGrade.color}`}>
+                      {safetyGrade.grade}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-xs font-bold uppercase tracking-wider text-foreground">Runway overview</p>
+                        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Runway overview</p>
                         <Badge variant="outline" className={`text-[9px] uppercase font-bold py-0.5 ${safetyGrade.color} ${safetyGrade.bg} ${safetyGrade.border}`}>
                           {safetyGrade.text}
                         </Badge>
@@ -1129,159 +1135,101 @@ Generated via PocketBuddy Runway.`;
                         </Badge>
                       </div>
 
-                      <h2 className="mt-3 text-xl sm:text-2xl font-semibold tracking-tight text-foreground">
+                      <h2 className="mt-3 text-xl sm:text-2xl font-bold tracking-tight text-foreground">
                         Expected runway: {expectedRunwayDays} days
                       </h2>
-                      <p className="mt-2 max-w-2xl text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                      <p className="mt-2 max-w-2xl text-xs sm:text-sm text-muted-foreground leading-relaxed font-medium">
                         {safeDailyIsZero
-                          ? "Your current balance is tied up by committed costs. Treat this as a pause signal for non-essential spending."
+                          ? "Your current balance is tied up by committed costs. Treat this as a pause signal for discretionary spending."
                           : noSpendHistory
                             ? "Allowance is configured, but recent payment history is still thin. Use the safe/day limit as a temporary guardrail."
                             : safetyGrade.description}
                       </p>
                       
-                      {/* Calm, Expected, Stress grid - simplified without nested boxes */}
-                      <div className="mt-4 grid grid-cols-3 divide-x divide-border/60 border-y border-border/50 py-3">
-                        <div className="text-center px-2">
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Calm</p>
-                          <p className="mt-0.5 text-sm font-semibold text-foreground tnum">{calmRunwayDays} days</p>
+                      {/* Unified Runway Metrics Dashboard */}
+                      <div className="mt-5 grid grid-cols-3 gap-4 border-t border-border/40 pt-5">
+                        <div className="space-y-1">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Daily Limit</p>
+                          <p className="text-base sm:text-lg font-black text-primary tnum leading-none">
+                            {safeDailyDisplay}
+                            {!safeDailyIsZero && <span className="text-[10px] font-normal text-muted-foreground">/day</span>}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground font-semibold leading-tight">{paceMessage}</p>
                         </div>
-                        <div className="text-center px-2">
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-primary">Expected</p>
-                          <p className="mt-0.5 text-sm font-semibold text-foreground tnum">{expectedRunwayDays} days</p>
+                        
+                        <div className="space-y-1 border-l border-border/30 pl-4">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Flexible Pool</p>
+                          <p className="text-base sm:text-lg font-black text-foreground tnum leading-none">
+                            {formatRs(remainingDiscretionary)}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground font-semibold leading-tight">Discretionary pool</p>
                         </div>
-                        <div className="text-center px-2">
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-pb-amber">Stress</p>
-                          <p className="mt-0.5 text-sm font-semibold text-foreground tnum">{stressRunwayDays} days</p>
+
+                        <div className="space-y-1 border-l border-border/30 pl-4">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Scenario Range</p>
+                          <p className="text-base sm:text-lg font-black text-foreground tnum leading-none">
+                            {stressRunwayDays} - {calmRunwayDays} days
+                          </p>
+                          <p className="text-[10px] text-muted-foreground font-semibold leading-tight">Stress to Calm</p>
                         </div>
                       </div>
-                    </div>
-                  </div>
 
-                  {/* Spend today, Flexible cash, Reset window grid - simplified without nested cards */}
-                  <div className="mt-6 grid grid-cols-3 gap-4 border-b border-border/40 pb-5">
-                    <div className="space-y-1">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Spend today</p>
-                      <p className="text-base font-semibold text-primary tnum">
-                        {safeDailyDisplay}
-                        {!safeDailyIsZero && <span className="text-[11px] text-zinc-500 font-medium">/day</span>}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground leading-snug">{paceMessage}</p>
+                      {/* Discretionary Fuel Gauge */}
+                      <div className="mt-5 space-y-1.5">
+                        <div className="flex justify-between text-[9px] md:text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                          <span>Discretionary Fuel</span>
+                          <span>{discretionaryFuelPct}% remaining ({daysLeftInCycle} days to reset)</span>
+                        </div>
+                        <Progress value={discretionaryFuelPct} className="h-1.5" />
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Flexible cash</p>
-                      <p className="text-base font-semibold text-foreground tnum">{formatRs(remainingDiscretionary)}</p>
-                      <p className="text-[11px] text-muted-foreground leading-snug">Available flexible pool.</p>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Reset window</p>
-                      <p className="text-base font-semibold text-foreground tnum">{daysLeftInCycle} days</p>
-                      <p className="text-[11px] text-muted-foreground leading-snug">Until cycle resets.</p>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 space-y-1.5">
-                    <div className="flex justify-between text-[9px] md:text-xs font-bold text-zinc-500 uppercase tracking-wider">
-                      <span>Discretionary fuel</span>
-                      <span>{discretionaryFuelPct}% remaining</span>
-                    </div>
-                    <Progress value={discretionaryFuelPct} className="h-1.5" />
                   </div>
                 </div>
 
                 <div className={`border-t border-border p-5 sm:p-6 lg:border-l lg:border-t-0 ${
-                  activeActionType === "ask_home" ? "bg-pb-red/5" : "bg-surface/55"
+                  activeActionType === "ask_home" ? "bg-pb-red/[0.02]" : "bg-surface/35"
                 }`}>
-                  <p className={`text-[10px] font-bold uppercase tracking-wider ${
+                  <p className={`text-[9px] font-bold uppercase tracking-wider ${
                     activeActionType === "ask_home" ? "text-pb-red" : "text-primary"
                   }`}>
                     What to do now
                   </p>
-                  <h3 className="mt-2 text-base font-semibold leading-snug text-foreground">{activeActionTitle}</h3>
-                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{activeActionDetail}</p>
+                  <h3 className="mt-2 text-base font-bold leading-snug text-foreground">{activeActionTitle}</h3>
+                  <p className="mt-2 text-xs text-muted-foreground leading-relaxed font-medium">{activeActionDetail}</p>
                   {activeActionType === "ask_home" && actualAskHomeAmount > 0 && (
-                    <div className="mt-4 rounded-xl border border-pb-red/20 bg-background/60 p-3">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-pb-red">Buffer needed</p>
-                      <p className="mt-1 text-xl font-semibold text-pb-red tnum">{formatRs(actualAskHomeAmount)}</p>
-                      <p className="mt-1 text-[11px] text-muted-foreground">Based on the base forecast, not simulator settings.</p>
+                    <div className="mt-4 rounded-xl border border-pb-red/20 bg-background/50 p-3.5">
+                      <p className="text-[9px] font-bold uppercase tracking-wider text-pb-red">Buffer needed</p>
+                      <p className="mt-1 text-xl font-black text-pb-red tnum">{formatRs(actualAskHomeAmount)}</p>
+                      <p className="mt-1 text-[10px] text-muted-foreground font-medium">Based on the base forecast, not simulator settings.</p>
                     </div>
                   )}
                 </div>
               </div>
             </Card>
 
-            {decisionEngine && (
-              <Card className="p-5 sm:p-6 border border-primary/20 bg-card/25 shadow-sm">
+            {/* ── Runway Drivers & Inputs ── */}
+            <Card className="p-5 sm:p-6 border border-border bg-card/25">
+              <div className="flex items-center justify-between border-b border-border/40 pb-3 mb-4">
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">What changed?</h3>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">Main factors affecting today’s runway estimate.</p>
+                </div>
+                
+                {/* Included in Forecast Dialog Trigger */}
                 <button
                   type="button"
-                  onClick={() => setShowForecastInputs((open) => !open)}
-                  className="flex w-full items-start justify-between gap-4 text-left"
+                  onClick={() => setShowForecastInputs(true)}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-[11px] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground hover:bg-surface transition cursor-pointer active:scale-95"
                 >
-                  <div className="min-w-0 space-y-1.5">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-[10px] md:text-xs font-bold uppercase tracking-[0.22em] text-primary">Included in this forecast</p>
-                      <Badge variant="outline" className="border-primary/20 bg-primary/10 text-primary text-[9px] uppercase tracking-wider">
-                        {forecastInputSummary}
-                      </Badge>
-                      {foodRoutine && (
-                        <Badge variant="outline" className="border-border bg-surface text-[9px] uppercase tracking-wider text-muted-foreground">
-                          {foodRoutine.label}
-                        </Badge>
-                      )}
-                    </div>
-                    <h3 className="text-base sm:text-lg font-semibold text-foreground tracking-tight">
-                      Runway has absorbed the major student costs
-                    </h3>
-                    <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-                      {decisionEngine.summary}
-                    </p>
-                  </div>
-                  <ChevronRight className={`mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${showForecastInputs ? "rotate-90" : ""}`} />
+                  <span>Forecast Inputs</span>
+                  <span className="flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-primary/10 px-1 text-[9px] font-bold text-primary tnum">
+                    {forecastInputCount}
+                  </span>
                 </button>
-
-                {showForecastInputs && (
-                  <div className="mt-5 divide-y divide-border/60 rounded-xl border border-border/70 bg-surface/55">
-                    {absorbedFactors.length ? absorbedFactors.map((factor: any) => (
-                      <div key={factor.kind} className="grid gap-2 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-                        <div className="min-w-0">
-                          <p className="text-xs font-semibold text-foreground">{factor.label}</p>
-                          <p className="mt-0.5 text-[11px] md:text-xs text-zinc-500 leading-snug">{factor.detail}</p>
-                        </div>
-                        <p className="text-sm font-semibold text-foreground tnum sm:text-right">
-                          {formatRs(factor.daily_amount ?? factor.amount)}
-                          {factor.daily_amount ? <span className="text-[10px] md:text-xs font-bold text-zinc-500">/day</span> : null}
-                        </p>
-                      </div>
-                    )) : commitmentSummary.length ? commitmentSummary.map((item) => (
-                      <div key={item.key} className="grid gap-2 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-                        <div className="min-w-0">
-                          <p className="text-xs font-semibold text-foreground">{item.label}</p>
-                          <p className="mt-0.5 text-[11px] md:text-xs text-zinc-500 leading-snug">Reserved before safe/day is calculated.</p>
-                        </div>
-                        <p className="text-sm font-semibold text-foreground tnum sm:text-right">{formatRs(item.amount)}</p>
-                      </div>
-                    )) : (
-                      <div className="p-4 text-xs text-muted-foreground">
-                        No subscriptions, meal bills, pool dues, or exam buffers are reserved yet. Add them in profile or transactions for a stronger forecast.
-                      </div>
-                    )}
-                  </div>
-                )}
-              </Card>
-            )}
-
-            <Card className="p-5 sm:p-6 border border-border bg-card/25">
-              <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400">What changed?</h3>
-                  <p className="mt-1 text-xs text-zinc-500">The top drivers behind today’s runway number.</p>
-                </div>
-                <Badge variant="outline" className="w-fit border-border bg-surface text-[10px] uppercase tracking-wider text-muted-foreground">
-                  {topDrivers.length ? `${topDrivers.length} drivers` : "No pressure"}
-                </Badge>
               </div>
+
               {topDrivers.length ? (
-                <div className="grid gap-4 md:grid-cols-3 mt-2">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 mt-2">
                   {topDrivers.map((driver) => (
                     <div key={driver.kind} className={`pl-3.5 py-1 border-l-2 ${
                       driver.severity === "high"
@@ -1290,17 +1238,21 @@ Generated via PocketBuddy Runway.`;
                           ? "border-pb-amber"
                           : "border-primary"
                     }`}>
-                      <p className="text-xs font-semibold text-foreground">{driver.label}</p>
+                      <div className="flex justify-between gap-2 items-center">
+                        <p className="text-xs font-semibold text-foreground">{driver.label}</p>
+                        {Number(driver.impact || 0) > 0 && (
+                          <span className="text-[10px] font-bold text-foreground bg-foreground/5 px-1.5 py-0.5 rounded tnum whitespace-nowrap">
+                            &minus;{formatRs(Number(driver.impact))}
+                          </span>
+                        )}
+                      </div>
                       <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{driver.detail}</p>
-                      {Number(driver.impact || 0) > 0 && (
-                        <p className="mt-1.5 text-[11px] font-semibold text-foreground tnum">{formatRs(Number(driver.impact))} impact</p>
-                      )}
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="text-xs text-muted-foreground italic py-1">
-                  No major pressure point detected yet. Runway will explain changes once transactions, food pace, pool dues, or recurring costs affect the forecast.
+                <div className="text-xs text-muted-foreground italic py-1 text-center">
+                  No major pressure points detected. Runway behaves as expected.
                 </div>
               )}
             </Card>
@@ -1612,14 +1564,27 @@ Generated via PocketBuddy Runway.`;
                 <div className="flex-1 space-y-5">
 
                   {/* Header */}
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <Compass className="h-5 w-5 text-primary" />
-                      <h3 className="text-base font-semibold tracking-tight text-foreground">Daily spend check</h3>
+                  <div className="flex items-center justify-between gap-4 border-b border-border/40 pb-3 mb-1 lg:border-none lg:pb-0 lg:mb-0">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <Compass className="h-5 w-5 text-primary shrink-0" />
+                        <h3 className="text-sm sm:text-base font-semibold tracking-tight text-foreground">Daily spend check</h3>
+                      </div>
+                      <p className="text-xs text-muted-foreground leading-relaxed hidden sm:block">
+                        Simulate scenarios and see how lifestyle changes extend your runway — without touching real data.
+                      </p>
                     </div>
-                    <p className="text-xs text-muted-foreground leading-relaxed">
-                      Simulate scenarios and see how lifestyle changes extend your runway — without touching real data.
-                    </p>
+
+                    {/* Mobile Simulated Days Indicator (Visible only on mobile) */}
+                    <div className="lg:hidden shrink-0 flex items-center gap-2.5 border border-border/60 bg-background px-3 py-1.5 rounded-xl shadow-sm">
+                      <div className="text-right">
+                        <span className="block text-[8px] font-bold uppercase tracking-wider text-muted-foreground">Simulated</span>
+                        <span className="block text-sm font-black text-foreground tnum leading-none mt-0.5">
+                          {safeDailyIsZero ? "0" : simulatedDays} days
+                        </span>
+                      </div>
+                      <div className={`h-2 w-2 rounded-full ${isSimulatedSafe ? "bg-pb-green" : "bg-pb-red"}`} />
+                    </div>
                   </div>
 
                   {/* Slider */}
@@ -1649,6 +1614,18 @@ Generated via PocketBuddy Runway.`;
                           <span className="text-center">Mid: {formatRs(Math.round(sliderMaxSpend * 50))}</span>
                           <span>{formatRs(sliderMaxSpend * 100)}</span>
                         </div>
+
+                        {/* Mobile-only Simulator status feedback */}
+                        <div className="flex items-start gap-2 pt-2.5 border-t border-border/30 lg:hidden text-xs">
+                          <div className={`h-2 w-2 rounded-full mt-1 shrink-0 ${isSimulatedSafe ? "bg-pb-green" : "bg-pb-red"}`} />
+                          <p className="text-xs text-muted-foreground leading-normal font-medium">
+                            {isSimulatedSafe
+                              ? `This target safely reaches your reset date.`
+                              : safeDailyIsZero
+                                ? "All discretionary balance consumed."
+                                : `Runs out ${Math.max(0, daysLeftInCycle - simulatedDays)} days early. Deficit: ${formatRs(simulatedGapPaise)}.`}
+                          </p>
+                        </div>
                       </>
                     ) : (
                       <div className="rounded-xl border border-pb-red/20 bg-pb-red/5 px-3 py-2.5 text-xs font-medium text-pb-red">
@@ -1659,7 +1636,7 @@ Generated via PocketBuddy Runway.`;
 
                   {/* Quick targets */}
                   <div className="space-y-2">
-                    <span className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Quick Targets</span>
+                    <span className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Quick Targets</span>
                     <div className="flex flex-wrap gap-1.5">
                       {simulatorPresets.map((preset) => (
                         <button
@@ -1669,10 +1646,10 @@ Generated via PocketBuddy Runway.`;
                             setSimulatedDailySpend(preset.value);
                             toast.info(`Target: ${preset.label} (${formatRs(preset.value * 100)}/day)`);
                           }}
-                          className={`rounded-full border px-3 py-1 text-[11px] font-medium transition-colors ${
+                          className={`rounded-lg border px-2.5 py-1 text-[11px] font-bold transition-all active:scale-95 cursor-pointer ${
                             activeSimulatedSpend === preset.value
-                              ? "border-primary bg-primary/10 text-primary font-semibold"
-                              : "border-border bg-background text-muted-foreground hover:bg-surface hover:text-foreground"
+                              ? "border-primary bg-primary/10 text-primary"
+                              : "border-border/60 bg-background text-muted-foreground hover:bg-surface hover:text-foreground"
                           }`}
                         >
                           {preset.label} ({formatRs(preset.value * 100)})
@@ -1682,7 +1659,7 @@ Generated via PocketBuddy Runway.`;
                         <button
                           type="button"
                           onClick={() => { setSimulatedDailySpend(null); toast.info("Reset to actual pace."); }}
-                          className="rounded-full border border-dashed border-border px-3 py-1 text-[11px] text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+                          className="rounded-lg border border-dashed border-border px-2.5 py-1 text-[11px] font-bold text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors cursor-pointer"
                         >
                           {defaultPace > 0 ? `Reset (${formatRs(defaultPace * 100)}/day)` : "Reset"}
                         </button>
@@ -1714,52 +1691,30 @@ Generated via PocketBuddy Runway.`;
                         </UITooltip>
                       </TooltipProvider>
                     </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => selectRunwayMode("normal")}
-                        className={`rounded-xl border p-3 text-left transition-all ${
-                          flightProtocol === "normal"
-                            ? "border-primary bg-primary/10 shadow-[0_0_12px_rgba(99,102,241,0.12)]"
-                            : "border-border bg-background text-muted-foreground hover:bg-surface"
-                        }`}
-                      >
-                        <span className="block text-xs font-bold text-foreground">Current Pace</span>
-                        <span className="mt-1 block text-sm font-bold text-foreground tnum">
-                          {noSpendHistory ? "—" : `${formatRs((defaultPace || safeDailyRs) * 100)}`}
-                        </span>
-                        <span className="mt-1 block text-[10px] text-muted-foreground leading-snug">No changes applied</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => selectRunwayMode("glide")}
-                        className={`rounded-xl border p-3 text-left transition-all ${
-                          flightProtocol === "glide"
-                            ? "border-pb-amber bg-pb-amber/10 shadow-[0_0_12px_rgba(213,155,82,0.12)]"
-                            : "border-border bg-background text-muted-foreground hover:bg-surface"
-                        }`}
-                      >
-                        <span className="block text-xs font-bold text-foreground">Stretch</span>
-                        <span className="mt-1 block text-sm font-bold text-pb-amber tnum">
-                          {safeDailyIsZero ? "Pause" : `${formatRs(stretchModeDailyRs * 100)}`}
-                        </span>
-                        <span className="mt-1 block text-[10px] text-muted-foreground leading-snug">Lower target + optional levers</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => selectRunwayMode("turbulence")}
-                        className={`rounded-xl border p-3 text-left transition-all ${
-                          flightProtocol === "turbulence"
-                            ? "border-pb-red bg-pb-red/10 shadow-[0_0_12px_rgba(220,38,38,0.12)]"
-                            : "border-border bg-background text-muted-foreground hover:bg-surface"
-                        }`}
-                      >
-                        <span className="block text-xs font-bold text-foreground">Emergency</span>
-                        <span className="mt-1 block text-sm font-bold text-pb-red tnum">
-                          {safeDailyIsZero ? "Pause" : `${formatRs(emergencyModeDailyRs * 100)}`}
-                        </span>
-                        <span className="mt-1 block text-[10px] text-muted-foreground leading-snug">Essentials first</span>
-                      </button>
+                    <div className="bg-muted/40 border border-border/40 p-1 rounded-xl grid grid-cols-3 gap-1">
+                      {[
+                        { key: "normal" as const, label: "Current Pace", amount: noSpendHistory ? "—" : `${formatRs((defaultPace || safeDailyRs) * 100)}` },
+                        { key: "glide" as const, label: "Stretch", amount: safeDailyIsZero ? "Pause" : `${formatRs(stretchModeDailyRs * 100)}` },
+                        { key: "turbulence" as const, label: "Emergency", amount: safeDailyIsZero ? "Pause" : `${formatRs(emergencyModeDailyRs * 100)}` }
+                      ].map((mode) => (
+                        <button
+                          key={mode.key}
+                          type="button"
+                          onClick={() => selectRunwayMode(mode.key)}
+                          className={`py-2 px-1 text-center rounded-lg transition-all cursor-pointer ${
+                            flightProtocol === mode.key
+                              ? "bg-background text-foreground shadow-sm border border-border/80 font-bold text-xs"
+                              : "text-muted-foreground hover:text-foreground text-xs font-semibold"
+                          }`}
+                        >
+                          <span className="block truncate text-[10px] sm:text-xs">{mode.label}</span>
+                          <span className="block text-[10px] sm:text-xs font-black opacity-80 mt-0.5 tnum">
+                            {mode.amount}
+                            {mode.key !== "normal" && mode.amount !== "Pause" && <span className="text-[8px] font-normal text-muted-foreground">/day</span>}
+                            {mode.key === "normal" && !noSpendHistory && <span className="text-[8px] font-normal text-muted-foreground">/day</span>}
+                          </span>
+                        </button>
+                      ))}
                     </div>
                   </div>
 
@@ -1791,20 +1746,20 @@ Generated via PocketBuddy Runway.`;
                                 type="button"
                                 disabled={!lever.enabled}
                                 onClick={lever.onToggle}
-                                className={`flex items-center justify-between p-3 rounded-xl border text-left transition-all ${
+                                className={`flex items-center justify-between p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
                                   !lever.enabled
-                                    ? "opacity-40 cursor-not-allowed border-border/40 bg-surface-raised/10"
+                                    ? "opacity-35 cursor-not-allowed border-border/30 bg-muted/5"
                                     : lever.active
-                                      ? "border-pb-green bg-pb-green/10 shadow-[0_0_10px_rgba(22,163,74,0.08)]"
-                                      : "border-border bg-background hover:bg-surface hover:border-border-hover"
+                                      ? "border-pb-green/45 bg-pb-green/5 text-foreground"
+                                      : "border-border/60 bg-background text-muted-foreground hover:bg-surface hover:text-foreground"
                                 }`}
                               >
                                 <div className="flex items-center gap-2.5 min-w-0">
-                                  <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${lever.active ? "bg-pb-green/20 text-pb-green" : "bg-muted text-muted-foreground"}`}>
+                                  <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${lever.active ? "bg-pb-green/10 text-pb-green" : "bg-muted text-muted-foreground"}`}>
                                     <LeverIcon className="h-4 w-4" />
                                   </div>
                                   <div className="min-w-0">
-                                    <span className="block text-xs font-semibold truncate text-foreground">{lever.label}</span>
+                                    <span className="block text-xs font-bold truncate text-foreground">{lever.label}</span>
                                     <span className="block text-[10px] text-muted-foreground">{lever.detail}</span>
                                   </div>
                                 </div>
@@ -1871,7 +1826,7 @@ Generated via PocketBuddy Runway.`;
                 </div>
 
                 {/* ── Right: Cockpit Gauge ── */}
-                <div className="flex w-full flex-col justify-between gap-4 border-t border-border pt-5 lg:w-72 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+                <div className="hidden lg:flex w-full flex-col justify-between gap-4 border-t border-border pt-5 lg:w-72 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Survival Cockpit</span>
@@ -1908,31 +1863,21 @@ Generated via PocketBuddy Runway.`;
                       </div>
                     </div>
 
-                    {/* Status banner */}
-                    <div className={`rounded-xl p-3 border-l-4 flex items-start gap-2.5 text-xs font-medium transition-all duration-300 ${
-                      isSimulatedSafe ? "border-pb-green bg-pb-green/5 text-pb-green" : "border-pb-red bg-pb-red/5 text-pb-red"
-                    }`}>
-                      {isSimulatedSafe ? (
-                        <>
-                          <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
-                          <div>
-                            <p className="font-bold">Reaches reset safely</p>
-                            <p className="text-[11px] opacity-80 mt-0.5">Survives the next {daysLeftInCycle} days on this plan.</p>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                          <div>
-                            <p className="font-bold">Deficit detected</p>
-                            <p className="text-[11px] opacity-80 mt-0.5">
-                              {safeDailyIsZero
-                                ? "All discretionary balance consumed."
-                                : `Runs out ${Math.max(0, daysLeftInCycle - simulatedDays)} days early. Gap: ${formatRs(simulatedGapPaise)}.`}
-                            </p>
-                          </div>
-                        </>
-                      )}
+                    {/* Status indicator */}
+                    <div className="pt-3.5 border-t border-border/40">
+                      <div className="flex items-center gap-2">
+                        <div className={`h-2.5 w-2.5 rounded-full ${isSimulatedSafe ? "bg-pb-green" : "bg-pb-red"}`} />
+                        <span className="text-xs font-bold text-foreground">
+                          {isSimulatedSafe ? "Reaches reset safely" : "Deficit detected"}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed mt-1.5 pl-4.5">
+                        {isSimulatedSafe
+                          ? `Survives the next ${daysLeftInCycle} days on this plan.`
+                          : safeDailyIsZero
+                            ? "All discretionary balance consumed."
+                            : `Runs out ${Math.max(0, daysLeftInCycle - simulatedDays)} days early. Cycle gap: ${formatRs(simulatedGapPaise)}.`}
+                      </p>
                     </div>
 
                     {/* Stats */}
@@ -1974,20 +1919,20 @@ Generated via PocketBuddy Runway.`;
             </Card>
 
             {/* 💡 RUNWAY SURVIVAL NUDGES */}
-            <Card className="p-5 sm:p-6 border border-border bg-card/20 space-y-4 mt-6">
+            <Card className="p-5 sm:p-6 border border-border bg-card/25 space-y-5 mt-6">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-border/40 pb-3">
-                <div className="flex items-center gap-1.5">
-                  <Zap className="h-4.5 w-4.5 text-pb-amber" />
+                <div className="space-y-0.5">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">Runway Actions</h3>
+                  <p className="text-[10px] text-muted-foreground font-medium">Configure settings and habits to stretch your cash runway.</p>
                 </div>
                 
                 <Select value={selectedActionId} onValueChange={setSelectedActionId}>
-                  <SelectTrigger className="h-9 w-full sm:w-[260px] rounded-lg border-border bg-background text-xs text-left">
+                  <SelectTrigger className="h-8.5 w-full sm:w-[240px] rounded-lg border-border/70 bg-background text-xs text-left focus:ring-1 focus:ring-primary/20">
                     <SelectValue placeholder="Select action step" />
                   </SelectTrigger>
                   <SelectContent className="bg-background border border-border text-foreground">
                     {runwayActions.map((action) => (
-                      <SelectItem key={action.id} value={action.id} className="text-xs font-medium">
+                      <SelectItem key={action.id} value={action.id} className="text-xs font-semibold">
                         {action.label}
                       </SelectItem>
                     ))}
@@ -1999,23 +1944,50 @@ Generated via PocketBuddy Runway.`;
               {(() => {
                 const selectedAction = runwayActions.find((a) => a.id === selectedActionId) || runwayActions[0];
                 if (!selectedAction) return null;
+                
+                const actionPath = 
+                  selectedAction.id === "priority" && activeActionType === "slow_down" ? "/pool" :
+                  selectedAction.id === "action-2" && forecast.status === "shortfall" ? "/settings" : // Subscriptions
+                  selectedAction.id === "action-1" ? "/settings" : // Buffer / Reserve
+                  selectedAction.id === "action-3" ? "/settings" : // Food cap settings
+                  null;
+
+                const actionButtonText = 
+                  selectedAction.id === "priority" && activeActionType === "slow_down" ? "Open pool dues" :
+                  selectedAction.id === "action-2" && forecast.status === "shortfall" ? "Manage subscriptions" :
+                  selectedAction.id === "action-1" ? "Configure safety buffer" :
+                  selectedAction.id === "action-3" ? "Adjust food cap" :
+                  "View settings";
+
                 return (
-                  <div className={`flex items-start gap-3 p-4 rounded-xl text-xs border-l-4 transition-all duration-300 ${
-                    selectedAction.severity === "high"
-                      ? "bg-pb-red/5 border-pb-red text-foreground"
-                      : selectedAction.severity === "medium"
-                        ? "bg-pb-amber/5 border-pb-amber text-foreground"
-                        : "bg-primary/5 border-primary text-foreground"
-                  }`}>
-                    <div className="space-y-1.5 flex-1 min-w-0">
-                      <h4 className="font-bold text-sm leading-snug">{selectedAction.label}</h4>
-                      <p className="text-xs text-muted-foreground leading-relaxed">{selectedAction.detail}</p>
-                      {selectedAction.id === "priority" && activeActionType === "slow_down" && (
-                        <Link to="/pool" className="mt-2 inline-flex h-8 items-center rounded-lg border border-border bg-surface px-3 text-[10px] font-bold uppercase tracking-wider text-foreground transition hover:bg-surface-raised">
-                          Open pool dues
-                        </Link>
-                      )}
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 pt-1">
+                    <div className="space-y-4 flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
+                          Selected Step
+                        </span>
+                        <Badge variant="outline" className={`text-[9px] uppercase font-bold px-2 py-0.5 rounded ${
+                          selectedAction.severity === "high" ? "border-pb-red/20 text-pb-red bg-pb-red/5" :
+                          selectedAction.severity === "medium" ? "border-pb-amber/20 text-pb-amber bg-pb-amber/5" :
+                          "border-border text-muted-foreground bg-muted/10"
+                        }`}>
+                          {selectedAction.severity === "high" ? "Critical Priority" : selectedAction.severity === "medium" ? "Recommended" : "Optional"}
+                        </Badge>
+                      </div>
+
+                      <div className="space-y-1">
+                        <h4 className="font-bold text-sm text-foreground">{selectedAction.label}</h4>
+                        <p className="text-xs text-muted-foreground leading-relaxed">{selectedAction.detail}</p>
+                      </div>
                     </div>
+
+                    {actionPath && (
+                      <div className="shrink-0 sm:self-center">
+                        <Link to={actionPath} className="inline-flex h-8 items-center rounded-lg border border-border/80 bg-background px-3.5 text-[10px] font-bold uppercase tracking-wider text-foreground hover:bg-surface hover:text-primary transition-all duration-200 shadow-sm cursor-pointer">
+                          {actionButtonText}
+                        </Link>
+                      </div>
+                    )}
                   </div>
                 );
               })()}
@@ -2139,62 +2111,7 @@ Generated via PocketBuddy Runway.`;
               </div>
             </Card>
 
-            {/* 📖 EDUCATIONAL GUIDE: HOW THE RUNWAY MATH WORKS */}
-            <Card className="p-6 border border-border bg-card/15">
-              <div className="flex items-center gap-1.5 mb-4 border-b border-border/40 pb-3">
-                <HelpCircle className="h-4.5 w-4.5 text-primary" />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">How this number is built</h3>
-              </div>
 
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="max-w-2xl text-xs text-zinc-500 leading-relaxed">
-                  Remaining flexible cash is divided by recent daily pace after reserved costs are protected.
-                </p>
-                <button
-                  onClick={() => setShowGuideModal(true)}
-                  className="inline-flex h-9 items-center justify-center rounded-lg border border-border bg-surface px-4 text-xs font-bold uppercase tracking-wider text-foreground transition hover:bg-surface-raised"
-                >
-                  Open guide
-                </button>
-              </div>
-
-              {false && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Step 1 */}
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[11px] md:text-xs font-bold">1</span>
-                    <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">Calculate Flexible Cash</h4>
-                  </div>
-                  <p className="text-[11px] md:text-xs text-zinc-500 leading-relaxed">
-                    We start with your total cycle allowance ({formatRs(forecast.current_cycle.available_funding)}) and subtract what you've already spent, plus any <strong>Fixed Commitments</strong> like active subscriptions, meal bills, pool dues, and exam reserve buffers. What is left is your <strong>Flexible Discretionary Pool</strong> (currently <strong>{formatRs(remainingDiscretionary)}</strong>).
-                  </p>
-                </div>
-
-                {/* Step 2 */}
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-full bg-pb-amber/10 text-pb-amber flex items-center justify-center text-[11px] md:text-xs font-bold">2</span>
-                    <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">Estimate Spend Speed (Pace)</h4>
-                  </div>
-                  <p className="text-[11px] md:text-xs text-zinc-500 leading-relaxed">
-                    Instead of a simple average, we use <strong>EWMA (Exponentially Weighted Moving Average)</strong>. This means recent days count much more than older days. We also apply <strong>weekend weights</strong> (typically 1.3x multiplier) because students tend to order more food and travel on weekends.
-                  </p>
-                </div>
-
-                {/* Step 3 */}
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-full bg-pb-green/10 text-pb-green flex items-center justify-center text-[11px] md:text-xs font-bold">3</span>
-                    <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">Project the Countdown</h4>
-                  </div>
-                  <p className="text-[11px] md:text-xs text-zinc-500 leading-relaxed">
-                    We divide your <strong>Flexible Pool</strong> by your <strong>Spend Speed</strong> to estimate runway days, then compare expected and stress cases. If this countdown is shorter than the days remaining in your cycle ({daysLeftInCycle} days), the engine flags the forecast shortfall and shows the buffer needed.
-                  </p>
-                </div>
-              </div>
-              )}
-            </Card>
 
           </div>
         )}
@@ -2203,25 +2120,34 @@ Generated via PocketBuddy Runway.`;
         {activeTab === "commitments" && (
           <div className="space-y-6">
             <Card className="p-5 sm:p-6 border border-border bg-card/25">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between border-b border-border/40 pb-4 mb-6">
                 <div>
-                  <h2 className="text-base font-semibold text-foreground">Fixed commitments</h2>
-                  <p className="text-xs text-zinc-500 mt-1">
+                  <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">Fixed commitments</h2>
+                  <p className="text-xs text-muted-foreground mt-1 max-w-xs leading-normal">
                     Reserved before safe/day is calculated, so essentials do not get mixed with flexible spend.
                   </p>
                 </div>
-                <div className="sm:text-right">
-                  <span className="text-[10px] md:text-xs font-bold text-zinc-500 uppercase tracking-wider block">Reserved this cycle</span>
-                  <span className="text-xl font-bold text-primary tnum">{formatRs(forecast.commitments.total)}</span>
+                <div className="flex flex-row justify-between items-center sm:flex-col sm:items-end sm:text-right gap-2 shrink-0">
+                  <div className="text-left sm:text-right">
+                    <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider block">Reserved this cycle</span>
+                    <span className="text-xl font-black text-primary tnum leading-tight">{formatRs(forecast.commitments.total)}</span>
+                  </div>
+                  <Badge variant="outline" className={`text-[9px] font-black uppercase py-0.5 px-1.5 rounded ${
+                    forecast.confidence.level === "high" ? "bg-pb-green/5 border-pb-green/20 text-pb-green" :
+                    forecast.confidence.level === "medium" ? "bg-pb-amber/5 border-pb-amber/20 text-pb-amber" :
+                    "bg-zinc-500/5 border-zinc-500/20 text-zinc-500"
+                  }`}>
+                    {forecast.confidence.level} ({forecast.confidence.score}%)
+                  </Badge>
                 </div>
               </div>
 
               {commitmentSummary.length > 0 && (
-                <div className="mb-6 grid gap-4 border-y border-border/40 py-3 grid-cols-2 lg:grid-cols-4">
+                <div className="mb-5 grid grid-cols-2 sm:grid-cols-4 gap-4 bg-muted/10 border border-border/40 p-3.5 rounded-xl">
                   {commitmentSummary.map((item) => (
-                    <div key={item.key} className="px-1">
-                      <p className="text-[10px] md:text-xs text-zinc-500 uppercase tracking-wider font-semibold">{item.label}</p>
-                      <p className="text-sm font-semibold text-foreground tnum mt-0.5">{formatRs(item.amount)}</p>
+                    <div key={item.key} className="space-y-0.5">
+                      <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold">{item.label}</p>
+                      <p className="text-sm font-black text-foreground tnum">{formatRs(item.amount)}</p>
                     </div>
                   ))}
                 </div>
@@ -2232,36 +2158,36 @@ Generated via PocketBuddy Runway.`;
                   No fixed commitments or reserves found for this allowance cycle. Add rent, subscriptions, meal bills, exam reserve, or pool dues to improve runway accuracy.
                 </div>
               ) : (
-                <div className="divide-y divide-border/60">
+                <div className="divide-y divide-border/30">
                   {forecast.commitments.items.map((item: any, i: number) => {
                     const due = new Date(item.due_at);
                     return (
-                      <div key={i} className="py-3.5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div key={i} className="py-3 flex items-center justify-between gap-3 first:pt-0 last:pb-0">
                         <div className="flex min-w-0 items-center gap-3">
-                          <div className="p-2 rounded-lg bg-white/5 border border-border/40 text-zinc-400">
-                            {item.kind === "subscription" ? <CreditCard className="h-4.5 w-4.5 text-primary/80" /> :
-                             item.kind === "mess" ? <Layers className="h-4.5 w-4.5 text-pb-amber/80" /> :
-                             item.kind === "exam_buffer" ? <ShieldCheck className="h-4.5 w-4.5 text-pb-green/80" /> :
-                             <Layers className="h-4.5 w-4.5 text-pb-blue/80" />}
+                          <div className="p-2 rounded-lg bg-muted border border-border/40 text-muted-foreground shrink-0">
+                            {item.kind === "subscription" ? <CreditCard className="h-4 w-4" /> :
+                             item.kind === "mess" ? <Layers className="h-4 w-4" /> :
+                             item.kind === "exam_buffer" ? <ShieldCheck className="h-4 w-4" /> :
+                             <Layers className="h-4 w-4" />}
                           </div>
-                          <div>
-                            <p className="text-xs font-semibold text-foreground">{item.label}</p>
-                            <p className="text-[10px] md:text-xs text-zinc-500 flex items-center gap-1.5 mt-0.5">
-                              <Calendar className="h-3 w-3" />
-                              <span>Due: {due.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-foreground truncate">{item.label}</p>
+                            <p className="text-[10px] text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                              <Calendar className="h-3 w-3 shrink-0" />
+                              <span>Due {due.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
                             </p>
                           </div>
                         </div>
 
-                        <div className="flex items-center justify-between gap-3 sm:justify-end">
-                          <Badge variant="outline" className={`text-[9px] uppercase font-black tracking-wider ${
-                            item.status === "scheduled" ? "border-pb-green/30 text-pb-green" :
-                            item.status === "reserved" ? "border-pb-purple/30 text-pb-purple" :
-                            "border-zinc-500/30 text-zinc-500"
+                        <div className="flex items-center gap-2.5 shrink-0">
+                          <Badge variant="outline" className={`text-[8px] font-bold uppercase py-0.5 ${
+                            item.status === "scheduled" ? "border-pb-green/30 text-pb-green bg-pb-green/5" :
+                            item.status === "reserved" ? "border-pb-purple/30 text-pb-purple bg-pb-purple/5" :
+                            "border-border text-muted-foreground bg-muted/5"
                           }`}>
                             {item.status}
                           </Badge>
-                          <span className="text-xs font-semibold text-foreground tnum">{formatRs(item.amount)}</span>
+                          <span className="text-xs font-black text-foreground tnum">{formatRs(item.amount)}</span>
                         </div>
                       </div>
                     );
@@ -2271,20 +2197,20 @@ Generated via PocketBuddy Runway.`;
             </Card>
 
             {/* Profile setup reminder for Mess and Exams */}
-            <Card className="p-5 border border-border/50 bg-surface flex flex-col sm:flex-row items-center gap-4 justify-between">
-              <div className="flex gap-3">
-                <div className="p-2.5 rounded-full bg-primary/10 text-primary self-start sm:self-center">
-                  <Info className="h-5 w-5" />
+            <Card className="p-4 border border-border/50 bg-card/10 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="p-2 rounded-lg bg-primary/10 text-primary shrink-0 hidden sm:block">
+                  <Info className="h-4 w-4" />
                 </div>
-                <div>
-                  <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">Keep commitments accurate</h4>
-                  <p className="text-[11px] md:text-xs text-zinc-500 mt-1 leading-relaxed">
-                    Update meal routine, subscriptions, exam reserve, and living setup whenever they change. Runway recalculates safe/day from these reserved costs.
+                <div className="min-w-0">
+                  <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">Need updates?</h4>
+                  <p className="text-[10px] text-muted-foreground leading-normal mt-0.5 truncate max-w-[200px] sm:max-w-none">
+                    Adjust subscriptions, mess bills, or exam buffer in settings.
                   </p>
                 </div>
               </div>
-              <Link to="/settings" className="shrink-0 h-9 rounded-lg border border-border px-4 flex items-center text-xs font-bold uppercase tracking-wider hover:bg-surface-raised transition-all">
-                Update Settings
+              <Link to="/settings" className="shrink-0 h-8 rounded-lg border border-border/80 bg-background px-3 flex items-center text-[10px] font-bold uppercase tracking-wider hover:bg-surface hover:text-primary transition-all duration-200 shadow-sm cursor-pointer">
+                Settings
               </Link>
             </Card>
           </div>
@@ -2295,20 +2221,29 @@ Generated via PocketBuddy Runway.`;
           <div className="space-y-6">
             {/* Charts Container */}
             <Card className="p-5 sm:p-6 border border-border bg-card/25">
-              <div className="mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+              <div className="mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                 <div>
                   <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400">Projection takeaway</h3>
                   <p className="mt-1 text-xs text-zinc-500 leading-relaxed">
                     {horizonTakeaway}
                   </p>
                 </div>
-                {projectionSignal && (
-                  <Badge variant="outline" className={`w-fit text-[10px] uppercase tracking-wider font-semibold ${
-                    projectionSignal.isDeficit ? "border-pb-red/30 text-pb-red bg-pb-red/5" : "border-pb-green/30 text-pb-green bg-pb-green/5"
+                <div className="flex flex-wrap items-center gap-2 sm:justify-end shrink-0">
+                  {projectionSignal && (
+                    <Badge variant="outline" className={`text-[10px] uppercase tracking-wider font-semibold ${
+                      projectionSignal.isDeficit ? "border-pb-red/30 text-pb-red bg-pb-red/5" : "border-pb-green/30 text-pb-green bg-pb-green/5"
+                    }`}>
+                      {projectionSignal.isDeficit ? "First deficit" : "Long view"}: {projectionSignal.label}
+                    </Badge>
+                  )}
+                  <Badge variant="outline" className={`text-[10px] uppercase tracking-wider font-semibold ${
+                    forecast.confidence.level === "high" ? "border-pb-green/30 text-pb-green bg-pb-green/5" :
+                    forecast.confidence.level === "medium" ? "border-pb-amber/30 text-pb-amber bg-pb-amber/5" :
+                    "border-border text-muted-foreground bg-muted/10"
                   }`}>
-                    {projectionSignal.isDeficit ? "First deficit" : "Long view"}: {projectionSignal.label}
+                    {forecast.confidence.level} confidence ({forecast.confidence.score}%)
                   </Badge>
-                )}
+                </div>
               </div>
               
               <div className="h-64 w-full text-xs">
@@ -2382,56 +2317,49 @@ Generated via PocketBuddy Runway.`;
           </div>
         )}
 
-        {/* ── Engine Methodology & Confidence ── */}
-        <Card className="p-5 sm:p-6 border border-border bg-card/15">
-          <div className="flex flex-col sm:flex-row justify-between gap-4 items-start sm:items-center mb-4">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
-              <ShieldCheck className="h-4.5 w-4.5 text-pb-green" />
-              <span>Forecast confidence</span>
-            </h3>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] md:text-xs font-bold text-zinc-500 uppercase">Confidence</span>
-              <Badge className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
-                forecast.confidence.level === "high" ? "bg-pb-green/10 text-pb-green border border-pb-green/30" :
-                forecast.confidence.level === "medium" ? "bg-pb-amber/10 text-pb-amber border border-pb-amber/30" :
-                "bg-zinc-500/10 text-zinc-500 border border-zinc-500/30"
-              }`}>
-                {forecast.confidence.level} ({forecast.confidence.score}%)
-              </Badge>
-            </div>
-          </div>
 
-          <div className="space-y-4 text-xs text-zinc-500 leading-relaxed">
-            <p className="font-semibold text-zinc-400">
-              {forecast.confidence.reason}
-            </p>
-            <button
-              type="button"
-              onClick={() => setShowMethodology((open) => !open)}
-              className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-primary transition hover:text-primary/80"
-            >
-              <ChevronRight className={`h-3.5 w-3.5 transition-transform ${showMethodology ? "rotate-90" : ""}`} />
-              {showMethodology ? "Hide calculation details" : "Show calculation details"}
-            </button>
-            {showMethodology && (
-            <div className="border-t border-border/50 pt-3">
-              <p className="font-bold text-[10px] md:text-xs uppercase tracking-wider text-zinc-400 mb-2">How this forecast is calculated</p>
-              <ul className="list-disc pl-4 space-y-1.5">
-                {forecast.methodology.notes.map((note: string, idx: number) => (
-                  <li key={idx}>{note}</li>
-                ))}
-                <li>
-                  Uses a <strong>{forecast.methodology.lookback_days}-day lookback</strong> with stronger weight on recent spends.
-                </li>
-                <li>
-                  Adjusts for day-of-week spending patterns so weekend-heavy food or travel habits do not get averaged away.
-                </li>
-              </ul>
-            </div>
+      </div>
+      {/* 📋 FORECAST INPUTS MODAL */}
+      <Dialog open={showForecastInputs} onOpenChange={setShowForecastInputs}>
+        <DialogContent className="max-w-md bg-background border border-border text-foreground">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-black uppercase tracking-wider text-primary flex items-center gap-1.5">
+              <ShieldCheck className="h-4.5 w-4.5 text-primary" />
+              <span>Forecast Inputs</span>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="divide-y divide-border/30 max-h-[60vh] overflow-y-auto pr-1">
+            {absorbedFactors.length ? absorbedFactors.map((factor: any) => (
+              <div key={factor.kind} className="py-3 flex items-start justify-between gap-3 text-xs">
+                <div className="min-w-0 space-y-0.5">
+                  <p className="font-bold text-foreground truncate">{factor.label}</p>
+                  <p className="text-[11px] text-muted-foreground leading-normal">{factor.detail}</p>
+                </div>
+                <div className="text-right shrink-0">
+                  <span className="font-black text-foreground tnum">
+                    {formatRs(factor.daily_amount ?? factor.amount)}
+                  </span>
+                  {factor.daily_amount ? <span className="block text-[10px] text-muted-foreground font-semibold">/day</span> : null}
+                </div>
+              </div>
+            )) : commitmentSummary.length ? commitmentSummary.map((item) => (
+              <div key={item.key} className="py-3 flex items-start justify-between gap-3 text-xs">
+                <div className="min-w-0 space-y-0.5">
+                  <p className="font-bold text-foreground truncate">{item.label}</p>
+                  <p className="text-[11px] text-muted-foreground leading-normal">Cycle reserve cost</p>
+                </div>
+                <span className="font-black text-foreground shrink-0 tnum">{formatRs(item.amount)}</span>
+              </div>
+            )) : (
+              <div className="py-6 text-xs text-muted-foreground text-center italic">
+                No recurring obligations linked yet.
+              </div>
             )}
           </div>
-        </Card>
-      </div>
+        </DialogContent>
+      </Dialog>
+
       {/* 📖 RUNWAY FLIGHT MANUAL GUIDE MODAL */}
       <Dialog open={showGuideModal} onOpenChange={setShowGuideModal}>
         <DialogContent className="max-w-lg bg-background border border-border text-foreground">
