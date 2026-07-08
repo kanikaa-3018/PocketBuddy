@@ -1005,14 +1005,16 @@ function Dashboard() {
     week.setDate(week.getDate() + 7);
     return subs
       .filter((s) => s.is_active !== false)
+      .filter((s) => ["confirmed", "active", "missed"].includes(String(s.status ?? "confirmed")))
       .filter((s) => {
         const d = new Date(s.next_debit_date);
         return d >= today && d <= week;
       })
       .map((s) => {
+        const amount = Number(s.amount ?? s.amount_paise ?? 0);
         const newLimit =
-          calc.daysLeft > 0 ? Math.round((calc.remaining - s.amount / 100) / calc.daysLeft) : 0;
-        return { ...s, newLimit, critical: newLimit < 80 };
+          calc.daysLeft > 0 ? Math.round((calc.remaining - amount / 100) / calc.daysLeft) : 0;
+        return { ...s, amount, newLimit, critical: newLimit < 80 };
       });
   }, [subs, calc]);
 
@@ -1929,7 +1931,7 @@ function Dashboard() {
                                 <div>
                                   <p className="text-xs font-semibold text-foreground">{sub.label}</p>
                                   <p style={{ fontSize: "11px", color: "var(--muted-foreground)", marginTop: "2px" }}>
-                                    {rupees(sub.amount)} · expected {shortDate(new Date(sub.due_at))} · {sub.cadence || "monthly"} cycle
+                                    {rupees(sub.amount)} - expected {shortDate(new Date(sub.due_at))} - {sub.cadence || "monthly"} cycle
                                   </p>
                                 </div>
                               </div>
@@ -1944,7 +1946,7 @@ function Dashboard() {
                                 <p style={{ fontSize: "9px", fontWeight: 700, letterSpacing: "0.05em", color: "var(--muted-foreground)", textTransform: "uppercase", marginBottom: "2px" }}>Why Detected</p>
                                 {sub.evidence.map((ev: string, idx: number) => (
                                   <span key={idx} style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>
-                                    • {ev}
+                                    - {ev}
                                   </span>
                                 ))}
                               </div>
@@ -1953,7 +1955,7 @@ function Dashboard() {
                             {/* Runway Impact */}
                             {dailyImpact > 0 && (
                               <p style={{ fontSize: "11px", color: "#f59e0b", fontWeight: 500, background: "rgba(245,158,11,0.05)", padding: "6px 10px", borderRadius: "6px", border: "1px dashed rgba(245,158,11,0.2)" }}>
-                                ⚠️ <strong>Runway Impact:</strong> Will reduce safe daily spend by <strong>{rupees(dailyImpact * 100)}/day</strong> (safe budget adjusts to {rupees(newLimit * 100)}/day).
+                                <strong>Runway impact if confirmed:</strong> Safe daily spend would drop by <strong>{rupees(dailyImpact * 100)}/day</strong> (adjusting to {rupees(newLimit * 100)}/day).
                               </p>
                             )}
 
@@ -1998,27 +2000,10 @@ function Dashboard() {
                                 className="border-border text-muted-foreground hover:text-foreground h-8 text-[11px] font-bold uppercase tracking-wider"
                                 onClick={() => {
                                   setSnoozedSubs(prev => [...prev, sub.id]);
-                                  toast.success(`Alert snoozed. We'll remind you next cycle.`);
+                                  toast.success(`Hidden for now.`);
                                 }}
                               >
-                                Remind me once
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="border-border text-red-400 hover:text-red-300 hover:bg-red-500/10 h-8 text-[11px] font-bold uppercase tracking-wider"
-                                onClick={async () => {
-                                  try {
-                                    await ignoreSubscription({ data: { id: sub.id } });
-                                    qc.invalidateQueries({ queryKey: ["runway-forecast"] });
-                                    qc.invalidateQueries({ queryKey: ["all-subs"] });
-                                    toast.success(`Ignored ${sub.label} merchant.`);
-                                  } catch (err: any) {
-                                    toast.error(err.message || "Failed to ignore merchant");
-                                  }
-                                }}
-                              >
-                                Ignore merchant
+                                Hide for now
                               </Button>
                             </div>
                           </div>

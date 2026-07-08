@@ -23,6 +23,23 @@ class SubReq(BaseModel):
     is_active: Optional[bool] = True
 
 
+def _billing_cycle_days(cycle: Optional[str]) -> int:
+    normalized = (cycle or "monthly").lower().replace("-", "_")
+    if normalized == "weekly":
+        return 7
+    if normalized in {"biweekly", "fortnightly"}:
+        return 14
+    if normalized in {"cycle_28", "prepaid_28"}:
+        return 28
+    if normalized == "quarterly":
+        return 90
+    if normalized in {"half_yearly", "semiannual", "semi_annual"}:
+        return 180
+    if normalized in {"annual", "yearly"}:
+        return 365
+    return 30
+
+
 @router.get("")
 async def get_subscriptions(user_id: str = Depends(get_current_user)):
     db = get_db()
@@ -40,14 +57,21 @@ async def insert_subscription_route(req: SubReq, user_id: str = Depends(get_curr
     service_name = (req.service_name or req.name or "").strip()
     if not service_name:
         raise HTTPException(status_code=400, detail="Missing service_name")
+    if req.amount <= 0:
+        raise HTTPException(status_code=400, detail="Subscription amount must be positive")
+    try:
+        next_debit_date = parse_to_naive_utc(req.next_debit_date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid next debit date")
 
     subscription = await upsert_subscription(
         db,
         user_id=user_id,
         service_name=service_name,
         amount_paise=req.amount,
-        next_debit_date=parse_to_naive_utc(req.next_debit_date),
-        detected_from=req.detected_from or "manual",
+        next_debit_date=next_debit_date,
+        detected_from="manual",
+        observed_interval_days=_billing_cycle_days(req.billing_cycle),
         status="confirmed",
     )
     if req.is_active is not None and subscription.get("is_active") != req.is_active:
@@ -73,7 +97,7 @@ async def toggle_subscription(req: dict, user_id: str = Depends(get_current_user
     desired_status = req.get("is_active")
     new_status = desired_status if isinstance(desired_status, bool) else not sub.get("is_active", True)
     await db.subscriptions.update_one(
-        {"_id": sub_id},
+        {"_id": sub_id, "user_id": user_id},
         {"$set": {"is_active": new_status, "updated_at": datetime.datetime.utcnow()}}
     )
 
@@ -91,7 +115,7 @@ async def confirm_subscription(req: dict, user_id: str = Depends(get_current_use
         raise HTTPException(status_code=404, detail="Subscription not found")
 
     await db.subscriptions.update_one(
-        {"_id": sub_id},
+        {"_id": sub_id, "user_id": user_id},
         {"$set": {"status": "confirmed", "is_active": True, "updated_at": datetime.datetime.utcnow()}}
     )
     return {"status": "ok", "status_label": "confirmed"}
@@ -108,7 +132,7 @@ async def ignore_subscription(req: dict, user_id: str = Depends(get_current_user
         raise HTTPException(status_code=404, detail="Subscription not found")
 
     await db.subscriptions.update_one(
-        {"_id": sub_id},
+        {"_id": sub_id, "user_id": user_id},
         {"$set": {"status": "ignored", "is_active": False, "updated_at": datetime.datetime.utcnow()}}
     )
     return {"status": "ok", "status_label": "ignored"}
@@ -125,7 +149,7 @@ async def cancel_subscription(req: dict, user_id: str = Depends(get_current_user
         raise HTTPException(status_code=404, detail="Subscription not found")
 
     await db.subscriptions.update_one(
-        {"_id": sub_id},
+        {"_id": sub_id, "user_id": user_id},
         {"$set": {"status": "cancelled", "is_active": False, "updated_at": datetime.datetime.utcnow()}}
     )
     return {"status": "ok", "status_label": "cancelled"}

@@ -50,7 +50,6 @@ import {
   ignoreSubscription,
   cancelSubscription,
 } from "@/lib/api/db.functions";
-import { PlatformIcon } from "@/components/PlatformIcon";
 
 export const Route = createLazyFileRoute("/_authenticated/settings")({
   component: SettingsPage,
@@ -58,6 +57,10 @@ export const Route = createLazyFileRoute("/_authenticated/settings")({
 
 type Profile = any;
 type Sub = any;
+
+function subAmount(s: Sub) {
+  return Number(s.amount ?? s.amount_paise ?? 0);
+}
 
 function SettingsPage() {
   const { user, logout } = useAuth();
@@ -78,7 +81,7 @@ function SettingsPage() {
   });
 
   const { trackedSubs, possibleSubs, inactiveSubs } = useMemo(() => {
-    const list = subs ?? [];
+    const list = (subs ?? []).map((s: any) => ({ ...s, amount: subAmount(s) }));
     const tracked = list.filter((s: any) => s.is_active !== false && (s.status === "confirmed" || s.status === "active" || s.status === "missed" || !s.status));
     const possible = list.filter((s: any) => s.is_active !== false && s.status === "possible");
     const inactive = list.filter((s: any) => s.is_active === false || s.status === "ignored" || s.status === "cancelled");
@@ -752,7 +755,7 @@ function SettingsPage() {
             marginBottom: "24px",
           }}
         >
-          {(subs ?? []).length === 0 ? (
+          {trackedSubs.length === 0 ? (
             <div
               style={{
                 padding: "32px 18px",
@@ -761,10 +764,10 @@ function SettingsPage() {
                 fontSize: "13px",
               }}
             >
-              No subscriptions tracked yet.
+              No confirmed recurring commitments yet.
             </div>
           ) : (
-            (subs ?? []).map((s: Sub, i: number) => (
+            trackedSubs.map((s: Sub, i: number) => (
               <div key={s.id}>
                 {i > 0 && (
                   <div
@@ -827,12 +830,27 @@ function SettingsPage() {
                       {rupees(s.amount)} · next {shortDate(new Date(s.next_debit_date))}
                     </p>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                     <Switch
                       id={`switch-sub-${s.id}`}
-                      checked={s.is_active}
+                      checked={s.is_active !== false}
                       onCheckedChange={(v) => toggleSub(s.id, v, s.service_name ?? s.name)}
                     />
+                    <button
+                      onClick={() => cancelSub(s.id, s.service_name ?? s.name)}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        color: "var(--muted-foreground)",
+                        cursor: "pointer",
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        letterSpacing: "0.06em",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      Mark cancelled
+                    </button>
                     <button
                       onClick={() => delSub(s.id)}
                       style={{
@@ -869,6 +887,112 @@ function SettingsPage() {
             ))
           )}
         </div>
+
+        {/* ── DETECTED COMMITMENTS REVIEW ── */}
+        {possibleSubs.length > 0 && (
+          <>
+            <SectionHeader icon={<CreditCard size={13} />} label="REVIEW DETECTED COMMITMENTS" />
+            <div
+              style={{
+                background: "var(--card)",
+                border: "1px solid var(--border)",
+                borderRadius: "14px",
+                overflow: "hidden",
+                marginBottom: "24px",
+              }}
+            >
+              {possibleSubs.map((s: Sub, i: number) => (
+                <div key={s.id}>
+                  {i > 0 && <div style={{ height: "1px", background: "var(--border)", margin: "0 18px" }} />}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "16px",
+                      padding: "14px 18px",
+                    }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--foreground)" }}>
+                        {s.service_name ?? s.name}
+                      </p>
+                      <p
+                        style={{
+                          fontSize: "12px",
+                          color: "var(--muted-foreground)",
+                          marginTop: "2px",
+                          fontFamily: "var(--font-mono)",
+                        }}
+                      >
+                        {rupees(subAmount(s))} - expected {shortDate(new Date(s.next_debit_date))} - {Math.round(Number(s.confidence ?? 0))}% confidence
+                      </p>
+                      {(s.evidence ?? []).slice(0, 2).map((item: string) => (
+                        <p key={item} style={{ fontSize: "11px", color: "var(--muted-foreground)", marginTop: "3px" }}>
+                          {item}
+                        </p>
+                      ))}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+                      <Button size="sm" onClick={() => confirmSub(s.id, s.service_name ?? s.name)}>
+                        Track
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => ignoreSub(s.id, s.service_name ?? s.name)}>
+                        Not recurring
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {inactiveSubs.length > 0 && (
+          <>
+            <SectionHeader icon={<CreditCard size={13} />} label="NOT TRACKED" />
+            <div
+              style={{
+                background: "var(--card)",
+                border: "1px solid var(--border)",
+                borderRadius: "14px",
+                overflow: "hidden",
+                marginBottom: "24px",
+              }}
+            >
+              {inactiveSubs.map((s: Sub, i: number) => (
+                <div key={s.id}>
+                  {i > 0 && <div style={{ height: "1px", background: "var(--border)", margin: "0 18px" }} />}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "12px 18px",
+                      gap: "16px",
+                    }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <p style={{ fontSize: "13px", fontWeight: 500, color: "var(--foreground)" }}>
+                        {s.service_name ?? s.name}
+                      </p>
+                      <p style={{ fontSize: "12px", color: "var(--muted-foreground)", marginTop: "2px" }}>
+                        {s.status === "ignored"
+                          ? "Ignored by you"
+                          : s.status === "cancelled"
+                            ? "Marked cancelled"
+                            : "Paused by you"}
+                      </p>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => confirmSub(s.id, s.service_name ?? s.name)}>
+                      Track again
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
 
         {/* ── DATA & EXPORT ── */}
         <SectionHeader icon={<Database size={13} />} label="DATA & EXPORT" />
@@ -1022,6 +1146,7 @@ function SettingsPage() {
             onClose={() => {
               setAddingSub(false);
               qc.invalidateQueries({ queryKey: ["all-subs"] });
+              qc.invalidateQueries({ queryKey: ["runway-forecast"] });
             }}
           />
         </DialogContent>

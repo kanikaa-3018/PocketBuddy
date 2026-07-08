@@ -64,6 +64,14 @@ def generate_monthly_transactions(year, month, user_id, max_day=31):
             "dir": "debit",
             "day": 10,
             "hour": 12
+        },
+        {
+            "amount": 9900,
+            "merchant": "Design Tool Workspace",
+            "category": "other",
+            "dir": "debit",
+            "day": 12,
+            "hour": 12
         }
     ]
     
@@ -210,6 +218,26 @@ def seed_data(email=TARGET_EMAIL, password=TARGET_PASSWORD, full_name=TARGET_NAM
         "created_at": datetime.datetime(2026, 4, 30),
         "updated_at": datetime.datetime(2026, 4, 30)
     })
+    # ChatGPT Plus: Active/Tracked from repeated known-brand debit rhythm
+    db.subscriptions.insert_one({
+        "_id": str(uuid.uuid4()),
+        "user_id": user_id,
+        "service_name": "ChatGPT Plus",
+        "name": "ChatGPT Plus",
+        "amount": 199900,
+        "billing_cycle": "monthly",
+        "next_debit_date": now + datetime.timedelta(days=5),
+        "detected_from": "recurring_pattern",
+        "is_active": True,
+        "status": "confirmed",
+        "confidence": 95.0,
+        "evidence": [
+            "Recognized premium subscription brand",
+            "Stable monthly amount of Rs 1,999.00 observed"
+        ],
+        "created_at": datetime.datetime(2026, 4, 30),
+        "updated_at": datetime.datetime(2026, 4, 30)
+    })
     # Netflix: Paused/Inactive
     db.subscriptions.insert_one({
         "_id": str(uuid.uuid4()),
@@ -227,22 +255,23 @@ def seed_data(email=TARGET_EMAIL, password=TARGET_PASSWORD, full_name=TARGET_NAM
         "created_at": datetime.datetime(2026, 4, 30),
         "updated_at": datetime.datetime(2026, 4, 30)
     })
-    # ChatGPT Plus: Possible/Candidate (detected rhythm)
+    # Design Tool Workspace: Possible/Candidate. This is intentionally not a
+    # known brand, so it remains in review until the student confirms it.
     db.subscriptions.insert_one({
         "_id": str(uuid.uuid4()),
         "user_id": user_id,
-        "service_name": "ChatGPT Plus",
-        "name": "ChatGPT Plus",
-        "amount": 199900,
+        "service_name": "Design Tool Workspace",
+        "name": "Design Tool Workspace",
+        "amount": 9900,
         "billing_cycle": "monthly",
-        "next_debit_date": now + datetime.timedelta(days=5),
+        "next_debit_date": now + datetime.timedelta(days=6),
         "detected_from": "recurring_pattern",
         "is_active": True,
         "status": "possible",
-        "confidence": 70.0,
+        "confidence": 60.0,
         "evidence": [
-            "OpenAI premium service rhythm detected in transaction notes",
-            "Stable monthly amount of Rs 1,999.00 observed",
+            "Seen twice with a recurring monthly cadence",
+            "Stable amount of Rs 99.00 observed",
             "Requires user confirmation to count as runway fixed cost"
         ],
         "created_at": datetime.datetime(2026, 4, 30),

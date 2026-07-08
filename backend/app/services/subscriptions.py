@@ -8,12 +8,12 @@ KNOWN_SUBSCRIPTIONS: tuple[tuple[tuple[str, ...], str], ...] = (
     (("spotify",), "Spotify"),
     (("netflix",), "Netflix"),
     (("youtube", "yt premium"), "YouTube Premium"),
-    (("prime", "amazon prime"), "Amazon Prime"),
+    (("amazon prime", "prime video", "prime membership"), "Amazon Prime"),
     (("hotstar",), "Disney+ Hotstar"),
     (("zee5",), "Zee5"),
     (("sonyliv",), "SonyLIV"),
     (("jiofiber", "jio fiber"), "JioFiber"),
-    (("airtel",), "Airtel Thanks"),
+    (("airtel thanks", "airtel postpaid", "airtel xstream", "airtel broadband", "airtel fiber"), "Airtel Thanks"),
     (("vi postpaid", "vodafone idea"), "Vi Postpaid"),
     (("xbox",), "Xbox Game Pass"),
     (("playstation",), "PlayStation Plus"),
@@ -46,12 +46,19 @@ CADENCE_BUCKETS = [
 
 GOOD_KEYWORDS = ["autopay", "mandate", "renewal", "subscription", "plan", "validity", "premium", "pre-debit", "bill"]
 BAD_KEYWORDS = [
-    "canteen", "cafeteria", "dhaba", "mess", "caterer", "dining", "tapri", "chai",
+    "canteen", "cafeteria", "cafe", "coffee", "dhaba", "mess", "caterer", "dining", "tapri", "chai", "snack", "restaurant",
     "zomato", "swiggy", "ubereats", "eatclub", "box8",
     "blinkit", "zepto", "bigbasket", "jiomart", "groceries", "grocery", "kirana",
     "uber", "ola", "auto", "taxi", "metro", "irctc", "rail", "travel",
     "transfer", "sent", "pay to"
 ]
+FOOD_OR_LOCAL_MERCHANT_BLOCKERS = {
+    "canteen", "cafeteria", "cafe", "coffee", "dhaba", "mess", "caterer",
+    "dining", "tapri", "chai", "snack", "restaurant", "kirana", "grocery",
+    "groceries", "campus", "hostel", "library", "stationery",
+}
+USER_EXCLUDED_STATUSES = {"ignored", "cancelled"}
+USER_INTENT_DETECTED_FROM = {"manual", "manual_transaction"}
 
 def to_naive_utc(dt: datetime.datetime) -> datetime.datetime:
     if dt.tzinfo is not None:
@@ -86,24 +93,47 @@ def canonical_merchant(value: str) -> str:
 def compact_merchant(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", value.lower())
 
+def amount_paise_from_doc(item: dict) -> int:
+    for key in ("amount", "amount_paise"):
+        amount = item.get(key, 0)
+        if isinstance(amount, int) and not isinstance(amount, bool) and amount > 0:
+            return amount
+    return 0
+
 def is_bad_merchant(merchant_name: str) -> bool:
-    name_lower = merchant_name.lower()
-    # Exempt club/pass/one members
-    if any(p in name_lower for p in ["pass", "club", "one"]):
+    if subscription_name_for_merchant(merchant_name):
         return False
-    return any(word in name_lower for word in BAD_KEYWORDS)
+    canonical = canonical_merchant(merchant_name)
+    tokens = set(canonical.split())
+    if tokens & FOOD_OR_LOCAL_MERCHANT_BLOCKERS:
+        return True
+    return any(word in canonical for word in BAD_KEYWORDS)
 
 def subscription_name_for_merchant(merchant: Optional[str]) -> Optional[str]:
     cleaned = clean_merchant_name(merchant)
     if not cleaned:
         return None
     canonical = canonical_merchant(cleaned)
+    tokens = set(canonical.split())
+    if tokens & FOOD_OR_LOCAL_MERCHANT_BLOCKERS:
+        return None
     compact = compact_merchant(cleaned)
     for keywords, display_name in KNOWN_SUBSCRIPTIONS:
         for keyword in keywords:
             if canonical_merchant(keyword) in canonical or compact_merchant(keyword) in compact:
                 return display_name
     return None
+
+def same_subscription_identity(left: Optional[str], right: Optional[str]) -> bool:
+    left_clean = clean_merchant_name(left)
+    right_clean = clean_merchant_name(right)
+    if not left_clean or not right_clean:
+        return False
+    if canonical_merchant(left_clean) == canonical_merchant(right_clean):
+        return True
+    left_known = subscription_name_for_merchant(left_clean)
+    right_known = subscription_name_for_merchant(right_clean)
+    return bool(left_known and right_known and canonical_merchant(left_known) == canonical_merchant(right_known))
 
 def service_name_from_transaction(txn: dict) -> Optional[str]:
     merchant = txn.get("mapped_merchant_name") or txn.get("raw_merchant_string")
@@ -152,19 +182,30 @@ async def upsert_subscription(
             "$or": [{"service_name": name_regex}, {"name": name_regex}],
         }
     )
+    if not existing:
+        user_subs = await db.subscriptions.find({"user_id": user_id}).to_list(length=300)
+        existing = next(
+            (
+                sub
+                for sub in user_subs
+                if same_subscription_identity(sub.get("service_name") or sub.get("name"), normalized_name)
+            ),
+            None,
+        )
 
     now = datetime.datetime.utcnow()
-    
+
     # Map observed interval to cadence label
     billing_cycle = "monthly"
     if observed_interval_days:
         billing_cycle, _ = classify_cadence([observed_interval_days])
 
-    # If manual creation or known service, override confidence/status
-    if detected_from in ("manual", "auto_detected"):
+    # If the user explicitly adds or marks a transaction as a commitment,
+    # treat that as stronger than old detection state.
+    if detected_from in USER_INTENT_DETECTED_FROM:
         status = "confirmed"
         confidence = 100.0
-        evidence = evidence or ["Manually added by user" if detected_from == "manual" else "Recognized subscription service"]
+        evidence = evidence or ["Manually added by user"]
 
     evidence = evidence or ["Recurring payment pattern detected"]
 
@@ -172,6 +213,7 @@ async def upsert_subscription(
         "name": normalized_name,
         "service_name": normalized_name,
         "amount": amount_paise,
+        "amount_paise": amount_paise,
         "billing_cycle": billing_cycle,
         "next_debit_date": to_naive_utc(next_debit_date),
         "status": status,
@@ -187,14 +229,19 @@ async def upsert_subscription(
 
     # Respect user exclusions or toggled status
     if existing:
-        # Don't auto-activate if the user has ignored/cancelled or turned it off
-        if existing.get("status") in ("ignored", "cancelled") and status == "possible":
-            # Keep their current status
+        # Detection must never undo a user's explicit ignore/cancel choice.
+        # Manual add/confirm is an explicit user reversal and should reactivate.
+        if detected_from in USER_INTENT_DETECTED_FROM:
+            update["is_active"] = status in ("confirmed", "active", "possible")
+        elif existing.get("status") in USER_EXCLUDED_STATUSES:
             update["status"] = existing["status"]
             update["is_active"] = existing.get("is_active", False)
-        
-        await db.subscriptions.update_one({"_id": existing["_id"]}, {"$set": update})
-        updated = await db.subscriptions.find_one({"_id": existing["_id"]})
+        elif existing.get("status") in {"confirmed", "active", "missed"}:
+            update["status"] = existing["status"]
+            update["is_active"] = existing.get("is_active", True)
+
+        await db.subscriptions.update_one({"_id": existing["_id"], "user_id": user_id}, {"$set": update})
+        updated = await db.subscriptions.find_one({"_id": existing["_id"], "user_id": user_id})
         return updated
 
     new_sub = {
@@ -230,15 +277,19 @@ async def upsert_subscription_for_transaction(
         detected_from=detected_from,
         observed_at=observed_at,
         observed_interval_days=30,
-        status="confirmed",
-        confidence=100.0,
-        evidence=["Recognized brand subscription service"],
+        status="possible",
+        confidence=60.0,
+        evidence=["Known subscription brand seen once; waiting for repeat pattern or user confirmation"],
     )
 
 async def detect_recurring_subscriptions(db, user_id: str) -> list[dict]:
     # Fetch user transactions (past 120 days)
     txns_cursor = db.transactions.find({"user_id": user_id}).sort("created_at", -1)
     txns = await txns_cursor.to_list(length=500)
+    profile = await db.profiles.find_one({"_id": user_id}) or {}
+    campus_key = canonical_merchant(
+        str(profile.get("college_name") or profile.get("campus") or "unknown_campus")
+    ) or "unknown_campus"
 
     # Load existing subscriptions to preserve user status overrides
     existing_subs = await db.subscriptions.find({"user_id": user_id}).to_list(length=300)
@@ -247,8 +298,8 @@ async def detect_recurring_subscriptions(db, user_id: str) -> list[dict]:
     # Group transactions by canonical merchant name
     groups: dict[str, list[dict]] = {}
     for txn in txns:
-        amount = txn.get("amount")
-        if not isinstance(amount, int) or amount <= 0:
+        amount = amount_paise_from_doc(txn)
+        if amount <= 0:
             continue
 
         direction = (txn.get("direction") or "debit").lower()
@@ -260,7 +311,8 @@ async def detect_recurring_subscriptions(db, user_id: str) -> list[dict]:
             continue
 
         key = canonical_merchant(service_name)
-        groups.setdefault(key, []).append(txn)
+        normalized_txn = {**txn, "amount": amount}
+        groups.setdefault(key, []).append(normalized_txn)
 
     detected: list[dict] = []
     now_utc = datetime.datetime.utcnow()
@@ -269,16 +321,16 @@ async def detect_recurring_subscriptions(db, user_id: str) -> list[dict]:
     async def get_community_user_count(merchant_name: str, amount: int) -> int:
         canonical_name = canonical_merchant(merchant_name)
         candidate = await db.candidate_subscriptions.find_one(
-            {"canonical_name": canonical_name, "amount": amount}
+            {"canonical_name": canonical_name, "amount": amount, "campus_key": campus_key}
         )
         if candidate:
-            return len(candidate.get("distinct_users", []))
+            return len([candidate_user for candidate_user in candidate.get("distinct_users", []) if candidate_user != user_id])
         return 0
 
     for m_canonical, txns_for_key in groups.items():
         # Sort oldest first to compute chronological intervals
         txns_for_key.sort(key=lambda t: coerce_datetime(t.get("created_at")) or datetime.datetime.min)
-        
+
         dated_txns = [
             (coerce_datetime(t.get("created_at")), t)
             for t in txns_for_key
@@ -294,14 +346,14 @@ async def detect_recurring_subscriptions(db, user_id: str) -> list[dict]:
             first_dt, _ = dated_txns[i]
             second_dt, _ = dated_txns[i + 1]
             gaps.append((second_dt - first_dt).days)
-            
+
         for _, t in dated_txns:
             amounts.append(t["amount"])
 
         # Check if the median gap matches any defined cadence cycle
         cadence_label, standard_days = classify_cadence(gaps)
         median_gap = int(statistics.median(gaps))
-        
+
         # Verify if interval matches cadence ranges (5 to 395 days)
         if not (5 <= median_gap <= 395):
             continue
@@ -313,7 +365,7 @@ async def detect_recurring_subscriptions(db, user_id: str) -> list[dict]:
 
         # Check if this merchant is classified as generic "habitual" spending
         bad_merchant = is_bad_merchant(observed_name)
-        
+
         # Confidence Score calculation:
         confidence = 60.0 if len(dated_txns) >= 3 else 40.0
         evidence = [f"Seen {len(dated_txns)} times with a recurring {cadence_label} cadence"]
@@ -323,7 +375,7 @@ async def detect_recurring_subscriptions(db, user_id: str) -> list[dict]:
         if known_name:
             confidence += 35.0
             evidence.append("Matches known premium subscription brand")
-        
+
         # 2. Key indicator words match
         matched_words = []
         for txn_item in txns_for_key:
@@ -344,29 +396,33 @@ async def detect_recurring_subscriptions(db, user_id: str) -> list[dict]:
             confidence += 10.0
             evidence.append("Amount shows slight variability")
 
-        # 4. Community verification
-        comm_users = await get_community_user_count(observed_name, latest_txn["amount"])
-        # Update community collection asynchronously
-        await db.candidate_subscriptions.update_one(
-            {"canonical_name": m_canonical, "amount": latest_txn["amount"]},
-            {
-                "$set": {
-                    "display_name": observed_name,
-                    "last_seen_at": now_utc,
-                    "observed_interval_days": standard_days,
+        # 4. Community verification. Only subscription-like merchants should
+        # participate in the shared campus candidate pool; habitual food/travel
+        # merchants would otherwise pollute the crowd signal.
+        comm_users = 0
+        if not bad_merchant:
+            comm_users = await get_community_user_count(observed_name, latest_txn["amount"])
+            await db.candidate_subscriptions.update_one(
+                {"canonical_name": m_canonical, "amount": latest_txn["amount"], "campus_key": campus_key},
+                {
+                    "$set": {
+                        "display_name": observed_name,
+                        "campus_key": campus_key,
+                        "last_seen_at": now_utc,
+                        "observed_interval_days": standard_days,
+                    },
+                    "$addToSet": {"distinct_users": user_id},
+                    "$setOnInsert": {
+                        "_id": str(uuid.uuid4()),
+                        "created_at": now_utc,
+                        "promoted": False,
+                    },
                 },
-                "$addToSet": {"distinct_users": user_id},
-                "$setOnInsert": {
-                    "_id": str(uuid.uuid4()),
-                    "created_at": now_utc,
-                    "promoted": False,
-                },
-            },
-            upsert=True,
-        )
-        if comm_users >= 3:
-            confidence += 15.0
-            evidence.append("Confirmed recurring commitment by other campus students")
+                upsert=True,
+            )
+            if comm_users >= 3:
+                confidence += 10.0
+                evidence.append("Similar recurring pattern seen from other students on this campus")
 
         # 5. Penalize and suppress generic habitual canteens/travel/cabs
         if bad_merchant:
@@ -378,12 +434,13 @@ async def detect_recurring_subscriptions(db, user_id: str) -> list[dict]:
 
         # Check existing user preference
         existing_pref = existing_map.get(m_canonical)
-        
-        # Determine status lifecycle
-        # If user already approved or if confidence >= 75
+
+        has_subscription_signal = bool(known_name or matched_words)
         if existing_pref and existing_pref.get("status") == "confirmed":
             status = "confirmed"
-        elif confidence >= 75:
+        elif existing_pref and existing_pref.get("status") in USER_EXCLUDED_STATUSES:
+            status = existing_pref["status"]
+        elif has_subscription_signal and confidence >= 75 and not bad_merchant:
             status = "confirmed"
         else:
             status = "possible"
@@ -409,47 +466,7 @@ async def detect_recurring_subscriptions(db, user_id: str) -> list[dict]:
         )
         detected.append(sub)
 
-    # Missed renewal & cancellation lifecycle pass
-    all_subs = await db.subscriptions.find({"user_id": user_id}).to_list(length=300)
-    for sub in all_subs:
-        if sub.get("status") not in ("confirmed", "active", "possible") or not sub.get("is_active", True):
-            continue
-
-        next_debit = sub.get("next_debit_date")
-        if not next_debit:
-            continue
-
-        interval_days = sub.get("observed_interval_days") or 30
-        grace_date = next_debit + datetime.timedelta(days=5)
-        skipped_cycle_date = next_debit + datetime.timedelta(days=interval_days)
-
-        if now_utc > grace_date:
-            # Check if a transaction matching this subscription occurred since next_debit - 3 days
-            sub_canonical = canonical_merchant(sub.get("service_name") or "")
-            matching_txn = await db.transactions.find_one({
-                "user_id": user_id,
-                "created_at": {"$gte": next_debit - datetime.timedelta(days=3)},
-                "direction": "debit",
-                "$or": [
-                    {"mapped_merchant_name": re.compile(f"^{re.escape(sub['service_name'])}$", re.IGNORECASE)},
-                    {"raw_merchant_string": re.compile(f"^{re.escape(sub['service_name'])}$", re.IGNORECASE)}
-                ]
-            })
-
-            if not matching_txn:
-                if now_utc > skipped_cycle_date:
-                    # Skipped a full cycle -> auto-cancel tracking
-                    await db.subscriptions.update_one(
-                        {"_id": sub["_id"]},
-                        {"$set": {"status": "cancelled", "is_active": False, "updated_at": now_utc}}
-                    )
-                else:
-                    # Beyond 5-day grace -> mark missed
-                    await db.subscriptions.update_one(
-                        {"_id": sub["_id"]},
-                        {"$set": {"status": "missed", "updated_at": now_utc}}
-                    )
-
-    # Reload all subscriptions for returned list
+    # Reload all subscriptions for returned list. Detection may add review
+    # candidates, but it must not cancel or deactivate commitments on a GET.
     updated_subs = await db.subscriptions.find({"user_id": user_id}).to_list(length=300)
     return updated_subs
