@@ -21,12 +21,14 @@ export function PlatformIcon({ platform, name, className = "h-5 w-5" }: { platfo
   }
 
   if (logoSrc) {
+    const isZepto = normalized === "zepto";
+    const paddingClass = isZepto ? "p-0" : "p-0.5";
     return (
-      <div className={`flex items-center justify-center overflow-hidden rounded-xl border border-border/40 bg-white shrink-0 ${shadowClass} ${className}`}>
+      <div className={`flex items-center justify-center overflow-hidden rounded-xl border border-border/40 bg-white shrink-0 ${shadowClass} ${paddingClass} ${className}`}>
         <img
           src={logoSrc}
           alt={name || platform}
-          className="h-full w-full object-cover"
+          className="h-full w-full object-contain"
         />
       </div>
     );
