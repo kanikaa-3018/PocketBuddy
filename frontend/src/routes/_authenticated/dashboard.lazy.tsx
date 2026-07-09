@@ -214,6 +214,38 @@ const CAT_COLORS: Record<string, string> = {
   other: "#6b7280",
 };
 
+const CHECKIN_NOTE_PRESETS = [
+  "Exam stretch",
+  "Mess closed",
+  "Travel day",
+  "Cash issue",
+] as const;
+
+function isFiniteHours(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function formatMealGapHours(
+  hours: number | null | undefined,
+  options: {
+    missingLabel?: string;
+    justNowLabel?: string;
+    includeAgo?: boolean;
+  } = {},
+) {
+  const {
+    missingLabel = "—",
+    justNowLabel = "Just now",
+    includeAgo = true,
+  } = options;
+
+  if (!isFiniteHours(hours) || hours < 0) return missingLabel;
+  if (hours < 1) return justNowLabel;
+
+  const rounded = Math.round(hours);
+  return includeAgo ? `${rounded}h ago` : `${rounded}h`;
+}
+
 function CountUp({ to, duration = 400 }: { to: number; duration?: number }) {
   const [v, setV] = useState(0);
   useEffect(() => {
@@ -1008,7 +1040,6 @@ function Dashboard() {
   const wellnessStatus = String(wellness?.status ?? "");
   const wellnessIsSteady = wellnessStatus === "steady";
   const wellnessIsWatch = wellnessStatus === "watch";
-  const wellnessNeedsAttention = isAttentionSignal(wellnessStatus);
   const wellnessToneColor = wellnessIsSteady
     ? "var(--pb-green)"
     : wellnessIsWatch
@@ -1246,7 +1277,7 @@ function Dashboard() {
   // Exam check-in
   const [showCheckIn, setShowCheckIn] = useState(false);
   const [checkInExpanded, setCheckInExpanded] = useState(false);
-  const [checkInMealSource, setCheckInMealSource] = useState<"mess" | "cooked" | "home" | "outside_cash">("mess");
+  const [checkInMealSource, setCheckInMealSource] = useState<"mess" | "cooked" | "home" | "outside_cash" | null>(null);
   const [checkInNote, setCheckInNote] = useState("");
   const [checkInSaving, setCheckInSaving] = useState<"ate" | "skipped" | null>(null);
   const checkinChecked = useRef(false);
@@ -1273,6 +1304,14 @@ function Dashboard() {
     setShowCheckIn(true);
   }, [profile, txns, insights, checkInStorageKey, checkInSnoozeKey]);
 
+  useEffect(() => {
+    if (!showCheckIn) {
+      setCheckInExpanded(false);
+      setCheckInMealSource(null);
+      setCheckInNote("");
+    }
+  }, [showCheckIn]);
+
   const search = Route.useSearch();
   useEffect(() => {
     if (search.log) {
@@ -1281,8 +1320,8 @@ function Dashboard() {
     }
   }, [search.log]);
 
-
-  const foodGapHours = menuFoodGapHours ?? 0;
+  const hasFoodGapSignal = isFiniteHours(menuFoodGapHours);
+  const foodGapHours = hasFoodGapSignal ? menuFoodGapHours : 0;
   const examActive = Boolean(insights?.exam?.in_exam_period);
   const examMealGapHours =
     typeof insights?.food?.gap_hours === "number" && insights?.food?.last_signal_source
@@ -1302,11 +1341,13 @@ function Dashboard() {
         ? `Keep the next meal near ${rupees(examFoodCapPaise)} so exam-week spending stays predictable.`
         : "Keep the next meal predictable and log cash or mess food if there is no payment record.",
     };
-  const examMealGapKnown = examMealGapHours > 0 && examMealGapHours < 900;
-  const examMealGapLabel = examMealGapKnown ? `${Math.round(examMealGapHours)}h` : "No signal";
-  const examMealGapProgress = examMealGapKnown
-    ? Math.min(100, Math.round((Math.min(examMealGapHours, 8) / 8) * 100))
-    : 100;
+  const examMealGapKnown =
+    (typeof insights?.food?.gap_hours === "number" && Boolean(insights?.food?.last_signal_source)) ||
+    hasFoodGapSignal;
+  const examMealGapLabel = formatMealGapHours(examMealGapKnown ? examMealGapHours : null, {
+    missingLabel: "No signal",
+    includeAgo: false,
+  });
   const examMealSignalSource =
     insights?.food?.last_signal_source === "checkin"
       ? "Check-in"
@@ -1314,8 +1355,23 @@ function Dashboard() {
         ? "Payment"
         : "Missing";
   const routineMealSignalLine = insights?.food?.last_signal_source
-    ? `Last meal signal: ${examMealSignalSource.toLowerCase()}, ${Math.round(insights.food.gap_hours ?? 0)}h ago`
-    : "Last meal signal: no payment or check-in yet";
+    ? `Last meal signal: ${examMealSignalSource.toLowerCase()}, ${formatMealGapHours(insights.food.gap_hours)}`
+    : hasFoodGapSignal
+      ? `Last meal signal: recent food spend, ${formatMealGapHours(foodGapHours)}`
+      : "Last meal signal: no payment or check-in yet";
+  const checkInMealSignalLead = !hasFoodGapSignal
+    ? "No recent meal signal is available yet."
+    : foodGapHours < 1
+      ? "PocketBuddy already saw a recent food payment or meal check-in just now."
+      : `PocketBuddy has not seen a food payment or meal check-in for ${Math.round(foodGapHours)} hours.`;
+  const checkInMealSignalFollowup = hasFoodGapSignal && foodGapHours < 1
+    ? "Only add a check-in if that meal happened through mess, cooking, home food, or cash so Food Guard and runway stay accurate."
+    : "If you ate through mess, cooking, home food, or cash, log it so Food Guard and runway stay accurate.";
+  const wellnessPrimaryAction = wellness?.primary_action as
+    | { key?: string; title?: string; detail?: string; cta_label?: string; destination?: string }
+    | undefined;
+  const wellnessActionDestination = String(wellnessPrimaryAction?.destination ?? "");
+  const isPrimaryWellnessAction = (destination: string) => wellnessActionDestination === destination;
 
   // ── Smart nudges derived from insights ──────────────────────────────────
   const [dismissedNudges, setDismissedNudges] = useState<Set<string>>(new Set());
@@ -1360,17 +1416,6 @@ function Dashboard() {
       });
     }
 
-    // Exam window
-    if (examActive) {
-      list.push({
-        id: "exam_window",
-        icon: AlertTriangle,
-        accent: "#ef4444",
-        title: `Exam window - ${insights.exam.days_left}d left`,
-        body: runwayView?.foodRoutine?.action?.detail ?? "Keep meals predictable and review today's safe spend before delivery or subscriptions.",
-      });
-    }
-
     // Spending velocity spike
     const vel = insights.velocity?.pct_change ?? 0;
     if (vel > 30) {
@@ -1402,6 +1447,10 @@ function Dashboard() {
 
   async function handleCheckInAte() {
     if (!user || checkInSaving) return;
+    if (!checkInMealSource) {
+      toast.error("Select where you ate so PocketBuddy updates the right meal signal.");
+      return;
+    }
     setCheckInSaving("ate");
     try {
       await insertCheckinLog({
@@ -1463,12 +1512,6 @@ function Dashboard() {
     } finally {
       setCheckInSaving(null);
     }
-  }
-
-  function handleCheckInSnooze() {
-    localStorage.setItem(checkInSnoozeKey, String(Date.now()));
-    setShowCheckIn(false);
-    toast("Snoozed for 4 hours. PocketBuddy will only nudge again if the meal signal is still stale.");
   }
 
   return (
@@ -1539,137 +1582,155 @@ function Dashboard() {
                     </Button>
                   </div>
                 </div>
-              ) : (wellnessIsSteady && !isWellnessExpanded) ? (
-                <div
-                  className="p-4 flex items-center justify-between gap-3 cursor-pointer select-none hover:bg-white/[0.02] transition-colors"
-                  onClick={() => setIsWellnessExpanded(true)}
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <span className="w-2 h-2 rounded-full bg-[var(--pb-green)] shrink-0" />
-                    <p className="text-xs font-bold tracking-widest text-zinc-500 uppercase font-mono shrink-0">Routine Signal Index:</p>
-                    <span className="text-sm font-black text-[var(--pb-green)] tnum shrink-0">{wellness.score}</span>
-                    <Badge variant="outline" className="font-bold text-[9px] px-1.5 py-0 tracking-wider uppercase bg-[rgba(22,163,74,0.05)] border-[rgba(22,163,74,0.3)] text-[var(--pb-green)] shrink-0">
-                      Steady
-                    </Badge>
-                    <span className="text-xs text-zinc-400 font-medium truncate hidden sm:inline ml-2">
-                      {wellness.message || "Your spending and meal signals are currently steady and within today's runway targets."}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1 text-zinc-500 hover:text-zinc-300 transition-colors shrink-0">
-                    <span className="text-[10px] uppercase font-bold tracking-widest font-mono hidden sm:inline">Details</span>
-                    <ChevronDown className="w-4 h-4" />
-                  </div>
-                </div>
               ) : (
-                <div className="p-5 md:p-6">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 border-b border-border/40 pb-3">
-                    <div className="space-y-1">
-                      <p className="text-[10px] font-bold tracking-widest text-zinc-500 uppercase font-mono">
-                        Routine Signal Index
-                      </p>
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-3xl md:text-4xl font-black tracking-tighter text-foreground tnum leading-none font-display" style={{
-                          color: wellnessToneColor
-                        }}>{wellness.score}</span>
-                        <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest font-mono">/ 100 Routine Score</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="font-bold text-xs px-2.5 py-1 tracking-wider uppercase" style={{
-                        borderColor: wellnessToneBorder,
-                        color: wellnessToneColor,
-                        background: wellnessToneBackground
-                      }}>
-                        {wellnessIsSteady ? "STEADY" : wellnessIsWatch ? "WATCH" : "NEEDS ATTENTION"}
+                (wellnessIsSteady && !isWellnessExpanded) ? (
+                  <div
+                    className="p-4 flex items-center justify-between gap-3 cursor-pointer select-none hover:bg-white/[0.02] transition-colors"
+                    onClick={() => setIsWellnessExpanded(true)}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="w-2 h-2 rounded-full bg-[var(--pb-green)] shrink-0" />
+                      <p className="text-xs font-bold tracking-widest text-zinc-500 uppercase font-mono shrink-0">Routine Signal Index:</p>
+                      <span className="text-sm font-black text-[var(--pb-green)] tnum shrink-0">{wellness.score}</span>
+                      <Badge variant="outline" className="font-bold text-[9px] px-1.5 py-0 tracking-wider uppercase bg-[rgba(22,163,74,0.05)] border-[rgba(22,163,74,0.3)] text-[var(--pb-green)] shrink-0">
+                        Steady
                       </Badge>
-
-                      {wellnessIsSteady && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setIsWellnessExpanded(false);
-                          }}
-                          className="p-1 hover:bg-white/5 rounded transition-colors text-zinc-500 hover:text-zinc-300 cursor-pointer"
-                          title="Collapse Card"
-                        >
-                          <ChevronUp className="w-4.5 h-4.5" />
-                        </button>
-                      )}
+                      <span className="text-xs text-zinc-400 font-medium truncate hidden sm:inline ml-2">
+                        {wellness.message || "Your spending and meal signals are currently steady and within today's runway targets."}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 text-zinc-500 hover:text-zinc-300 transition-colors shrink-0">
+                      <span className="text-[10px] uppercase font-bold tracking-widest font-mono hidden sm:inline">Details</span>
+                      <ChevronDown className="w-4 h-4" />
                     </div>
                   </div>
-
-                  <p className="text-xs md:text-sm text-zinc-300 font-medium leading-relaxed mb-4">
-                    {wellnessNeedsAttention
-                      ? wellness.message || "Several routine signals are stacked today. PocketBuddy only uses spends and check-ins here; start with one meal signal and one planned spend decision."
-                      : wellness.message}
-                  </p>
-
-                  <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface-raised/25 px-3 py-2 text-[11px] font-semibold text-zinc-500">
-                    <Utensils className="h-3.5 w-3.5 text-zinc-400" />
-                    <span>{routineMealSignalLine}</span>
-                  </div>
-
-                  <div className="border-t border-border/40 pt-3 mt-1 mb-3">
-                    <p className="text-xs font-bold tracking-widest text-zinc-500 uppercase mb-2.5 font-mono">Contributing Signals</p>
-
-                    <div className="flex flex-wrap gap-2">
-                      {wellness.signals?.map((sig: any) => (
-                        <div key={sig.key} className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-surface-raised/20 text-xs font-medium" style={{
-                          borderColor: isAttentionSignal(sig.severity)
-                            ? "rgba(239,68,68,0.25)"
-                            : sig.severity === "watch"
-                              ? "rgba(245,158,11,0.25)"
-                              : "var(--border)"
-                        }} title={sig.detail}>
-                          <span className="text-zinc-400">{sig.label}:</span>
-                          <span className="font-bold text-foreground">{sig.value}</span>
-                          <span className="w-2 h-2 rounded-full shrink-0" style={{
-                            background: isAttentionSignal(sig.severity)
-                              ? "var(--pb-red)"
-                              : sig.severity === "watch"
-                                ? "var(--pb-amber)"
-                                : "var(--pb-green)"
-                          }} />
+                ) : (
+                  <div className="p-5 md:p-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 border-b border-border/40 pb-3">
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-bold tracking-widest text-zinc-500 uppercase font-mono">
+                          Routine Signal Index
+                        </p>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-3xl md:text-4xl font-black tracking-tighter text-foreground tnum leading-none font-display" style={{
+                            color: wellnessToneColor
+                          }}>{wellness.score}</span>
+                          <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest font-mono">/ 100 Routine Score</span>
                         </div>
-                      ))}
-                    </div>
-                    <p className="mt-2.5 text-[11px] leading-relaxed text-zinc-500">
-                      {wellness.disclaimer || "Routine score uses payments, meal check-ins, runway, spend pace, and exam dates only; it is not medical advice."}
-                    </p>
-                  </div>
+                      </div>
 
-                  {!wellnessIsSteady && (
-                    <div className="border-t border-border/40 pt-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                      <span className="text-xs font-bold tracking-widest text-zinc-500 uppercase mb-1 sm:mb-0 sm:mr-2 font-mono">Next actions:</span>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 flex-1">
-                        <button
-                          id="btn-wellness-meal-checkin"
-                          type="button"
-                          onClick={() => setShowCheckIn(true)}
-                          className="min-h-[38px] px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider text-foreground bg-surface-raised hover:bg-surface-interactive border border-border rounded-lg transition-all cursor-pointer"
-                        >
-                          Meal Check-in
-                        </button>
-                        <button
-                          id="btn-wellness-food-guard"
-                          type="button"
-                          onClick={() => { setShowFoodSheet(true); setFoodTab("menus"); }}
-                          className="min-h-[38px] px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider text-foreground bg-surface-raised hover:bg-surface-interactive border border-border rounded-lg transition-all cursor-pointer"
-                        >
-                          Campus Food
-                        </button>
-                        <Link
-                          id="btn-wellness-runway"
-                          to="/runway"
-                          className="min-h-[38px] px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider text-primary-foreground bg-primary hover:bg-primary/90 rounded-lg transition-all flex items-center justify-center"
-                        >
-                          Review Runway
-                        </Link>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="font-bold text-xs px-2.5 py-1 tracking-wider uppercase" style={{
+                          borderColor: wellnessToneBorder,
+                          color: wellnessToneColor,
+                          background: wellnessToneBackground
+                        }}>
+                          {wellnessIsSteady ? "STEADY" : wellnessIsWatch ? "WATCH" : "NEEDS ATTENTION"}
+                        </Badge>
+
+                        {wellnessIsSteady && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setIsWellnessExpanded(false);
+                            }}
+                            className="p-1 hover:bg-white/5 rounded transition-colors text-zinc-500 hover:text-zinc-300 cursor-pointer"
+                            title="Collapse Card"
+                          >
+                            <ChevronUp className="w-4.5 h-4.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
-                  )}
-                </div>
+
+                    <p className="text-xs md:text-sm text-zinc-300 font-medium leading-relaxed mb-4">
+                      {wellness.message || "Several routine signals are stacked today. PocketBuddy only uses spends and check-ins here; start with one meal signal and one planned spend decision."}
+                    </p>
+
+                    <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface-raised/25 px-3 py-2 text-[11px] font-semibold text-zinc-500">
+                      <Utensils className="h-3.5 w-3.5 text-zinc-400" />
+                      <span>{routineMealSignalLine}</span>
+                    </div>
+
+                    <div className="border-t border-border/40 pt-3 mt-1 mb-3">
+                      <p className="text-xs font-bold tracking-widest text-zinc-500 uppercase mb-2.5 font-mono">Contributing Signals</p>
+
+                      <div className="flex flex-wrap gap-2">
+                        {wellness.signals?.map((sig: any) => (
+                          <div key={sig.key} className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-surface-raised/20 text-xs font-medium" style={{
+                            borderColor: isAttentionSignal(sig.severity)
+                              ? "rgba(239,68,68,0.25)"
+                              : sig.severity === "watch"
+                                ? "rgba(245,158,11,0.25)"
+                                : "var(--border)"
+                          }} title={sig.detail}>
+                            <span className="text-zinc-400">{sig.label}:</span>
+                            <span className="font-bold text-foreground">{sig.value}</span>
+                            <span className="w-2 h-2 rounded-full shrink-0" style={{
+                              background: isAttentionSignal(sig.severity)
+                                ? "var(--pb-red)"
+                                : sig.severity === "watch"
+                                  ? "var(--pb-amber)"
+                                  : "var(--pb-green)"
+                            }} />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {!wellnessIsSteady && (
+                      <div className="border-t border-border/40 pt-3 space-y-2">
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                          <span className="text-xs font-bold tracking-widest text-zinc-500 uppercase mb-1 sm:mb-0 sm:mr-2 font-mono">
+                            {wellnessPrimaryAction?.title ? `${wellnessPrimaryAction.title}:` : "Next actions:"}
+                          </span>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 flex-1">
+                            <button
+                              id="btn-wellness-meal-checkin"
+                              type="button"
+                              onClick={() => setShowCheckIn(true)}
+                              className={`min-h-[38px] px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider border rounded-lg transition-all cursor-pointer ${
+                                isPrimaryWellnessAction("checkin")
+                                  ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90"
+                                  : "text-foreground bg-surface-raised hover:bg-surface-interactive border-border"
+                              }`}
+                            >
+                              Meal Check-in
+                            </button>
+                            <button
+                              id="btn-wellness-food-guard"
+                              type="button"
+                              onClick={() => { setShowFoodSheet(true); setFoodTab("menus"); }}
+                              className={`min-h-[38px] px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider border rounded-lg transition-all cursor-pointer ${
+                                isPrimaryWellnessAction("food")
+                                  ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90"
+                                  : "text-foreground bg-surface-raised hover:bg-surface-interactive border-border"
+                              }`}
+                            >
+                              Campus Food
+                            </button>
+                            <Link
+                              id="btn-wellness-runway"
+                              to="/runway"
+                              className={`min-h-[38px] px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-all flex items-center justify-center border ${
+                                isPrimaryWellnessAction("runway")
+                                  ? "text-primary-foreground bg-primary border-primary hover:bg-primary/90"
+                                  : "text-foreground bg-surface-raised border-border hover:bg-surface-interactive"
+                              }`}
+                            >
+                              Review Runway
+                            </Link>
+                          </div>
+                        </div>
+                        {wellnessPrimaryAction?.detail && wellnessPrimaryAction.detail !== wellness.message && (
+                          <p className="text-[11px] leading-relaxed text-zinc-500">
+                            {wellnessPrimaryAction.detail}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
               )}
             </div>
 
@@ -2002,11 +2063,25 @@ function Dashboard() {
                 <div className="flex flex-col gap-1">
                   <p className="text-[10px] md:text-xs text-zinc-500 uppercase tracking-wider font-bold">Meal signal</p>
                   {insights ? (
-                    <p className={`text-[16px] font-black tnum ${insights.food.gap_hours > 12 ? "text-destructive" : insights.food.gap_hours > 6 ? "text-warning" : "text-success"}`}>
-                      {insights.food.gap_hours > 0 ? `${Math.round(insights.food.gap_hours)}h ago` : "—"}
+                    <p
+                      className={`text-[16px] font-black tnum ${
+                        insights.food.last_signal_source
+                          ? insights.food.gap_hours > 12
+                            ? "text-destructive"
+                            : insights.food.gap_hours > 6
+                              ? "text-warning"
+                              : "text-success"
+                          : "text-zinc-400"
+                      }`}
+                    >
+                      {formatMealGapHours(
+                        insights.food.last_signal_source ? insights.food.gap_hours : null,
+                      )}
                     </p>
                   ) : (
-                    <p className="text-[16px] font-black text-zinc-400">{foodGapHours > 0 ? `${Math.round(foodGapHours)}h ago` : "—"}</p>
+                    <p className="text-[16px] font-black text-zinc-400">
+                      {formatMealGapHours(hasFoodGapSignal ? foodGapHours : null)}
+                    </p>
                   )}
                   <p className="text-xs text-zinc-500">
                     {insights?.food?.last_signal_source === "checkin"
@@ -2050,58 +2125,76 @@ function Dashboard() {
               {examActive && (
                 <div className="mt-5 rounded-xl border border-border bg-surface-raised/30 p-3.5">
                   <div className="flex flex-col gap-3">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-xs font-bold uppercase tracking-[0.18em] text-foreground">Exam Food Checkpoint</p>
-                          <span className="rounded-md border border-border bg-surface px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                          <p className="text-xs font-semibold text-foreground">Exam meal checkpoint</p>
+                          <span className="rounded-md border border-border bg-surface px-2 py-0.5 text-[10px] font-medium text-zinc-500">
                             {insights?.exam?.days_left ?? 0}d left
+                          </span>
+                          <span className={`rounded-md border px-2 py-0.5 text-[10px] font-medium ${
+                            examNeedsMealSignal
+                              ? "border-amber-500/20 bg-amber-500/10 text-amber-500"
+                              : "border-emerald-500/20 bg-emerald-500/10 text-emerald-500"
+                          }`}>
+                            {examNeedsMealSignal ? "Signal needs update" : "Signal current"}
                           </span>
                         </div>
                         <p className="mt-1 text-xs leading-relaxed text-zinc-500">
-                          Keep one planned meal inside target before late delivery or subscription spend.
+                          {examNeedsMealSignal
+                            ? `No recent meal signal. Log it if you already ate, or keep the next meal near ${examFoodCapPaise > 0 ? rupees(examFoodCapPaise) : "today's food target"}.`
+                            : `Meal signal is current. Keep the next meal near ${examFoodCapPaise > 0 ? rupees(examFoodCapPaise) : "today's food target"} so exam-week food stays predictable.`}
                         </p>
+                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-zinc-500">
+                          <span>Last signal: <span className="text-foreground">{examMealGapLabel}</span></span>
+                          <span>Source: <span className="text-foreground">{examMealSignalSource}</span></span>
+                          <span>Suggested target: <span className="text-foreground">{examFoodCapPaise > 0 ? rupees(examFoodCapPaise) : "Runway"}</span></span>
+                        </div>
                       </div>
-                      {examNeedsMealSignal && (
+                      <div className="flex items-center gap-2 sm:shrink-0">
+                        {examNeedsMealSignal && (
+                          <button
+                            type="button"
+                            onClick={() => setShowCheckIn(true)}
+                            className={`h-8 rounded-lg border px-3 text-[11px] font-medium transition-colors ${
+                              isPrimaryWellnessAction("checkin")
+                                ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
+                                : "border-border bg-surface text-foreground hover:bg-surface-interactive"
+                            }`}
+                          >
+                            Meal check-in
+                          </button>
+                        )}
                         <button
                           type="button"
-                          onClick={() => setShowCheckIn(true)}
-                          className="h-8 rounded-lg border border-border bg-surface px-3 text-[10px] font-bold uppercase tracking-wider text-foreground hover:bg-surface-interactive transition-colors sm:w-auto"
+                          onClick={() => { setShowFoodSheet(true); setFoodTab("menus"); }}
+                          className={`h-8 rounded-lg border px-3 text-[11px] font-medium transition-colors ${
+                            isPrimaryWellnessAction("food")
+                              ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
+                              : "border-border bg-surface text-foreground hover:bg-surface-interactive"
+                          }`}
                         >
-                          Log If Ate
+                          Campus food
                         </button>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="rounded-lg border border-border bg-surface/50 p-2.5">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Signal</p>
-                        <p className={`mt-1 text-xs font-black uppercase tracking-wider ${examNeedsMealSignal ? "text-warning" : "text-success"}`}>
-                          {examNeedsMealSignal ? "Update" : "Current"}
-                        </p>
-                      </div>
-                      <div className="rounded-lg border border-border bg-surface/50 p-2.5">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Gap</p>
-                        <p className="mt-1 text-xs font-black text-foreground tnum">{examMealGapLabel}</p>
-                      </div>
-                      <div className="rounded-lg border border-border bg-surface/50 p-2.5">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Target</p>
-                        <p className="mt-1 text-xs font-black text-foreground tnum">
-                          {examFoodCapPaise > 0 ? rupees(examFoodCapPaise) : "Runway"}
-                        </p>
                       </div>
                     </div>
 
-                    <div>
-                      <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-zinc-500">
-                        <span>Meal gap checkpoint</span>
-                        <span>{examMealSignalSource}</span>
-                      </div>
-                      <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-surface border border-border">
-                        <div
-                          className={`h-full rounded-full transition-all ${examNeedsMealSignal ? "bg-warning" : "bg-success"}`}
-                          style={{ width: `${examMealGapProgress}%` }}
-                        />
+                    <div className="rounded-lg border border-border bg-surface/50 px-3 py-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">Next meal option</p>
+                          <p className="mt-1 text-sm font-semibold text-foreground">{examMealPlan.title}</p>
+                          <p className="mt-1 text-xs leading-relaxed text-zinc-500">{examMealPlan.detail}</p>
+                        </div>
+                        {bestFood && (
+                          <span className={`shrink-0 rounded-md border px-2 py-0.5 text-[10px] font-medium ${
+                            examBestFoodFitsCap
+                              ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-500"
+                              : "border-border bg-surface text-zinc-500"
+                          }`}>
+                            {examBestFoodFitsCap ? "Fits target" : "Closest option"}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -2834,8 +2927,8 @@ function Dashboard() {
                           it.meal_gap_context?.state === "meal_gap_checkin"
                             ? "Meal gap: check in"
                             : insights?.food?.gap_hours >= 12
-                              ? `Meal gap: ${Math.round(insights.food.gap_hours)}h`
-                              : `Last meal ${Math.round(insights?.food?.gap_hours ?? 0)}h ago`;
+                              ? `Meal gap: ${formatMealGapHours(insights.food.gap_hours, { includeAgo: false })}`
+                              : `Last meal ${formatMealGapHours(insights?.food?.gap_hours)}`;
                         const mealGapTitle =
                           it.meal_gap_context?.message ||
                           (insights?.food?.gap_hours >= 12
@@ -2886,7 +2979,7 @@ function Dashboard() {
                                   {routineState === "mess_first" ? "Mess-first routine" : "Routine fit"}
                                 </span>
                               )}
-                              {insights?.food?.gap_hours > 0 && (
+                              {insights?.food?.last_signal_source && (
                                 <span
                                   className="text-xs px-2 py-0.5 rounded bg-surface-raised text-zinc-400 font-semibold flex items-center gap-1"
                                   title={mealGapTitle}
@@ -3282,30 +3375,56 @@ function Dashboard() {
 
         {/* Check-in dialog */}
         <Dialog open={showCheckIn} onOpenChange={setShowCheckIn}>
-          <DialogContent id="dialog-checkin" className="max-w-md bg-surface border border-border p-5 rounded-2xl">
+          <DialogContent id="dialog-checkin" className="max-w-md max-h-[85vh] overflow-y-auto bg-surface border border-border p-4 sm:p-5 rounded-2xl">
             <DialogHeader className="space-y-1">
               <div className="flex items-center gap-2 text-primary">
                 <Utensils className="h-4 w-4" />
-                <span className="text-[10px] md:text-xs font-bold uppercase tracking-wider">Meal Signal Check-in</span>
+                <span className="text-[11px] font-medium">Meal check-in</span>
               </div>
-              <DialogTitle className="text-sm md:text-base font-bold text-foreground">
-                Update your food signal
+              <DialogTitle className="text-sm md:text-base font-semibold text-foreground">
+                Update your last meal signal
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-3 mt-2">
               <p className="text-xs text-zinc-400 leading-relaxed font-normal">
-                {foodGapHours > 0 ? (
-                  <>
-                    No food payment or check-in signal for <strong className="text-foreground">{Math.round(foodGapHours)} hours</strong>.
-                  </>
-                ) : (
-                  <>No recent meal signal is available yet.</>
-                )}{" "}
-                If you ate through mess, cooking, home food, or cash, log it so Food Guard and runway stay accurate.
+                {checkInMealSignalLead}{" "}
+                {checkInMealSignalFollowup}
               </p>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-lg border border-border bg-surface-raised/30 px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Last signal</p>
+                  <p className="mt-1 text-sm font-semibold text-foreground">
+                    {formatMealGapHours(hasFoodGapSignal ? foodGapHours : null, { missingLabel: "Missing" })}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border bg-surface-raised/30 px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Food target</p>
+                  <p className="mt-1 text-sm font-semibold text-foreground">{examFoodCapPaise > 0 ? rupees(examFoodCapPaise) : "Runway"}</p>
+                </div>
+              </div>
               {examActive && (
-                <div className="rounded-lg border border-border bg-surface-raised/40 px-3 py-2 text-[11px] font-medium leading-relaxed text-zinc-400">
-                  Exam window is active. A meal check-in prevents wrong meal-gap warnings without adding a spend.
+                <div className="rounded-lg border border-border bg-surface-raised/40 px-3 py-2 text-[11px] leading-relaxed text-zinc-400">
+                  Exam window is active. A meal check-in keeps the next food suggestion grounded without creating a fake spend.
+                </div>
+              )}
+              {(bestFood || examActive) && (
+                <div className="rounded-lg border border-border bg-surface-raised/30 px-3 py-2.5">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">If you still need to eat</p>
+                      <p className="mt-1 text-sm font-semibold text-foreground">{examMealPlan.title}</p>
+                      <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">{examMealPlan.detail}</p>
+                    </div>
+                    {bestFood && (
+                      <span className={`shrink-0 rounded-md border px-2 py-0.5 text-[10px] font-medium ${
+                        examBestFoodFitsCap
+                          ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-500"
+                          : "border-border bg-surface text-zinc-500"
+                      }`}>
+                        {bestFood.price ? rupees(bestFood.price) : "Campus option"}
+                      </span>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -3313,24 +3432,24 @@ function Dashboard() {
                 <div className="rounded-xl border border-border bg-surface-raised/40 p-3.5 space-y-3">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-xs font-bold text-foreground">I ate without a payment</p>
-                      <p className="text-[11px] text-zinc-500 mt-0.5">Select the source so future nudges are accurate.</p>
+                      <p className="text-xs font-semibold text-foreground">I already ate</p>
+                      <p className="text-[11px] text-zinc-500 mt-0.5">Choose the source so future food nudges stay accurate.</p>
                     </div>
-                    <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-bold">No spend added</span>
+                    <span className="text-[10px] text-zinc-500">No spend added</span>
                   </div>
-                  <div className="grid grid-cols-4 gap-1.5">
+                  <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
                     {[
                       ["mess", "Mess"],
                       ["cooked", "Cooked"],
                       ["home", "Home"],
-                      ["outside_cash", "Cash"],
+                      ["outside_cash", "Cash / outside"],
                     ].map(([value, label]) => (
                       <button
                         key={value}
                         type="button"
                         disabled={Boolean(checkInSaving)}
                         onClick={() => setCheckInMealSource(value as typeof checkInMealSource)}
-                        className={`h-8 rounded-lg border text-[10px] font-bold uppercase tracking-wider transition-all ${
+                        className={`h-8 rounded-lg border px-2 text-[11px] font-medium transition-all ${
                           checkInMealSource === value
                             ? "border-primary/40 bg-primary/10 text-primary"
                             : "border-border bg-surface text-zinc-400 hover:text-foreground hover:bg-surface-interactive"
@@ -3343,10 +3462,10 @@ function Dashboard() {
                   <button
                     id="btn-checkin-ate"
                     onClick={handleCheckInAte}
-                    disabled={Boolean(checkInSaving)}
-                    className="w-full h-9 rounded-lg bg-primary text-primary-foreground text-xs font-black uppercase tracking-wider hover:bg-primary/95 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={Boolean(checkInSaving) || !checkInMealSource}
+                    className="w-full h-9 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/95 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {checkInSaving === "ate" ? "Saving" : "Save Meal Check-in"}
+                    {checkInSaving === "ate" ? "Saving..." : "Save meal check-in"}
                   </button>
                 </div>
 
@@ -3356,47 +3475,49 @@ function Dashboard() {
                     onClick={() => setCheckInExpanded(true)}
                     className="w-full flex items-center justify-between text-left text-xs font-semibold text-foreground cursor-pointer"
                   >
-                    <span>Meal delayed / could not eat yet</span>
-                    <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Add context</span>
+                    <span>I could not eat yet</span>
+                    <span className="text-[10px] text-zinc-500">Add context</span>
                   </button>
                   {checkInExpanded && (
                     <div className="mt-3 space-y-2.5 animate-[fadeIn_0.15s_ease-out]">
-                      <p className="text-[11px] text-zinc-500 font-semibold uppercase tracking-wider">Optional context</p>
+                      <p className="text-[11px] leading-relaxed text-zinc-500">
+                        This keeps the reminder honest without marking the meal as eaten.
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {CHECKIN_NOTE_PRESETS.map((preset) => (
+                          <button
+                            key={preset}
+                            type="button"
+                            disabled={Boolean(checkInSaving)}
+                            onClick={() => setCheckInNote(preset)}
+                            className={`rounded-md border px-2.5 py-1 text-[10px] transition-colors ${
+                              checkInNote === preset
+                                ? "border-primary/40 bg-primary/10 text-primary"
+                                : "border-border bg-surface text-zinc-500 hover:text-foreground"
+                            }`}
+                          >
+                            {preset}
+                          </button>
+                        ))}
+                      </div>
                       <Input
                         id="input-checkin-note"
                         value={checkInNote}
                         onChange={(e) => setCheckInNote(e.target.value)}
                         placeholder="e.g. mess closed, exam prep, cash issue"
-                        className="bg-surface border-border text-xs h-9 text-foreground font-semibold"
+                        className="bg-surface border-border text-xs h-9 text-foreground"
                       />
                       <Button
                         id="btn-submit-checkin-skipped"
-                        className="w-full bg-surface border border-border text-foreground hover:bg-surface-interactive text-xs font-black uppercase tracking-wider h-9"
+                        className="w-full bg-surface border border-border text-foreground hover:bg-surface-interactive text-xs font-medium h-9"
                         onClick={handleCheckInSkipped}
                         disabled={Boolean(checkInSaving)}
                       >
-                        {checkInSaving === "skipped" ? "Saving" : "Save Delayed Meal"}
+                        {checkInSaving === "skipped" ? "Saving..." : "Log delayed meal"}
                       </Button>
                     </div>
                   )}
                 </div>
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <button
-                  onClick={() => { setShowCheckIn(false); setShowFoodSheet(true); setFoodTab("menus"); }}
-                  disabled={Boolean(checkInSaving)}
-                  className="flex-1 rounded-xl bg-primary text-primary-foreground font-black uppercase text-xs h-9 tracking-wider hover:bg-primary/95 transition-all cursor-pointer text-center disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  Open Campus Food
-                </button>
-                <button
-                  onClick={examActive ? handleCheckInSnooze : () => setShowCheckIn(false)}
-                  disabled={Boolean(checkInSaving)}
-                  className="flex-1 rounded-xl bg-surface-raised border border-border text-zinc-400 font-bold uppercase text-xs h-9 tracking-wider hover:text-zinc-200 transition-all cursor-pointer text-center disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {examActive ? "Remind later" : "Not now"}
-                </button>
               </div>
             </div>
           </DialogContent>

@@ -8,7 +8,9 @@ os.environ.setdefault("MONGO_URI", "mongodb://localhost:27017/pocketbuddy_test")
 from app.services.wellness import (  # noqa: E402
     INDIA_STANDARD_TIME_OFFSET_MINUTES,
     average_meal_gap_hours,
+    build_wellness_summary,
     current_meal_gap_hours,
+    is_debit_transaction,
     is_late_night_activity,
     is_meal_checkin,
     meal_signal_events,
@@ -93,6 +95,86 @@ class WellnessSignalTests(unittest.TestCase):
         )
 
         self.assertEqual(average_meal_gap_hours(now, events), 5)
+
+    def test_credit_transactions_are_not_treated_as_debits(self):
+        self.assertFalse(is_debit_transaction({"direction": "credit", "amount": 1000}))
+        self.assertTrue(is_debit_transaction({"direction": "debit", "amount": 1000}))
+        self.assertTrue(is_debit_transaction({"amount": 1000}))
+
+    def test_missing_meal_signal_requests_checkin_without_marking_attention(self):
+        summary = build_wellness_summary(
+            meal_events_count_7d=0,
+            current_food_gap_hours=None,
+            avg_food_gap_hours_7d=None,
+            late_night_activity_7d=0,
+            runway_days=15,
+            safe_daily_limit_rs=220,
+            spend_velocity=1.0,
+            in_exam_period=False,
+        )
+
+        self.assertEqual(summary["status"], "watch")
+        self.assertEqual(summary["primary_action"]["key"], "meal_checkin")
+        self.assertEqual(summary["signals"][0]["state"], "missing")
+        self.assertEqual(summary["signals"][0]["value"], "Missing")
+
+    def test_exam_window_only_changes_context_when_other_signals_are_stable(self):
+        baseline = build_wellness_summary(
+            meal_events_count_7d=4,
+            current_food_gap_hours=4,
+            avg_food_gap_hours_7d=5,
+            late_night_activity_7d=0,
+            runway_days=16,
+            safe_daily_limit_rs=250,
+            spend_velocity=1.0,
+            in_exam_period=False,
+        )
+        exam = build_wellness_summary(
+            meal_events_count_7d=4,
+            current_food_gap_hours=4,
+            avg_food_gap_hours_7d=5,
+            late_night_activity_7d=0,
+            runway_days=16,
+            safe_daily_limit_rs=250,
+            spend_velocity=1.0,
+            in_exam_period=True,
+        )
+
+        self.assertEqual(baseline["score"], exam["score"])
+        self.assertEqual(exam["status"], "steady")
+        self.assertEqual(exam["signals"][-1]["severity"], "watch")
+
+    def test_exam_period_prefers_meal_action_when_meal_signal_is_stale(self):
+        summary = build_wellness_summary(
+            meal_events_count_7d=2,
+            current_food_gap_hours=13,
+            avg_food_gap_hours_7d=11,
+            late_night_activity_7d=0,
+            runway_days=14,
+            safe_daily_limit_rs=180,
+            spend_velocity=1.0,
+            in_exam_period=True,
+        )
+
+        self.assertEqual(summary["primary_action"]["key"], "meal_checkin")
+        self.assertEqual(summary["signals"][0]["severity"], "attention")
+        self.assertIn("exam-day meal", summary["primary_action"]["title"].lower())
+
+    def test_runway_attention_message_and_action_are_not_duplicate_copy(self):
+        summary = build_wellness_summary(
+            meal_events_count_7d=3,
+            current_food_gap_hours=4,
+            avg_food_gap_hours_7d=5,
+            late_night_activity_7d=0,
+            runway_days=0,
+            safe_daily_limit_rs=0,
+            spend_velocity=1.6,
+            in_exam_period=False,
+        )
+
+        self.assertEqual(summary["primary_action"]["key"], "review_runway")
+        self.assertIn("effectively exhausted", summary["primary_action"]["detail"].lower())
+        self.assertNotEqual(summary["message"], summary["primary_action"]["detail"])
 
 
 if __name__ == "__main__":
