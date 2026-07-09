@@ -1250,6 +1250,8 @@ function Dashboard() {
   const [checkInNote, setCheckInNote] = useState("");
   const [checkInSaving, setCheckInSaving] = useState<"ate" | "skipped" | null>(null);
   const checkinChecked = useRef(false);
+  const checkInStorageKey = `pocketbuddy_last_checkin_${user?.id ?? "anon"}`;
+  const checkInSnoozeKey = `pocketbuddy_checkin_snooze_${user?.id ?? "anon"}`;
 
   useEffect(() => {
     if (checkinChecked.current || !profile || !txns || !insights) return;
@@ -1264,10 +1266,12 @@ function Dashboard() {
     const fallbackHours = lastFood ? (Date.now() - new Date(lastFood.created_at).getTime()) / 3600000 : 999;
     const hours = insights.food?.last_signal_source && typeof insights.food?.gap_hours === "number" ? insights.food.gap_hours : fallbackHours;
     if (hours < 16) return;
-    const lastCk = localStorage.getItem(`pocketbuddy_last_checkin_${user?.id ?? "anon"}`);
+    const snoozedAt = localStorage.getItem(checkInSnoozeKey);
+    if (snoozedAt && Date.now() - parseInt(snoozedAt, 10) < 4 * 3600000) return;
+    const lastCk = localStorage.getItem(checkInStorageKey);
     if (lastCk && Date.now() - parseInt(lastCk, 10) < 16 * 3600000) return;
     setShowCheckIn(true);
-  }, [profile, txns, insights]);
+  }, [profile, txns, insights, checkInStorageKey, checkInSnoozeKey]);
 
   const search = Route.useSearch();
   useEffect(() => {
@@ -1309,6 +1313,9 @@ function Dashboard() {
       : insights?.food?.last_signal_source === "transaction"
         ? "Payment"
         : "Missing";
+  const routineMealSignalLine = insights?.food?.last_signal_source
+    ? `Last meal signal: ${examMealSignalSource.toLowerCase()}, ${Math.round(insights.food.gap_hours ?? 0)}h ago`
+    : "Last meal signal: no payment or check-in yet";
 
   // ── Smart nudges derived from insights ──────────────────────────────────
   const [dismissedNudges, setDismissedNudges] = useState<Set<string>>(new Set());
@@ -1405,7 +1412,7 @@ function Dashboard() {
           suggestion_given: "meal_gap_checkin",
         },
       });
-      localStorage.setItem(`pocketbuddy_last_checkin_${user?.id ?? "anon"}`, String(Date.now()));
+      localStorage.setItem(checkInStorageKey, String(Date.now()));
       setShowCheckIn(false);
       setCheckInExpanded(false);
       qc.invalidateQueries({ queryKey: ["insights"] });
@@ -1437,7 +1444,7 @@ function Dashboard() {
           context_note: checkInNote,
         },
       });
-      localStorage.setItem(`pocketbuddy_last_checkin_${user?.id ?? "anon"}`, String(Date.now()));
+      localStorage.setItem(checkInStorageKey, String(Date.now()));
       setShowCheckIn(false);
       setCheckInNote("");
       setCheckInExpanded(false);
@@ -1456,6 +1463,12 @@ function Dashboard() {
     } finally {
       setCheckInSaving(null);
     }
+  }
+
+  function handleCheckInSnooze() {
+    localStorage.setItem(checkInSnoozeKey, String(Date.now()));
+    setShowCheckIn(false);
+    toast("Snoozed for 4 hours. PocketBuddy will only nudge again if the meal signal is still stale.");
   }
 
   return (
@@ -1591,6 +1604,11 @@ function Dashboard() {
                       ? wellness.message || "Several routine signals are stacked today. PocketBuddy only uses spends and check-ins here; start with one meal signal and one planned spend decision."
                       : wellness.message}
                   </p>
+
+                  <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface-raised/25 px-3 py-2 text-[11px] font-semibold text-zinc-500">
+                    <Utensils className="h-3.5 w-3.5 text-zinc-400" />
+                    <span>{routineMealSignalLine}</span>
+                  </div>
 
                   <div className="border-t border-border/40 pt-3 mt-1 mb-3">
                     <p className="text-xs font-bold tracking-widest text-zinc-500 uppercase mb-2.5 font-mono">Contributing Signals</p>
@@ -3367,15 +3385,17 @@ function Dashboard() {
               <div className="flex gap-2 pt-2">
                 <button
                   onClick={() => { setShowCheckIn(false); setShowFoodSheet(true); setFoodTab("menus"); }}
-                  className="flex-1 rounded-xl bg-primary text-primary-foreground font-black uppercase text-xs h-9 tracking-wider hover:bg-primary/95 transition-all cursor-pointer text-center"
+                  disabled={Boolean(checkInSaving)}
+                  className="flex-1 rounded-xl bg-primary text-primary-foreground font-black uppercase text-xs h-9 tracking-wider hover:bg-primary/95 transition-all cursor-pointer text-center disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Open Campus Food
                 </button>
                 <button
-                  onClick={() => setShowCheckIn(false)}
-                  className="flex-1 rounded-xl bg-surface-raised border border-border text-zinc-400 font-bold uppercase text-xs h-9 tracking-wider hover:text-zinc-200 transition-all cursor-pointer text-center"
+                  onClick={examActive ? handleCheckInSnooze : () => setShowCheckIn(false)}
+                  disabled={Boolean(checkInSaving)}
+                  className="flex-1 rounded-xl bg-surface-raised border border-border text-zinc-400 font-bold uppercase text-xs h-9 tracking-wider hover:text-zinc-200 transition-all cursor-pointer text-center disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Not now
+                  {examActive ? "Remind later" : "Not now"}
                 </button>
               </div>
             </div>
