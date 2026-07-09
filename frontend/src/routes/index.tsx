@@ -1103,7 +1103,7 @@ function LandingPage() {
   const features = [
     { icon: Smartphone, title: "Privacy-first Instant UPI Sync", description: "The optional Android connector parses supported payment alerts on-device and sends only transaction facts ── never raw notification text.", accent: "#8C7853", delay: 0 },
     { icon: Map, title: "Crowdsourced Merchant Mapping", description: "Raw strings like SHREE_BALAJI_ENT resolve into 'Hostel 1 Night Canteen' via 1-tap crowd classification, shared globally across campus.", accent: "#C27D56", delay: 100 },
-    { icon: Zap, title: "Geofenced AI Guard", description: "Amazon Bedrock analyzes your runway against a live campus food database to surface hyper-local, cost-effective meal alternatives.", accent: "#D9A05B", delay: 200 },
+    { icon: Zap, title: "Campus Intelligence", description: "Turns runway, commitments, routine signals, and trusted campus prices into one practical next step.", accent: "#D9A05B", delay: 200 },
     { icon: ShoppingCart, title: "Wing Cart Pooler", description: "Open a Blinkit/Zepto pool, share it on WhatsApp, let roommates add items ── delivery fees split automatically. No install needed.", accent: "#F7EC13", delay: 0 },
     { icon: CalendarCheck, title: "Exam-Week Check-In", description: "If no food transaction is detected for 16+ hours during exam week, PocketBuddy pings you and suggests the nearest open campus canteen.", accent: "#5E17EB", delay: 100 },
     { icon: Bell, title: "Subscription Collision Guard", description: "Auto-detects recurring Spotify, YouTube & gaming debits, then flags exact days when they tighten your food runway.", accent: "#FC8019", delay: 200 },
@@ -1306,9 +1306,9 @@ function LandingPage() {
         <div className="space-y-6">
           <SectionLabel text="The Dashboard" />
           <SectionHeading>Your financial runway, live.</SectionHeading>
-          <p className="text-sm text-muted-foreground leading-relaxed">One glance tells you everything ── days until broke, safe daily spend limit, AI-suggested campus meals, active Wing pools, and your routine signal index. All computed from payments, check-ins, and campus context.</p>
+          <p className="text-sm text-muted-foreground leading-relaxed">One glance tells you everything: days until broke, safe daily spend limit, grounded campus meal advice, active Wing pools, and routine signals. All computed from PocketBuddy facts, with AI used only to explain next steps.</p>
           <div className="space-y-3 pt-2">
-            {["Live runway countdown with exact HH:MM:SS timer", "Routine signal score from concrete budget signals", "Hyper-local Bedrock meal suggestions", "Crowdsourced merchant recognition", "Subscription collision calendar"].map((item) => (
+            {["Live runway countdown with exact HH:MM:SS timer", "Routine signal nudges from real behavioral signals", "Campus-aware next steps from trusted data", "Crowdsourced merchant recognition", "Subscription collision calendar"].map((item) => (
               <div key={item} className="flex items-center gap-3">
                 <div className="w-1.5 h-1.5 rounded-full bg-[#C27D56] shrink-0" />
                 <span className="text-xs sm:text-sm text-muted-foreground">{item}</span>
@@ -1424,7 +1424,7 @@ function LandingPage() {
             <TimelineStep n="02" title="Phone parses locally" sub="Amount, direction, merchant, source app, and a masked preview are created on-device. Raw notification text is not uploaded." delay={80} />
             <TimelineStep n="03" title="Merchant gets crowd-classified" sub="If the merchant is new, one 1-tap prompt classifies it globally for your entire campus. Next student gets it automatically." delay={160} />
             <TimelineStep n="04" title="Runway recalculates instantly" sub="Your dashboard updates the days-remaining metric, checks subscription collisions, and flags routine or budget signals in real time." delay={240} />
-            <TimelineStep n="05" title="AI guard activates if needed" sub="Bedrock cross-references your spending vector against the campus food database and surfaces the cheapest viable meal option near you." delay={320} />
+            <TimelineStep n="05" title="Campus intelligence suggests the next step" sub="PocketBuddy turns runway, commitments, routine, and trusted campus context into a practical action." delay={320} />
           </div>
         </div>
       </section>
