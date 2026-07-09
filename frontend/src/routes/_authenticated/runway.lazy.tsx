@@ -19,18 +19,6 @@ import { useState, useMemo } from "react";
 import { toast } from "sonner";
 import { Tooltip as UITooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -1132,12 +1120,6 @@ From PocketBuddy Runway.`;
                   </div>
                 )}
 
-                <button
-                  onClick={copyFlightBrief}
-                  className="mt-4 inline-flex h-9 w-full items-center justify-center rounded-lg border border-border bg-surface text-xs font-bold uppercase tracking-wider text-foreground transition hover:bg-surface-raised"
-                >
-                  Copy Runway Brief
-                </button>
               </Card>
             </div>
 
@@ -1167,8 +1149,8 @@ From PocketBuddy Runway.`;
                     {/* Grade badge — smaller on mobile, with glow */}
                     <div className="relative shrink-0 mt-0.5">
                       <div className={`absolute inset-0 rounded-full blur-md opacity-30 ${safetyGrade.bg}`} />
-                      <div className={`relative w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center border-2 shadow-md font-black text-xl sm:text-2xl tracking-tight select-none ${safetyGrade.bg} ${safetyGrade.border} ${safetyGrade.color}`}>
-                        {safetyGrade.grade}
+                      <div className={`relative inline-flex h-10 items-center rounded-full border px-3 text-[10px] font-bold uppercase tracking-[0.16em] select-none sm:h-11 sm:px-4 ${safetyGrade.bg} ${safetyGrade.border} ${safetyGrade.color}`}>
+                        {safetyGrade.text}
                       </div>
                     </div>
                     <div className="min-w-0 flex-1">
@@ -1260,6 +1242,36 @@ From PocketBuddy Runway.`;
                     </div>
                   )}
                 </div>
+                <div className="mt-4 col-span-full border-t border-border/50 bg-background/35 p-4 sm:p-5">
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <div className="rounded-xl border border-border/60 bg-background/60 p-3">
+                      <p className={sectionEyebrowClass}>Can I last?</p>
+                      <p className="mt-1 text-sm font-semibold text-foreground tnum">{expectedRunwayDays}</p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        Stress case: {stressRunwayDays} days. Buffer needed: {formatRs(actualAskHomeAmount)}.
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-border/60 bg-background/60 p-3">
+                      <p className={sectionEyebrowClass}>Spend today</p>
+                      <p className="mt-1 text-sm font-semibold text-primary tnum">{safeDailyDisplay}{!safeDailyIsZero && <span className="text-[10px] font-medium text-muted-foreground">/day</span>}</p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">Spend limit to reach the allowance reset safely.</p>
+                    </div>
+                    <div className="rounded-xl border border-border/60 bg-background/60 p-3">
+                      <p className={sectionEyebrowClass}>Current pace</p>
+                      <p className="mt-1 text-sm font-semibold text-foreground tnum">
+                        {noSpendHistory ? "No history" : formatRs(forecast.projection.projected_daily_spend)}
+                      </p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        {noSpendHistory ? "Sync a few recent payments before pace is trusted." : "Calculated from recent discretionary spending pace."}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-border/60 bg-background/60 p-3">
+                      <p className={sectionEyebrowClass}>Shortfall risk</p>
+                      <p className="mt-1 text-sm font-semibold text-foreground tnum">{Math.round(forecast.projection.shortfall_probability * 100)}%</p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">Chance that the current pace runs out before your allowance resets.</p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </Card>
 
@@ -1312,86 +1324,6 @@ From PocketBuddy Runway.`;
                 </div>
               )}
             </Card>
-
-            {/* KPI Cards Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Card 1: Runway Days */}
-              <Card className="p-5 flex flex-col justify-between border border-border relative overflow-hidden bg-card/40">
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="text-[10px] md:text-xs font-bold tracking-[0.15em] text-zinc-500 uppercase">Can I last?</p>
-                    <div className={`p-1.5 rounded-lg ${statusDetails.bg} ${statusDetails.color}`}>
-                      <statusDetails.icon className="h-4 w-4" />
-                    </div>
-                  </div>
-                  <h3 className="text-xl sm:text-2xl font-semibold tracking-tight tnum flex items-baseline gap-1.5">
-                    {expectedRunwayDays}
-                    <span className="text-xs font-semibold text-zinc-500">expected days</span>
-                  </h3>
-                </div>
-                <p className="text-[11px] md:text-xs text-zinc-500 mt-3 leading-snug border-t border-border/50 pt-2.5">
-                  {forecast.status === "shortfall"
-                    ? `Stress case: ${stressRunwayDays} days. Buffer needed: ${formatRs(actualAskHomeAmount)}.`
-                    : `Stress case still shows ${stressRunwayDays} days.`}
-                </p>
-              </Card>
-
-              {/* Card 2: Safe Daily Spend */}
-              <Card className="p-5 flex flex-col justify-between border border-border relative overflow-hidden bg-card/40">
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="text-[10px] md:text-xs font-bold tracking-[0.15em] text-zinc-500 uppercase">Spend today</p>
-                    <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
-                      <Wallet className="h-4 w-4" />
-                    </div>
-                  </div>
-                  <h3 className="text-xl sm:text-2xl font-semibold tracking-tight tnum text-primary">
-                    {safeDailyDisplay}
-                    {!safeDailyIsZero && <span className="text-xs font-semibold text-zinc-500">/day</span>}
-                  </h3>
-                </div>
-                <p className="text-[11px] md:text-xs text-zinc-500 mt-3 leading-snug border-t border-border/50 pt-2.5">
-                  {safeDailyIsZero ? "No discretionary budget remains after commitments." : "Spend limit to reach the allowance reset safely."}
-                </p>
-              </Card>
-
-              {/* Card 3: Spend Velocity (EWMA) */}
-              <Card className="p-5 flex flex-col justify-between border border-border relative overflow-hidden bg-card/40">
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="text-[10px] md:text-xs font-bold tracking-[0.15em] text-zinc-500 uppercase">Current pace</p>
-                    <div className="p-1.5 rounded-lg bg-pb-amber/10 text-pb-amber">
-                      <Activity className="h-4 w-4" />
-                    </div>
-                  </div>
-                  <h3 className="text-xl sm:text-2xl font-semibold tracking-tight tnum text-pb-amber">
-                    {noSpendHistory ? "No history" : formatRs(forecast.projection.projected_daily_spend)}
-                    {!noSpendHistory && <span className="text-xs font-semibold text-zinc-500">/day</span>}
-                  </h3>
-                </div>
-                <p className="text-[11px] md:text-xs text-zinc-500 mt-3 leading-snug border-t border-border/50 pt-2.5">
-                  {noSpendHistory ? "Sync a few recent payments before pace is treated as trusted." : "Calculated from recent discretionary spending pace."}
-                </p>
-              </Card>
-
-              {/* Card 4: Shortfall Probability */}
-              <Card className="p-5 flex flex-col justify-between border border-border relative overflow-hidden bg-card/40">
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="text-[10px] md:text-xs font-bold tracking-[0.15em] text-zinc-500 uppercase">Shortfall risk</p>
-                    <div className={`p-1.5 rounded-lg ${forecast.projection.shortfall_probability >= 0.35 ? "bg-pb-red/10 text-pb-red" : "bg-pb-green/10 text-pb-green"}`}>
-                      <TrendingDown className="h-4 w-4" />
-                    </div>
-                  </div>
-                  <h3 className="text-xl sm:text-2xl font-semibold tracking-tight tnum">
-                    {Math.round(forecast.projection.shortfall_probability * 100)}%
-                  </h3>
-                </div>
-                <p className="text-[11px] md:text-xs text-zinc-500 mt-3 leading-snug border-t border-border/50 pt-2.5">
-                  Chance that the current pace runs out before your allowance resets.
-                </p>
-              </Card>
-            </div>
 
             <Card className="border border-border bg-surface p-5 sm:p-6 shadow-sm rounded-2xl relative overflow-hidden transition-all duration-300 hover:shadow-md">
               {/* Decorative accent bar */}
@@ -1959,15 +1891,7 @@ From PocketBuddy Runway.`;
                     )}
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={copyFlightBrief}
-                    className="flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-border bg-background text-xs font-bold uppercase tracking-wider text-foreground transition-all hover:bg-surface-raised active:scale-[0.98] shadow-sm"
-                  >
-                    <ArrowUpRight className="h-4 w-4 text-primary" />
-                    <span>Copy Runway Brief</span>
-                  </button>
-                </div>
+              </div>
 
               </div>
             </Card>
@@ -1977,67 +1901,81 @@ From PocketBuddy Runway.`;
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-border/40 pb-3">
                 <div className="space-y-0.5">
                   <p className={sectionEyebrowClass}>Runway actions</p>
-                  <h3 className={sectionTitleClass}>Choose one lever to change the forecast</h3>
-                  <p className={sectionBodyClass}>Each option below maps to a real setting or habit, so the next step stays obvious.</p>
+                  <h3 className={sectionTitleClass}>Pick one lever to move the forecast</h3>
+                  <p className={sectionBodyClass}>Each option maps to a real setting or habit.</p>
                 </div>
-
-                <Select value={selectedActionId} onValueChange={setSelectedActionId}>
-                  <SelectTrigger className="h-9 w-full sm:w-[260px] rounded-lg border-border/70 bg-background text-xs text-left focus:ring-1 focus:ring-primary/20">
-                    <SelectValue placeholder="Select action step" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-background border border-border text-foreground">
-                    {secondaryRunwayActions.map((action) => (
-                      <SelectItem key={action.id} value={action.id} className="text-xs font-semibold">
-                        {action.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </div>
 
-              {/* Selected Action Content */}
-              {(() => {
-                if (!selectedRunwayAction) return null;
+              <div className="mt-4 grid gap-2 md:grid-cols-3">
+                {secondaryRunwayActions.map((action) => {
+                  const active = selectedActionId === action.id;
+                  const actionTone = action.severity === "high"
+                    ? "border-pb-red/20 bg-pb-red/5 text-pb-red"
+                    : action.severity === "medium"
+                      ? "border-pb-amber/20 bg-pb-amber/5 text-pb-amber"
+                      : "border-border/70 bg-background text-muted-foreground";
+                  return (
+                    <button
+                      key={action.id}
+                      type="button"
+                      onClick={() => setSelectedActionId(action.id)}
+                      className={`group rounded-2xl border p-3 text-left transition-all ${active ? "border-primary/30 bg-primary/5 shadow-sm" : "border-border/60 bg-background/60 hover:border-border hover:bg-background"}`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] ${actionTone}`}>
+                          {action.severity === "high" ? "Critical" : action.severity === "medium" ? "Recommended" : "Optional"}
+                        </span>
+                        <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                          {active ? "Selected" : "Tap to open"}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-sm font-semibold tracking-tight text-foreground line-clamp-2">
+                        {action.label}
+                      </p>
+                      <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground line-clamp-2">
+                        {action.detail}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
 
+              {selectedRunwayAction && (() => {
                 const actionPath =
                   selectedRunwayAction.id === "action-2" && forecast.status === "shortfall" ? "/settings" :
                   selectedRunwayAction.id === "action-1" ? "/settings" :
                   selectedRunwayAction.id === "action-3" ? "/settings" :
                   null;
-
                 const actionButtonText =
                   selectedRunwayAction.id === "action-2" && forecast.status === "shortfall" ? "Manage subscriptions" :
                   selectedRunwayAction.id === "action-1" ? "Configure safety buffer" :
                   selectedRunwayAction.id === "action-3" ? "Adjust food cap" :
                   "View settings";
-
                 return (
-                  <div className="flex flex-col gap-4 pt-1 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0 flex-1 space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className={sectionEyebrowClass}>Selected step</span>
-                        <Badge variant="outline" className={`text-[9px] uppercase font-semibold px-2 py-0.5 rounded ${
-                          selectedRunwayAction.severity === "high" ? "border-pb-red/20 text-pb-red bg-pb-red/5" :
-                          selectedRunwayAction.severity === "medium" ? "border-pb-amber/20 text-pb-amber bg-pb-amber/5" :
-                          "border-border text-muted-foreground bg-muted/10"
-                        }`}>
-                          {selectedRunwayAction.severity === "high" ? "Critical priority" : selectedRunwayAction.severity === "medium" ? "Recommended" : "Optional"}
-                        </Badge>
-                      </div>
-
-                      <div className="space-y-1">
+                  <div className="mt-4 rounded-2xl border border-border/60 bg-background/55 p-4">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={sectionEyebrowClass}>Selected step</span>
+                          <Badge variant="outline" className={`text-[9px] uppercase font-semibold px-2 py-0.5 rounded ${
+                            selectedRunwayAction.severity === "high" ? "border-pb-red/20 text-pb-red bg-pb-red/5" :
+                            selectedRunwayAction.severity === "medium" ? "border-pb-amber/20 text-pb-amber bg-pb-amber/5" :
+                            "border-border text-muted-foreground bg-muted/10"
+                          }`}>
+                            {selectedRunwayAction.severity === "high" ? "Critical priority" : selectedRunwayAction.severity === "medium" ? "Recommended" : "Optional"}
+                          </Badge>
+                        </div>
                         <h4 className={sectionTitleClass}>{selectedRunwayAction.label}</h4>
                         <p className={sectionBodyClass}>{selectedRunwayAction.detail}</p>
                       </div>
+                      {actionPath && (
+                        <div className="shrink-0">
+                          <Link to={actionPath} className="inline-flex h-9 items-center rounded-lg border border-border/80 bg-background px-3.5 text-[10px] font-semibold uppercase tracking-wider text-foreground hover:bg-surface hover:text-primary transition-all duration-200 shadow-sm cursor-pointer">
+                            {actionButtonText}
+                          </Link>
+                        </div>
+                      )}
                     </div>
-
-                    {actionPath && (
-                      <div className="shrink-0 sm:self-center">
-                        <Link to={actionPath} className="inline-flex h-8 items-center rounded-lg border border-border/80 bg-background px-3.5 text-[10px] font-semibold uppercase tracking-wider text-foreground hover:bg-surface hover:text-primary transition-all duration-200 shadow-sm cursor-pointer">
-                          {actionButtonText}
-                        </Link>
-                      </div>
-                    )}
                   </div>
                 );
               })()}
@@ -2056,25 +1994,40 @@ From PocketBuddy Runway.`;
                   {forecast.current_cycle.days_left} days left
                 </Badge>
               </div>
-              <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                <div className="rounded-xl border border-border/60 bg-background/55 p-3">
-                  <p className={sectionEyebrowClass}>Started</p>
-                  <p className="mt-1 text-sm font-semibold text-foreground">
-                    {new Date(forecast.current_cycle.start).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
-                  </p>
-                  <p className="mt-1 text-[11px] text-muted-foreground">Funding: {formatRs(forecast.current_cycle.available_funding)}</p>
+              <div className="mt-4 rounded-2xl border border-border/60 bg-background/55 p-4">
+                <div className="relative">
+                  <div className="absolute left-4 right-4 top-[26px] hidden h-px bg-border/50 sm:block" />
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <div className="relative min-w-0 pl-8 sm:pl-0">
+                      <div className="absolute left-0 top-1.5 h-2.5 w-2.5 rounded-full bg-primary sm:left-[calc(50%-0.3125rem)]" />
+                      <p className={sectionEyebrowClass}>Started</p>
+                      <p className="mt-1 text-sm font-semibold text-foreground">
+                        {new Date(forecast.current_cycle.start).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                      </p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">Funding: {formatRs(forecast.current_cycle.available_funding)}</p>
+                    </div>
+                    <div className="relative min-w-0 pl-8 sm:pl-0">
+                      <div className="absolute left-0 top-1.5 h-2.5 w-2.5 rounded-full bg-pb-amber sm:left-[calc(50%-0.3125rem)]" />
+                      <p className={sectionEyebrowClass}>Used so far</p>
+                      <p className="mt-1 text-sm font-semibold text-foreground tnum">{formatRs(forecast.current_cycle.spent)}</p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">{allowanceProgressPct}% of cycle funding spent</p>
+                    </div>
+                    <div className="relative min-w-0 pl-8 sm:pl-0">
+                      <div className="absolute left-0 top-1.5 h-2.5 w-2.5 rounded-full bg-pb-green sm:left-[calc(50%-0.3125rem)]" />
+                      <p className={sectionEyebrowClass}>Resets</p>
+                      <p className="mt-1 text-sm font-semibold text-foreground">
+                        {new Date(forecast.current_cycle.end).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                      </p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">Balance: {formatRs(remainingBalance)}</p>
+                    </div>
+                  </div>
                 </div>
-                <div className="rounded-xl border border-border/60 bg-background/55 p-3">
-                  <p className={sectionEyebrowClass}>Used so far</p>
-                  <p className="mt-1 text-sm font-semibold text-foreground tnum">{formatRs(forecast.current_cycle.spent)}</p>
-                  <p className="mt-1 text-[11px] text-muted-foreground">{allowanceProgressPct}% of cycle funding spent</p>
-                </div>
-                <div className="rounded-xl border border-border/60 bg-background/55 p-3">
-                  <p className={sectionEyebrowClass}>Resets</p>
-                  <p className="mt-1 text-sm font-semibold text-foreground">
-                    {new Date(forecast.current_cycle.end).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
-                  </p>
-                  <p className="mt-1 text-[11px] text-muted-foreground">Balance: {formatRs(remainingBalance)}</p>
+                <div className="mt-4 border-t border-border/50 pt-3">
+                  <div className="flex items-center justify-between gap-3 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                    <span>Cycle progress</span>
+                    <span>{allowanceProgressPct}% used</span>
+                  </div>
+                  <Progress value={allowanceProgressPct} className="mt-2 h-1.5 bg-surface-raised" />
                 </div>
               </div>
             </Card>
@@ -2085,81 +2038,51 @@ From PocketBuddy Runway.`;
                 <div className="space-y-1">
                   <p className={sectionEyebrowClass}>Where the runway goes</p>
                   <h3 className={sectionTitleClass}>Reserved vs flexible spend</h3>
-                  <p className={sectionBodyClass}>
-                    This view explains the forecast above; it is not a second recommendation.
-                  </p>
+                  <p className={sectionBodyClass}>Protected costs stay fixed. The rest is flexible.</p>
                 </div>
-                <Badge variant="outline" className="w-fit text-[10px] md:text-xs uppercase font-semibold border-border bg-surface-raised px-2 py-0.5">
-                  Reserved vs flexible
+                <Badge variant="outline" className="w-fit text-[10px] md:text-xs uppercase font-semibold border-border bg-surface-raised px-2 py-0.5 tracking-wider">
+                  Cycle split
                 </Badge>
               </div>
               <div className="mt-4 space-y-4">
-                <div className="rounded-xl border border-border/60 bg-background/55">
-                  {[
-                    { label: "Cycle funding", value: forecast.current_cycle.available_funding, tone: "text-pb-green" },
-                    { label: "Already spent", value: -forecast.current_cycle.spent, tone: "text-muted-foreground" },
-                    { label: "Reserved costs", value: -forecast.commitments.total, tone: "text-primary" },
-                    { label: "Flexible cash left", value: remainingDiscretionary, tone: "text-foreground" },
-                  ].map((row, idx) => (
-                    <div key={row.label} className={`flex items-center justify-between gap-4 px-3 py-3 text-xs ${idx > 0 ? "border-t border-border/60" : ""}`}>
-                      <span className="font-medium text-muted-foreground">{row.label}</span>
-                      <span className={`font-semibold tnum ${row.tone}`}>
-                        {row.value < 0 ? `-${formatRs(Math.abs(row.value))}` : formatRs(row.value)}
-                      </span>
+                <div className="rounded-2xl border border-border/60 bg-background/55 p-4 sm:p-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Cycle split</p>
+                      <p className="mt-1 text-sm font-semibold text-foreground">Reserved and flexible cash share the same allowance.</p>
                     </div>
-                  ))}
-                </div>
-
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="rounded-xl border border-primary/15 bg-primary/5 p-3">
-                    <p className={sectionEyebrowClass}>Reserved share</p>
-                    <p className="mt-1 text-sm font-semibold text-foreground tnum">{committedPct}%</p>
-                    <p className={sectionBodyClass}>{formatRs(forecast.commitments.total)} protected before daily spend.</p>
-                  </div>
-                  <div className="rounded-xl border border-pb-amber/15 bg-pb-amber/5 p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-pb-amber">Flexible forecast</p>
-                    <p className="mt-1 text-sm font-semibold text-foreground tnum">{formatRs(forecast.projection.projected_discretionary)}</p>
-                    <p className={sectionBodyClass}>{flexiblePct}% of the remaining forecasted spend.</p>
-                  </div>
-                </div>
-
-                <div className="hidden">
-                  <div className="flex h-3 rounded-full overflow-hidden mb-2 bg-surface-raised">
-                    <div className="bg-primary/80 transition-all" style={{ width: `${committedPct}%` }} title={`Reserved: ${committedPct}%`} />
-                    <div className="bg-pb-amber/70 transition-all" style={{ width: `${flexiblePct}%` }} title={`Flexible: ${flexiblePct}%`} />
-                  </div>
-                  <div className="grid gap-2 text-[11px] md:text-xs font-semibold sm:grid-cols-2">
-                    <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-surface/50 px-3 py-2">
-                      <span className="text-primary flex items-center gap-1.5">
-                        <span className="w-2.5 h-2.5 bg-primary/80 rounded-sm" />
-                        Reserved costs
-                      </span>
-                      <span className="text-foreground tnum">{committedPct}% · {formatRs(forecast.commitments.total)}</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-surface/50 px-3 py-2">
-                      <span className="text-pb-amber flex items-center gap-1.5">
-                        <span className="w-2.5 h-2.5 bg-pb-amber/70 rounded-sm" />
-                        Flexible forecast
-                      </span>
-                      <span className="text-foreground tnum">{flexiblePct}% · {formatRs(forecast.projection.projected_discretionary)}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-3 border-t border-border/50 pt-4 sm:grid-cols-2">
-                  <div>
-                    <h4 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">Reserved costs</h4>
-                    <p className={sectionBodyClass}>
-                      Subscriptions, meal routine, exam buffer, and pending pool settlements are protected before daily spending is calculated.
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground tnum">
+                      {committedPct}% reserved / {flexiblePct}% flexible
                     </p>
                   </div>
-                  <div>
-                    <h4 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-pb-amber">Flexible forecast</h4>
-                    <p className={sectionBodyClass}>
-                      Snacks, travel, shopping, and other variable spends are projected from recent pace for the remaining cycle.
-                    </p>
+                  <div className="mt-4 h-3 overflow-hidden rounded-full bg-surface-raised">
+                    <div className="flex h-full w-full">
+                      <div className="bg-primary/80 transition-all" style={{ width: `${committedPct}%` }} />
+                      <div className="bg-pb-amber/75 transition-all" style={{ width: `${flexiblePct}%` }} />
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-xl border border-border/60 bg-surface/55 p-3">
+                      <p className={sectionEyebrowClass}>Cycle funding</p>
+                      <p className="mt-1 text-sm font-semibold text-foreground tnum">{formatRs(forecast.current_cycle.available_funding)}</p>
+                      <p className={sectionBodyClass}>Allowance available at cycle start.</p>
+                    </div>
+                    <div className="rounded-xl border border-primary/15 bg-primary/5 p-3">
+                      <p className={sectionEyebrowClass}>Reserved costs</p>
+                      <p className="mt-1 text-sm font-semibold text-foreground tnum">{formatRs(forecast.commitments.total)}</p>
+                      <p className={sectionBodyClass}>Protected before daily spending is calculated.</p>
+                    </div>
+                    <div className="rounded-xl border border-pb-amber/15 bg-pb-amber/5 p-3">
+                      <p className={sectionEyebrowClass}>Flexible cash left</p>
+                      <p className="mt-1 text-sm font-semibold text-foreground tnum">{formatRs(remainingDiscretionary)}</p>
+                      <p className={sectionBodyClass}>This pool drives runway pace and the next safe/day limit.</p>
+                    </div>
                   </div>
                 </div>
+
+                <p className="text-[11px] text-muted-foreground leading-relaxed border-t border-border/50 pt-4">
+                  Reserved costs include subscriptions, meal routine, exam buffer, and pending pool settlements. Flexible spend is anything that can move with student choices.
+                </p>
               </div>
             </Card>
 
@@ -2325,31 +2248,32 @@ From PocketBuddy Runway.`;
                   <Card key={h.key} className="border border-border bg-card/30 p-4">
                     <div className="space-y-4">
                       <div className="flex items-start justify-between gap-3">
-                        <div>
+                        <div className="min-w-0">
                           <p className={sectionEyebrowClass}>{h.label}</p>
-                          <p className={`mt-1 text-xl font-semibold tnum ${isNegative ? "text-pb-red" : "text-pb-green"}`}>
+                          <p className={`mt-1 text-2xl font-semibold tnum ${isNegative ? "text-pb-red" : "text-pb-green"}`}>
                             {formatRs(h.projected_balance)}
                           </p>
-                          <p className={sectionBodyClass}>
-                            {isNegative
-                              ? "Projected balance falls below zero by the end of this horizon."
-                              : "Projected balance stays positive through this horizon."}
-                          </p>
                         </div>
-                        <Badge variant="outline" className={`text-[9px] uppercase font-semibold ${
+                        <Badge variant="outline" className={`shrink-0 text-[9px] uppercase font-semibold ${
                           isNegative ? "border-pb-red/30 text-pb-red bg-pb-red/5" : "border-pb-green/30 text-pb-green bg-pb-green/5"
                         }`}>
                           {isNegative ? "Deficit" : "Surplus"}
                         </Badge>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-3 border-y border-border/50 py-3">
+                      <p className={sectionBodyClass}>
+                        {isNegative
+                          ? "Projected balance falls below zero by the end of this horizon."
+                          : "Projected balance stays positive through this horizon."}
+                      </p>
+
+                      <div className="grid grid-cols-3 gap-2 rounded-2xl border border-border/60 bg-background/55 p-3">
                         <div className="space-y-1">
                           <p className={sectionEyebrowClass}>Funding</p>
                           <p className="text-sm font-semibold text-foreground tnum">{formatRs(h.projected_funding)}</p>
                         </div>
                         <div className="space-y-1">
-                          <p className={sectionEyebrowClass}>Expected spend</p>
+                          <p className={sectionEyebrowClass}>Spend</p>
                           <p className="text-sm font-semibold text-foreground tnum">{formatRs(h.projected_spend)}</p>
                         </div>
                         <div className="space-y-1 text-right">
@@ -2360,27 +2284,23 @@ From PocketBuddy Runway.`;
                         </div>
                       </div>
 
-                      <div className="space-y-2">
-                        <div className="flex items-start justify-between gap-4">
-                          <div>
-                            <p className={sectionEyebrowClass}>Scenario range</p>
-                            <p className={sectionBodyClass}>Range at {forecast.confidence.score}% model confidence.</p>
-                          </div>
-                          <p className="shrink-0 text-sm font-semibold text-foreground tnum text-right">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="rounded-xl border border-border/60 bg-background/55 p-3">
+                          <p className={sectionEyebrowClass}>Scenario range</p>
+                          <p className="mt-1 text-sm font-semibold text-foreground tnum">
                             {formatRs(h.balance_low)} to {formatRs(h.balance_high)}
                           </p>
+                          <p className={sectionBodyClass}>Range at {forecast.confidence.score}% model confidence.</p>
                         </div>
-                        <div className="flex items-start justify-between gap-4">
-                          <div>
-                            <p className={sectionEyebrowClass}>{isNegative ? "Correction needed" : "End position"}</p>
-                            <p className={sectionBodyClass}>
-                              {isNegative
-                                ? "Add monthly funding or lower flexible spend before this horizon."
-                                : "Current pace still leaves a positive balance at the end of this horizon."}
-                            </p>
-                          </div>
-                          <p className={`shrink-0 text-sm font-semibold tnum text-right ${isNegative ? "text-pb-red" : "text-pb-green"}`}>
+                        <div className="rounded-xl border border-border/60 bg-background/55 p-3">
+                          <p className={sectionEyebrowClass}>{isNegative ? "Correction needed" : "End position"}</p>
+                          <p className="mt-1 text-sm font-semibold text-foreground tnum">
                             {isNegative ? `${formatRs(h.monthly_shortfall)} / month` : formatRs(h.projected_balance)}
+                          </p>
+                          <p className={sectionBodyClass}>
+                            {isNegative
+                              ? "Add monthly funding or lower flexible spend before this horizon."
+                              : "Current pace still leaves a positive balance at the end of this horizon."}
                           </p>
                         </div>
                       </div>
