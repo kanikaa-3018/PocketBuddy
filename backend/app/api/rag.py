@@ -203,10 +203,19 @@ async def get_runway_intel(user_id: str = Depends(get_current_user)):
     user = await db.users.find_one({"_id": user_id}) or {}
     full_name = str(user.get("full_name") or "").strip()
     pool_ids: set[str] = set()
+    user_item_query: dict = {"added_by_user_id": user_id}
     if full_name:
         name_regex = re.compile(f"^{re.escape(full_name)}$", re.IGNORECASE)
-        user_items = await db.cart_pool_items.find({"added_by_name": name_regex}).to_list(length=1000)
-        pool_ids.update(str(item.get("pool_id")) for item in user_items if item.get("pool_id"))
+        user_item_query = {
+            "$or": [
+                {"added_by_user_id": user_id},
+                {"added_by_user_id": {"$exists": False}, "added_by_name": name_regex},
+                {"added_by_user_id": None, "added_by_name": name_regex},
+                {"added_by_user_id": "", "added_by_name": name_regex},
+            ]
+        }
+    user_items = await db.cart_pool_items.find(user_item_query).to_list(length=1000)
+    pool_ids.update(str(item.get("pool_id")) for item in user_items if item.get("pool_id"))
 
     hosted = await db.cart_pools.find(
         {"host_id": user_id, "status": {"$in": ["open", "closed", "completed"]}}
@@ -253,12 +262,30 @@ async def get_runway_intel(user_id: str = Depends(get_current_user)):
     next_action_title = str(next_action.get("title") or "Keep runway stable")
     next_action_detail = str(next_action.get("detail") or "Keep discretionary spend inside the safe daily limit.")
     decision_summary = str(decision_engine.get("summary") or "")
+    pace_source = str((forecast.get("projection") or {}).get("pace_source") or "")
+    stress_band = (forecast.get("projection") or {}).get("stress_band") or {}
+    expected_days = int((stress_band.get("expected") or {}).get("days_until_broke") or broke_days)
+    stress_days = int((stress_band.get("stress") or {}).get("days_until_broke") or broke_days)
 
     # Build local fallback
-    if status == "shortfall":
+    if status == "setup_required":
         fallback_summary = (
-            f"Based on your current spending pace, you will run out of allowance in {broke_days} days "
-            f"({days_left - broke_days} days before the cycle ends). "
+            "Runway needs your allowance or an allowance credit before it can produce a trusted daily limit. "
+            "Add funding in Settings or sync transactions first; no spending recommendation is shown yet."
+        )
+    elif next_action.get("type") == "pause_flexible":
+        fallback_summary = (
+            "There is no safe discretionary amount left after known spending and commitments. "
+            "Pause flexible spending until reset, or add funding before making non-essential payments."
+        )
+    elif pace_source == "no_recent_history":
+        fallback_summary = (
+            f"Use Rs {safe_daily:,}/day only as a temporary cap because there is not enough recent spend history yet. "
+            "Sync or add a few real payments before relying on pace-based suggestions."
+        )
+    elif status == "shortfall":
+        fallback_summary = (
+            f"Expected runway is {expected_days} days, with a stress case of {stress_days} days. "
             f"Ask home for Rs {ask_amount:,} and follow this next action: {next_action_detail}"
         )
     elif status == "watch" or shortfall_prob >= 0.35:
@@ -275,14 +302,15 @@ async def get_runway_intel(user_id: str = Depends(get_current_user)):
     # Try Bedrock
     if settings.BEDROCK_ENABLED:
         try:
-            prompt = f"""You are PocketBuddy, a student budget advisor for college students.
+            prompt = f"""You are PocketBuddy, a campus affordability explainer for college students.
 Here is the student's runway forecast details:
 - Cycle days left: {days_left} days
 - Safe daily spend limit: Rs {safe_daily}
 - Current daily spend pace (EWMA): Rs {projected_daily}
 - Forecast status: {status.upper()}
 - Shortfall probability: {shortfall_prob * 100:.0f}%
-- Days until broke: {broke_days} (out of {days_left} days left)
+- Expected runway: {expected_days} days
+- Stress-case runway: {stress_days} days
 - Ask home amount needed: Rs {ask_amount}
 - Upcoming commitments total: Rs {commitments_total}
 - Meal routine: {food_label}
@@ -291,7 +319,7 @@ Here is the student's runway forecast details:
 - Decision engine summary: {decision_summary}
 - Next best action: {next_action_title} — {next_action_detail}
 
-Generate exactly 2 concise, personalized, and action-oriented sentences. Be direct, reference the specific numbers, and suggest concrete actions that match their meal routine. Do not invent phone numbers, contacts, merchant names, or guarantees. No emojis. No preamble."""
+Generate exactly 2 concise, personalized, and action-oriented sentences. Explain only the deterministic values above. Do not calculate new amounts. Do not invent amounts, dates, probabilities, contacts, merchant names, guarantees, or extra actions. No emojis. No preamble."""
 
             text = generate_text(prompt, max_tokens=150, temperature=0.25)
             if text:
