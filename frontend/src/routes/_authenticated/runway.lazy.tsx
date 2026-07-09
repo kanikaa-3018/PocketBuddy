@@ -427,17 +427,18 @@ Generated via PocketBuddy Runway.`;
 
       <div className="py-4 pb-32 space-y-6 animate-[fadeIn_0.3s_ease-out]">
         {/* ── Runway Advisor Narration ── */}
-        <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-card/50 to-card p-5 shadow-lg">
-          <div className="absolute top-0 right-0 p-3 flex gap-2">
-            <span className="flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-2.5 w-2.5 rounded-full bg-primary opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary"></span>
-            </span>
-          </div>
-          <div className="flex items-center gap-2 mb-3">
-            <Zap className="h-4.5 w-4.5 text-primary animate-pulse" />
-            <h2 className="text-xs font-bold uppercase tracking-wider text-primary">Runway Advisor</h2>
-            <Badge variant="outline" className="text-[9px] md:text-xs uppercase border-primary/20 text-primary px-1.5 py-0">Amazon Bedrock Nova</Badge>
+        <div className="relative overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-sm">
+          <div className="absolute inset-x-0 top-0 h-1 bg-primary/70" />
+          <div className="flex items-start gap-3 mb-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="h-8 w-8 rounded-lg border border-primary/20 bg-primary/10 flex items-center justify-center shrink-0">
+                <ShieldCheck className="h-4 w-4 text-primary" />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-xs font-bold uppercase tracking-wider text-primary">Runway Advisor</h2>
+                <p className="text-[11px] text-muted-foreground leading-snug">Next step for the current cycle.</p>
+              </div>
+            </div>
           </div>
           {intelLoading ? (
             <div className="space-y-2">

@@ -6,7 +6,7 @@ import { AppShell, MobileMenuButton } from "@/components/AppShell";
 import { PlatformIcon } from "@/components/PlatformIcon";
 import {
   Plus, ChevronRight, AlertTriangle, Users, Utensils, ShoppingBag,
-  Bus, Receipt, MoreHorizontal, Wallet, Timer, MessageSquare, Phone, Mail, MapPin, ExternalLink, Compass, TrendingDown, Calendar,
+  Bus, Receipt, MoreHorizontal, Wallet, Timer, MessageSquare, Phone, Mail, MapPin, ExternalLink, Compass, TrendingDown, Calendar, ShieldCheck,
   ChevronDown, ChevronUp
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -2384,37 +2384,64 @@ function Dashboard() {
             </Link>
 
             {/* ── AI Campus Intelligence (Bedrock) ──────────────────── */}
-            <div className="bg-surface border border-border rounded-2xl p-5 relative overflow-hidden">
-              <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at top left, rgba(255,107,0,0.07), transparent 60%)" }} />
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-5.5 h-5.5 rounded-full bg-gradient-to-br from-primary to-pb-amber flex items-center justify-center shrink-0">
-                  <span style={{ fontSize: "11px", fontWeight: 900, color: "#0A0A0A" }}>AI</span>
-                </div>
-                <p className="text-xs font-bold tracking-[0.2em] text-zinc-500 uppercase">Campus Intelligence</p>
-                {campusIntel?.source === "bedrock" && (
-                  <span className="ml-auto text-[10px] md:text-xs font-black text-primary uppercase tracking-wider border border-primary/30 px-1.5 py-0.5 rounded-full">Bedrock</span>
-                )}
-              </div>
-              {campusIntel?.summary ? (
-                <p className="text-[13px] text-zinc-300 leading-relaxed">{campusIntel.summary}</p>
-              ) : (
-                <div className="space-y-1.5">
-                  <div className="h-2.5 rounded bg-white/5 w-full animate-pulse" />
-                  <div className="h-2.5 rounded bg-white/5 w-4/5 animate-pulse" />
-                  <div className="h-2.5 rounded bg-white/5 w-3/5 animate-pulse" />
-                </div>
-              )}
-              {campusIntel && (
-                <div className="mt-3 pt-3 border-t border-border flex gap-4">
-                  <div>
-                    <p className="text-[10px] md:text-xs text-zinc-600 uppercase tracking-wider">This Week</p>
-                    <p className="text-xs font-black text-foreground tnum">{rupees((campusIntel.spend_7d ?? 0) * 100)}</p>
+            <div className="bg-surface border border-border rounded-2xl p-4 sm:p-5 relative overflow-hidden">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="h-8 w-8 rounded-lg border border-border bg-background/50 flex items-center justify-center shrink-0">
+                    <ShieldCheck className="h-4 w-4 text-primary" />
                   </div>
-                  <div>
-                    <p className="text-[10px] md:text-xs text-zinc-600 uppercase tracking-wider">Last Meal</p>
-                    <p className={`text-xs font-black tnum ${(campusIntel.last_food_hours ?? 0) > 8 ? "text-warning" : "text-success"}`}>
-                      {campusIntel.last_food_hours > 0 ? `${Math.round(campusIntel.last_food_hours)}h ago` : "—"}
-                    </p>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold tracking-[0.16em] text-muted-foreground uppercase">Campus Intelligence</p>
+                    <p className="text-[11px] text-muted-foreground leading-snug">Cycle balance, spend pace, commitments, and routine.</p>
+                  </div>
+                </div>
+              </div>
+              {campusIntel?.headline ? (
+                <div>
+                  <div className="border-l-2 border-primary/40 pl-3">
+                    <h3 className="text-sm sm:text-base font-semibold text-foreground leading-snug">{campusIntel.headline}</h3>
+                    <p className="mt-2 text-xs text-foreground/90 leading-relaxed">{campusIntel.next_action ?? campusIntel.summary}</p>
+                  </div>
+                  {campusIntel.why && (
+                    <p className="mt-3 text-[11px] text-muted-foreground leading-relaxed">{campusIntel.why}</p>
+                  )}
+
+                  <div className="mt-4 pt-3 border-t border-border divide-y divide-border/60">
+                    {(() => {
+                      const signals = campusIntel.signals ?? [
+                        { label: "Runway", value: rupees((campusIntel.safe_daily ?? 0) * 100) + "/day", detail: "Safe spend", tone: "steady" },
+                        { label: "Spend pace", value: rupees((campusIntel.spend_7d ?? 0) * 100), detail: "Last 7 days", tone: "steady" },
+                        { label: "Commitments", value: rupees((campusIntel.upcoming_commitments ?? 0) * 100), detail: "Next 7 days", tone: "steady" },
+                        { label: "Routine", value: campusIntel.last_food_hours > 0 ? `${Math.round(campusIntel.last_food_hours)}h ago` : "No signal", detail: "Latest signal", tone: "steady" },
+                      ];
+                      const visibleSignals = signals
+                        .filter((signal: any, index: number) => index < 2 || signal.tone === "watch")
+                        .slice(0, 3);
+
+                      return visibleSignals.map((signal: any) => (
+                        <div key={signal.label} className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${signal.tone === "watch" ? "bg-warning" : "bg-muted-foreground/50"}`} />
+                              <p className="text-[10px] md:text-xs text-muted-foreground uppercase tracking-wider truncate">{signal.label}</p>
+                            </div>
+                            <p className="mt-0.5 text-[10px] text-muted-foreground/80 truncate">{signal.detail}</p>
+                          </div>
+                          <p className="text-xs font-semibold text-foreground tnum shrink-0">{signal.value}</p>
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-5 w-2/3" />
+                  <Skeleton className="h-4 w-full" />
+                  <div className="pt-3 border-t border-border space-y-2">
+                    <Skeleton className="h-7 w-full" />
+                    <Skeleton className="h-7 w-full" />
+                    <Skeleton className="h-7 w-full" />
                   </div>
                 </div>
               )}

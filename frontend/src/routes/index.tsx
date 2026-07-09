@@ -783,9 +783,9 @@ function DashboardMockup() {
       <div className="rounded-xl p-2 border cursor-pointer transition-transform duration-150" style={{ background: isDark ? "rgba(255,107,0,0.04)" : "rgba(255,107,0,0.03)", borderColor: isDark ? "rgba(255,107,0,0.15)" : "rgba(255,107,0,0.12)", transform: tappedCard === "ai" ? "scale(0.97)" : "scale(1)" }} onClick={() => tapCard("ai")}>
         <div className="text-[9px] text-[#C27D56] tracking-wider font-mono mb-1 leading-none flex items-center gap-1">
           <Zap className="w-2.5 h-2.5 text-[#C27D56]" fill="currentColor" />
-          AI GUARD · BEDROCK
+          CAMPUS INTEL
         </div>
-        <div className="text-[10px] text-foreground leading-snug">BH-2 Night Canteen: Egg Paratha <span className="text-[#C27D56] font-bold">₹45</span> · Open till 2AM</div>
+        <div className="text-[10px] text-foreground leading-snug">BH-2 Night Canteen: Egg Paratha <span className="text-[#C27D56] font-bold">Rs 45</span> from trusted campus data</div>
       </div>
     </div>
   );
@@ -1103,7 +1103,7 @@ function LandingPage() {
   const features = [
     { icon: Smartphone, title: "Privacy-first Instant UPI Sync", description: "The optional Android connector parses supported payment alerts on-device and sends only transaction facts ── never raw notification text.", accent: "#8C7853", delay: 0 },
     { icon: Map, title: "Crowdsourced Merchant Mapping", description: "Raw strings like SHREE_BALAJI_ENT resolve into 'Hostel 1 Night Canteen' via 1-tap crowd classification, shared globally across campus.", accent: "#C27D56", delay: 100 },
-    { icon: Zap, title: "Geofenced AI Guard", description: "Amazon Bedrock analyzes your runway against a live campus food database to surface hyper-local, cost-effective meal alternatives.", accent: "#D9A05B", delay: 200 },
+    { icon: Zap, title: "Campus Intelligence", description: "Turns runway, commitments, routine signals, and trusted campus prices into one practical next step.", accent: "#D9A05B", delay: 200 },
     { icon: ShoppingCart, title: "Wing Cart Pooler", description: "Open a Blinkit/Zepto pool, share it on WhatsApp, let roommates add items ── delivery fees split automatically. No install needed.", accent: "#F7EC13", delay: 0 },
     { icon: CalendarCheck, title: "Exam-Week Check-In", description: "If no food transaction is detected for 16+ hours during exam week, PocketBuddy pings you and suggests the nearest open campus canteen.", accent: "#5E17EB", delay: 100 },
     { icon: Bell, title: "Subscription Collision Guard", description: "Auto-detects recurring Spotify, YouTube & gaming debits, then flags exact days when they'll slice your food runway to dangerous levels.", accent: "#FC8019", delay: 200 },
@@ -1114,7 +1114,7 @@ function LandingPage() {
     { q: "What if I don't have the Android companion app?", a: "You can still use PocketBuddy in full manual mode ── log transactions in one tap, get AI food suggestions, join Wing Cart Pools, and track subscriptions. The companion just makes it passive and offline-syncing." },
     { q: "How does the crowdsourced merchant mapping work?", a: "When a new merchant string appears (e.g. SHREE_BALAJI_ENT), you get a 1-tap prompt to classify it. Once classified, it's immediately resolved for every student on your campus ── your 10 seconds of effort saves hundreds of others the same friction." },
     { q: "Is this only for one campus?", a: "No. PocketBuddy works for any residential campus. The campus food database is seeded per college and grows through crowdsourcing, so each university can start with its own menus and routes." },
-    { q: "How is the Burnout Risk Score calculated?", a: "It's derived from four real signals: food gap hours (time since last food transaction), exam period overlap, spending velocity spike vs. prior week, and late-night transaction patterns. No subjective surveys ── it's entirely data-driven." },
+    { q: "How is the routine signal calculated?", a: "It uses backend facts such as food gap hours, exam period overlap, spending velocity changes, and late-night transaction timing. It is a practical nudge, not a medical or mental-health assessment." },
   ];
 
   const comparisons = [
@@ -1122,7 +1122,7 @@ function LandingPage() {
     { feature: "UPI push notification ingestion", us: true, fi: false, mint: false, splitwise: false },
     { feature: "Campus-specific food intelligence", us: true, fi: false, mint: false, splitwise: false },
     { feature: "Crowdsourced merchant mapping", us: true, fi: false, mint: false, splitwise: false },
-    { feature: "Burnout risk detection", us: true, fi: false, mint: false, splitwise: false },
+    { feature: "Routine signal nudges", us: true, fi: false, mint: false, splitwise: false },
     { feature: "Delivery fee split pooling", us: true, fi: false, mint: false, splitwise: true },
     { feature: "Subscription collision alerts", us: true, fi: true, mint: true, splitwise: false },
     { feature: "Exam-period food monitoring", us: true, fi: false, mint: false, splitwise: false },
@@ -1131,7 +1131,7 @@ function LandingPage() {
 
   const problems = [
     { icon: Banknote, stat: "120", sub: "avg units wasted monthly on delivery surge fees by dorm students", color: "#FC8019" },
-    { icon: Utensils, stat: "3 in 5", sub: "students skip a meal during exam week due to financial anxiety", color: "#ef4444" },
+    { icon: Utensils, stat: "3 in 5", sub: "students skip a meal during exam week due to budget pressure", color: "#ef4444" },
     { icon: Smartphone, stat: "94%", sub: "of students abandon manual finance apps within 2 weeks", color: "#f59e0b" },
     { icon: Moon, stat: "80", sub: "spent late-night per month on impulse delivery orders", color: "#5E17EB" },
   ];
@@ -1306,9 +1306,9 @@ function LandingPage() {
         <div className="space-y-6">
           <SectionLabel text="The Dashboard" />
           <SectionHeading>Your financial runway, live.</SectionHeading>
-          <p className="text-sm text-muted-foreground leading-relaxed">One glance tells you everything ── days until broke, safe daily spend limit, AI-suggested campus meals, active Wing pools, and your burnout risk index. All computed passively from your UPI notifications.</p>
+          <p className="text-sm text-muted-foreground leading-relaxed">One glance tells you everything ── days until broke, safe daily spend limit, grounded campus meal advice, active Wing pools, and routine signals. All computed from PocketBuddy facts, with AI used only to explain next steps.</p>
           <div className="space-y-3 pt-2">
-            {["Live runway countdown with exact HH:MM:SS timer", "AI burnout risk score from 5 real behavioral signals", "Hyper-local Bedrock meal suggestions", "Crowdsourced merchant recognition", "Subscription collision calendar"].map((item) => (
+            {["Live runway countdown with exact HH:MM:SS timer", "Routine signal nudges from real behavioral signals", "Campus-aware next steps from trusted data", "Crowdsourced merchant recognition", "Subscription collision calendar"].map((item) => (
               <div key={item} className="flex items-center gap-3">
                 <div className="w-1.5 h-1.5 rounded-full bg-[#C27D56] shrink-0" />
                 <span className="text-xs sm:text-sm text-muted-foreground">{item}</span>
@@ -1326,7 +1326,7 @@ function LandingPage() {
         <div className="max-w-[960px] mx-auto grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-10">
           {[
             { value: "0", label: "MANUAL ENTRIES NEEDED" },
-            { value: "16+h", label: "BURNOUT DETECTION THRESHOLD" },
+            { value: "16+h", label: "MEAL GAP NUDGE WINDOW" },
             { value: "75%", label: "TOKEN COST REDUCTION VIA RAG" },
             { value: "∞", label: "CAMPUS MERCHANTS MAPPABLE" },
           ].map(({ value, label }) => (
@@ -1423,8 +1423,8 @@ function LandingPage() {
             <TimelineStep n="01" title="Payment alert appears" sub="You pay ₹30 at the hostel canteen. The optional Android connector checks whether the alert is a supported payment event." delay={0} />
             <TimelineStep n="02" title="Phone parses locally" sub="Amount, direction, merchant, source app, and a masked preview are created on-device. Raw notification text is not uploaded." delay={80} />
             <TimelineStep n="03" title="Merchant gets crowd-classified" sub="If the merchant is new, one 1-tap prompt classifies it globally for your entire campus. Next student gets it automatically." delay={160} />
-            <TimelineStep n="04" title="Runway recalculates instantly" sub="Your dashboard updates the days-remaining metric, checks for subscription collisions, and flags burnout risks in real time." delay={240} />
-            <TimelineStep n="05" title="AI guard activates if needed" sub="Bedrock cross-references your spending vector against the campus food database and surfaces the cheapest viable meal option near you." delay={320} />
+            <TimelineStep n="04" title="Runway recalculates instantly" sub="Your dashboard updates days remaining, checks subscription collisions, and turns routine signals into practical nudges." delay={240} />
+            <TimelineStep n="05" title="Campus intelligence suggests the next step" sub="PocketBuddy turns runway, commitments, routine, and trusted campus context into a practical action." delay={320} />
           </div>
         </div>
       </section>
