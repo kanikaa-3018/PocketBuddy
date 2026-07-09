@@ -1,4 +1,4 @@
-import { createLazyFileRoute, Link } from "@tanstack/react-router";
+﻿import { createLazyFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
 import { AppShell, MobileMenuButton } from "@/components/AppShell";
@@ -269,10 +269,10 @@ function RunwayPage() {
     const categoryAdvice = affordCategory === "food"
       ? foodRoutine?.action?.title || "Use the lowest-cost routine meal if possible."
       : affordCategory === "travel"
-        ? "Book only if the ride is essential or fits todayÃ¢â‚¬â„¢s safe limit."
+        ? "Book only if the ride is essential or fits today's safe limit."
         : affordCategory === "shopping"
           ? "Delay this unless it is required before reset."
-          : "Keep it inside todayÃ¢â‚¬â„¢s safe limit.";
+          : "Keep it inside today's safe limit.";
     if (safeDailyIsZero || affordAmountPaise > remainingDiscretionary) {
       return {
         status: "avoid",
@@ -285,7 +285,7 @@ function RunwayPage() {
     if (affordAmountPaise <= safeDailyPaise) {
       return {
         status: "safe",
-        title: "Safe if this is todayÃ¢â‚¬â„¢s main flexible spend",
+        title: "Safe if this is today's main flexible spend",
         detail: `${formatRs(affordAmountPaise)} keeps the next safe/day near ${formatRs(nextSafeDaily)}. ${categoryAdvice}`,
         tone: "border-pb-green/20 bg-pb-green/5 text-pb-green",
         runwayDaysLost,
@@ -294,7 +294,7 @@ function RunwayPage() {
     return {
       status: "tight",
       title: "Tight",
-      detail: `${formatRs(affordAmountPaise)} is above todayÃ¢â‚¬â„¢s safe/day and uses about ${runwayDaysLost.toFixed(1)} runway days. ${categoryAdvice}`,
+      detail: `${formatRs(affordAmountPaise)} is above today's safe/day and uses about ${runwayDaysLost.toFixed(1)} runway days. ${categoryAdvice}`,
       tone: "border-pb-amber/20 bg-pb-amber/5 text-pb-amber",
       runwayDaysLost,
     };
@@ -373,7 +373,7 @@ From PocketBuddy Runway.`;
     if (!forecast) return { grade: "N/A", text: "Calculating", color: "text-zinc-500", bg: "bg-zinc-500/10", border: "border-zinc-500/20", description: "Calculating runway projections..." };
     if (forecast.status === "setup_required") {
       return {
-        grade: "Ã¢â‚¬â€",
+        grade: "N/A",
         text: "Setup needed",
         color: "text-primary",
         bg: "bg-primary/10",
@@ -424,7 +424,7 @@ From PocketBuddy Runway.`;
     }
     return {
       grade: "F",
-      text: "Deficit",
+      text: "Needs buffer",
       color: "text-pb-red",
       bg: "bg-pb-red/10",
       border: "border-pb-red/20",
@@ -797,7 +797,7 @@ From PocketBuddy Runway.`;
       </div>
 
       <div className="py-4 pb-32 space-y-6 animate-[fadeIn_0.3s_ease-out]">
-        {/* Ã¢â€â‚¬Ã¢â€â‚¬ Runway Advisor Narration (Sleek Notification Bar) Ã¢â€â‚¬Ã¢â€â‚¬ */}
+        {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Runway Advisor Narration (Sleek Notification Bar) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
         <div className={`flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl text-xs font-medium border transition-all duration-300 ${
           activeActionType === "ask_home"
             ? "border-pb-red/30 bg-pb-red/5 text-pb-red"
@@ -849,7 +849,7 @@ From PocketBuddy Runway.`;
           </button>
         </div>
 
-        {/* Ã¢â€â‚¬Ã¢â€â‚¬ Tab: Overview Ã¢â€â‚¬Ã¢â€â‚¬ */}
+        {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Tab: Overview ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
         {activeTab === "overview" && (
           <div className="space-y-6">
             {false && (
@@ -1012,7 +1012,7 @@ From PocketBuddy Runway.`;
                       <div>
                         <span className="block text-[10px] sm:text-xs font-bold text-foreground truncate">{mode.title}</span>
                         <span className="mt-1 block text-xs sm:text-sm font-black text-foreground tnum">
-                          {mode.amount === null ? (mode.key === "normal" ? "Ã¢â‚¬â€" : "Pause") : formatRs(mode.amount)}
+                          {mode.amount === null ? (mode.key === "normal" ? "—" : "Pause") : formatRs(mode.amount)}
                           {mode.amount !== null && <span className="text-[9px] font-normal text-muted-foreground">/day</span>}
                         </span>
                       </div>
@@ -1021,13 +1021,13 @@ From PocketBuddy Runway.`;
                   ))}
                 </div>
 
-                <div className="mt-5 rounded-xl border border-border bg-surface/70 p-4">
+                <div className="mt-5 rounded-2xl border border-border/60 bg-background/75 p-4 shadow-sm">
                   <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Simulation result</p>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Daily spend check</p>
                       <p className="mt-1 text-xl font-semibold text-foreground tnum">{safeDailyIsZero ? "Pause" : `${simulatedDays} days`}</p>
                     </div>
-                    <Badge variant="outline" className={`${isSimulatedSafe ? "border-success/30 bg-success/10 text-success" : "border-destructive/30 bg-destructive/10 text-destructive"} text-[10px] font-bold uppercase tracking-wider`}>
+                    <Badge variant="outline" className={`${isSimulatedSafe ? "border-success/30 bg-success/10 text-success" : "border-destructive/30 bg-destructive/10 text-destructive"} shrink-0 text-[10px] font-bold uppercase tracking-wider`}>
                       {isSimulatedSafe ? "Reaches reset" : "Falls short"}
                     </Badge>
                   </div>
@@ -1040,21 +1040,21 @@ From PocketBuddy Runway.`;
                   </p>
 
                   {!safeDailyIsZero && (
-                  <div className="mt-4 space-y-2">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-medium text-muted-foreground">{noSpendHistory ? "Temporary daily cap" : "Fine tune daily target"}</span>
-                      <span className="font-semibold text-primary tnum">{formatRs(activeSimulatedSpend * 100)}/day</span>
+                    <div className="mt-4 space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-medium text-muted-foreground">{noSpendHistory ? "Temporary daily cap" : "Fine tune daily target"}</span>
+                        <span className="font-semibold text-primary tnum">{formatRs(activeSimulatedSpend * 100)}/day</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={simulatorMinSpend}
+                        max={sliderMaxSpend}
+                        step="10"
+                        value={activeSimulatedSpend}
+                        onChange={(e) => setSimulatedDailySpend(parseInt(e.target.value, 10))}
+                        className="w-full h-1.5 cursor-pointer appearance-none rounded-full bg-gradient-to-r from-pb-green via-pb-amber to-pb-red accent-primary focus:outline-none"
+                      />
                     </div>
-                    <input
-                      type="range"
-                      min={simulatorMinSpend}
-                      max={sliderMaxSpend}
-                      step="10"
-                      value={activeSimulatedSpend}
-                      onChange={(e) => setSimulatedDailySpend(parseInt(e.target.value, 10))}
-                      className="w-full h-1.5 cursor-pointer appearance-none rounded-lg bg-border accent-primary focus:outline-none"
-                    />
-                  </div>
                   )}
                 </div>
 
@@ -1128,19 +1128,10 @@ From PocketBuddy Runway.`;
                 <div className="p-5 sm:p-6">
                   {/* Header row: badge always inline-left of meta labels */}
                   <div className="flex items-start gap-3 mb-4">
-                    {/* Grade badge Ã¢â‚¬â€ smaller on mobile, with glow */}
-                    <div className="relative shrink-0 mt-0.5">
-                      <div className={`absolute inset-0 rounded-full blur-md opacity-30 ${safetyGrade.bg}`} />
-                      <div className={`relative inline-flex h-10 items-center rounded-full border px-3 text-[10px] font-bold uppercase tracking-[0.16em] select-none sm:h-11 sm:px-4 ${safetyGrade.bg} ${safetyGrade.border} ${safetyGrade.color}`}>
-                        {safetyGrade.text}
-                      </div>
-                    </div>
+                    {/* Grade badge ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â smaller on mobile, with glow */}
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <p className="text-[10px] font-black uppercase tracking-[0.14em] text-muted-foreground">Runway overview</p>
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border ${safetyGrade.color} ${safetyGrade.bg} ${safetyGrade.border}`}>
-                          {safetyGrade.text}
-                        </span>
                         <span className="inline-flex items-center rounded-full border border-border bg-muted/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
                           {forecast.confidence.level} confidence
                         </span>
@@ -1148,6 +1139,14 @@ From PocketBuddy Runway.`;
                       <h2 className="mt-2 text-lg sm:text-2xl font-black tracking-tight text-foreground leading-snug">
                         Expected runway: <span className="text-primary">{expectedRunwayDays}</span> days
                       </h2>
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border ${safetyGrade.color} ${safetyGrade.bg} ${safetyGrade.border}`}>
+                          {safetyGrade.text}
+                        </span>
+                        <span className="inline-flex items-center rounded-full border border-border bg-background/70 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+                          {daysLeftInCycle} days left
+                        </span>
+                      </div>
                     </div>
                   </div>
 
@@ -1159,7 +1158,7 @@ From PocketBuddy Runway.`;
                         : safetyGrade.description}
                   </p>
 
-                  {/* Metrics Ã¢â‚¬â€ 2-col on mobile, 3-col on sm+ */}
+                  {/* Metrics ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 2-col on mobile, 3-col on sm+ */}
                   <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-4 border-t border-border/40 pt-4">
                     <div className="space-y-1">
                       <p className="text-[9px] font-black uppercase tracking-[0.13em] text-muted-foreground">Daily Limit</p>
@@ -1181,9 +1180,9 @@ From PocketBuddy Runway.`;
                     <div className="space-y-1 col-span-2 sm:col-span-1 sm:border-l sm:border-border/30 sm:pl-3 border-t sm:border-t-0 border-border/30 pt-3 sm:pt-0">
                       <p className="text-[9px] font-black uppercase tracking-[0.13em] text-muted-foreground">Scenario Range</p>
                       <p className="text-base sm:text-lg font-black text-foreground tnum leading-none">
-                        {stressRunwayDays} Ã¢â‚¬â€œ {calmRunwayDays} days
+                        {stressRunwayDays} - {calmRunwayDays} days
                       </p>
-                      <p className="text-[10px] text-muted-foreground leading-tight">Stress to Calm</p>
+                      <p className="text-[10px] text-muted-foreground leading-tight">Stress case to calm case</p>
                     </div>
                   </div>
 
@@ -1257,12 +1256,12 @@ From PocketBuddy Runway.`;
               </div>
             </Card>
 
-            {/* Ã¢â€â‚¬Ã¢â€â‚¬ Runway Drivers & Inputs Ã¢â€â‚¬Ã¢â€â‚¬ */}
+            {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Runway Drivers & Inputs ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
             <Card className="p-5 sm:p-6 border border-border bg-card/25">
               <div className="flex items-center justify-between border-b border-border/40 pb-3 mb-4">
                 <div>
                   <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">What changed?</h3>
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">Main factors affecting todayÃ¢â‚¬â„¢s runway estimate.</p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">Main factors affecting today's runway estimate.</p>
                 </div>
 
                 {/* Included in Forecast Dialog Trigger */}
@@ -1278,34 +1277,34 @@ From PocketBuddy Runway.`;
                 </button>
               </div>
 
-              {topDrivers.length ? (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 mt-2">
-                  {topDrivers.map((driver) => (
-                    <div key={driver.kind} className={`pl-3.5 py-1 border-l-2 ${
-                      driver.severity === "high"
-                        ? "border-pb-red"
-                        : driver.severity === "medium"
-                          ? "border-pb-amber"
-                          : "border-primary"
-                    }`}>
-                      <div className="flex justify-between gap-2 items-center">
-                        <p className="text-xs font-semibold text-foreground">{driver.label}</p>
-                        {Number(driver.impact || 0) > 0 && (
-                          <span className="text-[10px] font-bold text-foreground bg-foreground/5 px-1.5 py-0.5 rounded tnum whitespace-nowrap">
-                            &minus;{formatRs(Number(driver.impact))}
-                          </span>
-                        )}
+                {topDrivers.length ? (
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 mt-2">
+                    {topDrivers.map((driver) => (
+                      <div key={driver.kind} className={`pl-3.5 py-1 border-l-2 ${
+                        driver.severity === "high"
+                          ? "border-pb-red"
+                          : driver.severity === "medium"
+                            ? "border-pb-amber"
+                            : "border-primary"
+                      }`}>
+                        <div className="flex justify-between gap-2 items-center">
+                          <p className="text-xs font-semibold text-foreground">{driver.label}</p>
+                          {Number(driver.impact || 0) > 0 && (
+                            <span className="text-[10px] font-bold text-foreground bg-foreground/5 px-1.5 py-0.5 rounded tnum whitespace-nowrap">
+                              &minus;{formatRs(Number(driver.impact))}
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{driver.detail}</p>
                       </div>
-                      <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{driver.detail}</p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-xs text-muted-foreground italic py-1 text-center">
-                  No major pressure points detected. Runway behaves as expected.
-                </div>
-              )}
-            </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-xs text-muted-foreground italic py-1 text-center">
+                    No major pressure points detected. Runway behaves as expected.
+                  </div>
+                )}
+              </Card>
 
             <Card className="border border-border bg-surface p-5 sm:p-6 shadow-sm rounded-2xl relative overflow-hidden transition-all duration-300 hover:shadow-md">
               {/* Decorative accent bar */}
@@ -1385,26 +1384,30 @@ From PocketBuddy Runway.`;
                 </div>
 
                 {/* Result panel */}
-                <div className={`rounded-xl p-4 transition-all duration-300 border-l-4 ${
+                <div className={`rounded-2xl border p-4 sm:p-5 transition-all duration-300 ${
                   affordAmountPaise <= 0
-                    ? "border-border bg-surface-raised/35"
+                    ? "border-border/60 bg-surface/40"
                     : affordCheck.status === "safe"
-                      ? "border-pb-green bg-pb-green/5"
+                      ? "border-pb-green/25 bg-pb-green/[0.04]"
                       : affordCheck.status === "tight"
-                        ? "border-pb-amber bg-pb-amber/5"
-                        : "border-pb-red bg-pb-red/5"
+                        ? "border-pb-amber/25 bg-pb-amber/[0.04]"
+                        : "border-pb-red/25 bg-pb-red/[0.04]"
                 }`}>
                   {affordAmountPaise <= 0 ? (
-                    <div className="text-center py-2 space-y-1">
-                      <Calculator className="h-6 w-6 text-muted-foreground/45 mx-auto mb-1.5" />
-                      <h4 className="text-xs font-bold text-foreground">Interactive Runway Calculator</h4>
-                      <p className="text-[10px] text-muted-foreground leading-relaxed max-w-sm mx-auto">
-                        Select a quick preset or type any custom amount above to instantly simulate the impact on your allowance cycle and remaining days.
-                      </p>
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-background text-muted-foreground">
+                        <Calculator className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-xs font-bold uppercase tracking-[0.14em] text-foreground">Try an amount</h4>
+                        <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                          Pick a preset or type a value to preview the runway effect.
+                        </p>
+                      </div>
                     </div>
                   ) : (
                     <div className="flex flex-col gap-1">
-                      <div className="flex items-center justify-between gap-2 border-b border-border/40 pb-2.5 mb-2.5">
+                      <div className="flex items-start justify-between gap-3">
                         <div className="flex items-center gap-2">
                           <div className={`flex h-6 w-6 items-center justify-center rounded-lg ${
                             affordCheck.status === "safe"
@@ -1429,7 +1432,7 @@ From PocketBuddy Runway.`;
                                 : "Reconsider purchase"}
                           </h4>
                         </div>
-                        <Badge variant="outline" className={`text-[9px] uppercase font-black px-2 py-0.5 rounded-full ${
+                        <Badge variant="outline" className={`shrink-0 text-[9px] uppercase font-black px-2 py-0.5 rounded-full ${
                           affordCheck.status === "safe" ? "border-pb-green/30 bg-pb-green/10 text-pb-green" :
                           affordCheck.status === "tight" ? "border-pb-amber/30 bg-pb-amber/10 text-pb-amber" :
                           "border-pb-red/30 bg-pb-red/10 text-pb-red"
@@ -1438,22 +1441,22 @@ From PocketBuddy Runway.`;
                         </Badge>
                       </div>
 
-                      <p className="text-xs leading-relaxed text-muted-foreground">{affordCheck.detail}</p>
+                      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{affordCheck.detail}</p>
 
-                      {/* Student analogies */}
-                      <div className="mt-3.5 grid grid-cols-2 gap-3 border-t border-border/40 pt-3 text-[11px]">
-                        <div className="space-y-0.5">
-                          <span className="block text-[9px] uppercase font-bold text-muted-foreground tracking-wider font-semibold">Small-spend equivalent</span>
-                          <span className="text-xs font-black text-foreground tnum">{smallSpendEquivalent} units</span>
-                        </div>
-                        <div className="space-y-0.5">
-                          <span className="block text-[9px] uppercase font-bold text-muted-foreground tracking-wider font-semibold">Routine meals</span>
-                          <span className="text-xs font-black text-foreground tnum">{routineMealEquivalent} meals</span>
+                      <div className="mt-4 border-y border-border/40 py-3">
+                        <div className="grid grid-cols-2 gap-3 text-[11px]">
+                          <div className="space-y-0.5">
+                            <span className="block text-[9px] uppercase font-bold text-muted-foreground tracking-wider">Small-spend equivalent</span>
+                            <span className="text-xs font-black text-foreground tnum">{smallSpendEquivalent} units</span>
+                          </div>
+                          <div className="space-y-0.5">
+                            <span className="block text-[9px] uppercase font-bold text-muted-foreground tracking-wider">Routine meals</span>
+                            <span className="text-xs font-black text-foreground tnum">{routineMealEquivalent} meals</span>
+                          </div>
                         </div>
                       </div>
 
-                      {/* Runway impact progress bar */}
-                      <div className="mt-4 space-y-1.5">
+                      <div className="mt-3 space-y-1.5">
                         <div className="flex justify-between text-[9px] font-bold text-muted-foreground uppercase tracking-wider">
                           <span>Runway impact: &minus;{affordCheck.runwayDaysLost.toFixed(1)} days</span>
                           <span>Remaining: {Math.max(0, 100 - calculatorRunwayPct).toFixed(0)}%</span>
@@ -1599,27 +1602,24 @@ From PocketBuddy Runway.`;
               </Card>
             )}
 
-            {/* Ã°Å¸â€ºÂ« DAILY SPEND CHECK Ã¢â‚¬â€ SURVIVAL COCKPIT */}
-            <Card className="border border-border bg-surface p-4 sm:p-5 shadow-sm rounded-2xl relative overflow-hidden">
+            {/* ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂºÃ‚Â« DAILY SPEND CHECK ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â SURVIVAL COCKPIT */}
+            <Card className="relative overflow-hidden rounded-2xl border border-border bg-surface p-3 sm:p-3.5 shadow-sm">
               <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-primary/30 via-pb-amber/30 to-pb-green/30" />
 
-              <div className="flex flex-col lg:flex-row gap-5 items-stretch">
-
-                {/* Ã¢â€â‚¬Ã¢â€â‚¬ Left: Controls Ã¢â€â‚¬Ã¢â€â‚¬ */}
-                <div className="flex-1 space-y-4">
-
-                  <div className="space-y-3">
-                    <div className="space-y-1">
+              <div className="grid gap-2.5 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
+                <div className="space-y-2.5">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="space-y-0.5">
                       <p className={sectionEyebrowClass}>Daily spend check</p>
-                      <div className="flex items-start gap-2">
+                      <div className="flex items-center gap-2">
                         <Compass className="mt-0.5 h-4.5 w-4.5 shrink-0 text-primary" />
                         <h3 className={sectionTitleClass}>Test a daily target before you follow it</h3>
                       </div>
                       <p className={sectionBodyClass}>
-                        Adjust the target, compare modes, and see whether the cycle still reaches reset.
+                        Slide a target, snap to a common student pattern, and see whether the month still closes safely.
                       </p>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       <Badge variant="outline" className="border-border bg-background/70 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                         Target: {safeDailyDisplay}/day
                       </Badge>
@@ -1632,35 +1632,44 @@ From PocketBuddy Runway.`;
                     </div>
                   </div>
 
-                  <div className="space-y-3 pt-1">
-                    <div className="flex items-baseline justify-between gap-3">
-                      <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Adjust daily spend</span>
-                      <span className="text-sm font-semibold text-primary tnum sm:text-base">
-                        {safeDailyIsZero ? "Pause" : formatRs(activeSimulatedSpend * 100)}
-                        {!safeDailyIsZero && <span className="text-xs font-medium text-muted-foreground"> /day</span>}
-                      </span>
+                  <div className="rounded-2xl border border-border/60 bg-background/55 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Current target</p>
+                        <p className="mt-1 text-[15px] font-semibold leading-none text-foreground">
+                          {safeDailyIsZero ? "Pause" : `${formatRs(activeSimulatedSpend * 100)}/day`}
+                        </p>
+                      </div>
+                      <div className={`rounded-full border px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.14em] ${
+                        isSimulatedSafe ? "border-pb-green/30 bg-pb-green/5 text-pb-green" : "border-pb-red/30 bg-pb-red/5 text-pb-red"
+                      }`}>
+                        {isSimulatedSafe ? "Reaches reset" : "Needs adjustment"}
+                      </div>
                     </div>
+
                     {!safeDailyIsZero ? (
                       <>
-                        <input
-                          type="range"
-                          min={simulatorMinSpend}
-                          max={sliderMaxSpend}
-                          step="10"
-                          value={activeSimulatedSpend}
-                          onChange={(e) => setSimulatedDailySpend(parseInt(e.target.value, 10))}
-                          onMouseUp={() => toast.info(`Simulated at ${formatRs(activeSimulatedSpend * 100)}/day -> ${simulatedDays} days runway`)}
-                          onTouchEnd={() => toast.info(`Simulated at ${formatRs(activeSimulatedSpend * 100)}/day -> ${simulatedDays} days runway`)}
-                          className="w-full h-2 rounded-lg appearance-none cursor-pointer bg-gradient-to-r from-pb-green via-pb-amber to-pb-red accent-primary focus:outline-none"
-                        />
-                        <div className="flex justify-between font-mono text-[10px] font-semibold text-muted-foreground">
-                          <span>{formatRs(simulatorMinSpend * 100)}</span>
-                          <span className="text-center">Mid: {formatRs(Math.round(sliderMaxSpend * 50))}</span>
-                          <span>{formatRs(sliderMaxSpend * 100)}</span>
+                        <div className="mt-3">
+                          <input
+                            type="range"
+                            min={simulatorMinSpend}
+                            max={sliderMaxSpend}
+                            step="10"
+                            value={activeSimulatedSpend}
+                            onChange={(e) => setSimulatedDailySpend(parseInt(e.target.value, 10))}
+                            onMouseUp={() => toast.info(`Simulated at ${formatRs(activeSimulatedSpend * 100)}/day -> ${simulatedDays} days runway`)}
+                            onTouchEnd={() => toast.info(`Simulated at ${formatRs(activeSimulatedSpend * 100)}/day -> ${simulatedDays} days runway`)}
+                            className="h-2 w-full cursor-pointer appearance-none rounded-full bg-gradient-to-r from-pb-green via-pb-amber to-pb-red accent-primary focus:outline-none"
+                          />
+                          <div className="mt-1.5 flex justify-between text-[10px] font-semibold text-muted-foreground">
+                            <span>{formatRs(simulatorMinSpend * 100)}</span>
+                            <span>Mid: {formatRs(Math.round(sliderMaxSpend * 50))}</span>
+                            <span>{formatRs(sliderMaxSpend * 100)}</span>
+                          </div>
                         </div>
 
-                        <div className="flex items-start gap-2 rounded-xl border border-border/50 bg-background/50 px-3 py-2 text-xs">
-                          <div className={`h-2 w-2 rounded-full mt-1 shrink-0 ${isSimulatedSafe ? "bg-pb-green" : "bg-pb-red"}`} />
+                        <div className="mt-3 flex items-start gap-2 rounded-xl border border-border/50 bg-background/50 px-3 py-2 text-xs">
+                          <div className={`mt-1 h-2 w-2 shrink-0 rounded-full ${isSimulatedSafe ? "bg-pb-green" : "bg-pb-red"}`} />
                           <p className="text-xs font-medium leading-normal text-muted-foreground">
                             {isSimulatedSafe
                               ? `This target safely reaches your reset date.`
@@ -1671,16 +1680,29 @@ From PocketBuddy Runway.`;
                         </div>
                       </>
                     ) : (
-                      <div className="rounded-xl border border-pb-red/20 bg-pb-red/5 px-3 py-2.5 text-xs font-medium text-pb-red">
+                      <div className="mt-3 rounded-xl border border-pb-red/20 bg-pb-red/5 px-3 py-2.5 text-xs font-medium text-pb-red">
                         Discretionary budget exhausted. Pause non-essential spending.
                       </div>
                     )}
                   </div>
 
-                  {/* Quick targets */}
-                  <div className="space-y-2">
-                    <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Quick targets</span>
-                    <div className="flex flex-wrap gap-1.5">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Quick targets</span>
+                      {simulatedDailySpend !== null && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSimulatedDailySpend(null);
+                            toast.info("Reset to actual pace.");
+                          }}
+                          className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          {defaultPace > 0 ? `Reset to ${formatRs(defaultPace * 100)}/day` : "Reset"}
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-1">
                       {simulatorPresets.map((preset) => (
                         <button
                           key={`${preset.label}-${preset.value}`}
@@ -1689,39 +1711,29 @@ From PocketBuddy Runway.`;
                             setSimulatedDailySpend(preset.value);
                             toast.info(`Target: ${preset.label} (${formatRs(preset.value * 100)}/day)`);
                           }}
-                          className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition-all active:scale-95 cursor-pointer ${
+                          className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-all active:scale-95 cursor-pointer ${
                             activeSimulatedSpend === preset.value
                               ? "border-primary bg-primary/10 text-primary"
                               : "border-border/60 bg-background text-muted-foreground hover:bg-surface hover:text-foreground"
                           }`}
                         >
-                          {preset.label} ({formatRs(preset.value * 100)})
+                          {preset.label}
                         </button>
                       ))}
-                      {simulatedDailySpend !== null && (
-                        <button
-                          type="button"
-                          onClick={() => { setSimulatedDailySpend(null); toast.info("Reset to actual pace."); }}
-                          className="rounded-lg border border-dashed border-border px-2.5 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors cursor-pointer"
-                        >
-                          {defaultPace > 0 ? `Reset (${formatRs(defaultPace * 100)}/day)` : "Reset"}
-                        </button>
-                      )}
                     </div>
                   </div>
 
-                  {/* Mode cards */}
-                  <div className="border-t border-border/40 pt-4 space-y-2.5">
+                  <div className="rounded-2xl border border-border/60 bg-background/55 p-2.5">
                     <div className="flex items-center gap-1.5">
                       <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Plan intensity</span>
                       <TooltipProvider>
                         <UITooltip>
                           <TooltipTrigger asChild>
-                            <button type="button" className="text-muted-foreground hover:text-foreground transition-colors">
+                            <button type="button" className="text-muted-foreground transition-colors hover:text-foreground">
                               <Info className="h-3.5 w-3.5" />
                             </button>
                           </TooltipTrigger>
-                          <TooltipContent className="max-w-xs rounded-xl border border-border bg-card p-3 space-y-2 text-xs shadow-xl">
+                          <TooltipContent className="max-w-xs space-y-2 rounded-xl border border-border bg-card p-3 text-xs shadow-xl">
                             <p className="font-bold text-foreground flex items-center gap-1">
                               <Sparkles className="h-3 w-3 text-pb-amber" /> Stretch mode
                             </p>
@@ -1734,9 +1746,9 @@ From PocketBuddy Runway.`;
                         </UITooltip>
                       </TooltipProvider>
                     </div>
-                    <div className="bg-muted/35 border border-border/40 p-1 rounded-xl grid grid-cols-3 gap-1">
+                    <div className="mt-2.5 grid grid-cols-3 gap-1">
                       {[
-                        { key: "normal" as const, label: "Current Pace", amount: noSpendHistory ? "Ã¢â‚¬â€" : `${formatRs((defaultPace || safeDailyRs) * 100)}` },
+                        { key: "normal" as const, label: "Current Pace", amount: noSpendHistory ? "—" : `${formatRs((defaultPace || safeDailyRs) * 100)}` },
                         { key: "glide" as const, label: "Stretch", amount: safeDailyIsZero ? "Pause" : `${formatRs(stretchModeDailyRs * 100)}` },
                         { key: "turbulence" as const, label: "Emergency", amount: safeDailyIsZero ? "Pause" : `${formatRs(emergencyModeDailyRs * 100)}` }
                       ].map((mode) => (
@@ -1744,38 +1756,33 @@ From PocketBuddy Runway.`;
                           key={mode.key}
                           type="button"
                           onClick={() => selectRunwayMode(mode.key)}
-                          className={`py-2 px-1 text-center rounded-lg transition-all cursor-pointer ${
+                          className={`rounded-xl border px-2 py-1.5 text-center transition-all cursor-pointer ${
                             flightProtocol === mode.key
-                              ? "bg-background text-foreground shadow-sm border border-border/80 font-semibold text-xs"
-                              : "text-muted-foreground hover:text-foreground text-xs font-medium"
+                              ? "border-primary bg-primary/5 text-foreground shadow-sm"
+                              : "border-border/60 bg-background text-muted-foreground hover:bg-surface hover:text-foreground"
                           }`}
                         >
-                          <span className="block truncate text-[10px] sm:text-xs">{mode.label}</span>
-                          <span className="block text-[10px] sm:text-xs font-black opacity-80 mt-0.5 tnum">
-                            {mode.amount}
-                            {mode.key !== "normal" && mode.amount !== "Pause" && <span className="text-[8px] font-normal text-muted-foreground">/day</span>}
-                            {mode.key === "normal" && !noSpendHistory && <span className="text-[8px] font-normal text-muted-foreground">/day</span>}
-                          </span>
+                          <span className="block truncate text-[10px] sm:text-xs font-semibold">{mode.label}</span>
+                          <span className="mt-0.5 block text-[10px] sm:text-xs font-black tnum">{mode.amount}{mode.key !== "normal" || !noSpendHistory ? <span className="text-[8px] font-normal text-muted-foreground">/day</span> : null}</span>
                         </button>
                       ))}
                     </div>
                   </div>
 
-                  {/* Levers */}
-                  <div className="border-t border-border/40 pt-4 space-y-3">
+                  <div className="rounded-2xl border border-border/60 bg-background/55 p-2.5">
                     {flightProtocol === "normal" && (
-                      <div className="flex items-center gap-2 rounded-xl border border-dashed border-border/60 bg-muted/20 p-3 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-2 rounded-xl border border-dashed border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
                         <Info className="h-4 w-4 shrink-0" />
                         <span>Switch to Stretch or Emergency mode to unlock recovery levers.</span>
                       </div>
                     )}
 
                     {flightProtocol === "glide" && (
-                      <div className="space-y-2.5">
+                      <div className="space-y-2">
                         <div className="flex items-center gap-1">
                           <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Optional stretch levers</span>
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                           {[
                             { enabled: canUseMealLever, active: scenarioFoodSwitch, icon: Utensils, label: foodSwitchSaving > 0 ? "Replace deliveries" : "Tighten meal routine", detail: canUseMealLever ? `Adds ${formatRs(mealPlanLeverAmount)}` : "Needs food history", onToggle: () => { const v = !scenarioFoodSwitch; setScenarioFoodSwitch(v); if (v) toast.success(`Meal lever: +${formatRs(mealPlanLeverAmount)}`); else toast.info("Meal lever off."); } },
                             { enabled: canUseFixedCostLever, active: scenarioSubscriptionsPaused, icon: CreditCard, label: "Pause subscriptions", detail: canUseFixedCostLever ? `Frees ${formatRs(fixedCostLeverAmount)}` : "No subs found", onToggle: () => { const v = !scenarioSubscriptionsPaused; setScenarioSubscriptionsPaused(v); if (v) toast.success(`Subs paused: +${formatRs(fixedCostLeverAmount)}`); else toast.info("Subs lever off."); } },
@@ -1789,7 +1796,7 @@ From PocketBuddy Runway.`;
                                 type="button"
                                 disabled={!lever.enabled}
                                 onClick={lever.onToggle}
-                                className={`flex items-center justify-between p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
+                                className={`flex items-center justify-between rounded-xl border p-2.5 text-left transition-all cursor-pointer ${
                                   !lever.enabled
                                     ? "opacity-35 cursor-not-allowed border-border/30 bg-muted/5"
                                     : lever.active
@@ -1802,7 +1809,7 @@ From PocketBuddy Runway.`;
                                     <LeverIcon className="h-4 w-4" />
                                   </div>
                                   <div className="min-w-0">
-                                    <span className="block text-xs font-bold truncate text-foreground">{lever.label}</span>
+                                    <span className="block truncate text-xs font-bold text-foreground">{lever.label}</span>
                                     <span className="block text-[10px] text-muted-foreground">{lever.detail}</span>
                                   </div>
                                 </div>
@@ -1819,57 +1826,60 @@ From PocketBuddy Runway.`;
                     )}
 
                     {flightProtocol === "turbulence" && (
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-pb-red">
-                          <AlertCircle className="h-3.5 w-3.5" /><span>Emergency plan</span>
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-wider text-pb-red">
+                          <span className="flex items-center gap-1.5"><AlertCircle className="h-3.5 w-3.5" /> Emergency plan</span>
+                          <span className="text-muted-foreground">Auto-applied levers</span>
                         </div>
-                        <div className="p-1 space-y-3">
-                          <div className="grid grid-cols-3 gap-2 border-b border-border/40 pb-3">
-                            {[
-                              { label: "Meal", enabled: canUseMealLever, amount: mealPlanLeverAmount },
-                              { label: "Fixed cost", enabled: canUseFixedCostLever, amount: fixedCostLeverAmount },
-                              { label: "Pool", enabled: canUseSharedPlanLever, amount: sharedPlanLeverAmount },
-                            ].map((l) => (
-                              <div key={l.label} className="text-center">
-                                <p className="text-[10px] font-semibold uppercase text-muted-foreground">{l.label}</p>
-                                <p className={`mt-1 text-xs font-bold ${l.enabled ? "text-pb-green" : "text-muted-foreground"}`}>
-                                  {l.enabled ? `+${formatRs(l.amount)}` : "Inactive"}
-                                </p>
-                              </div>
-                            ))}
-                          </div>
-                          <button
-                            type="button"
-                            disabled={!canStressHighSpend}
-                            onClick={() => { const v = !scenarioHighSpendDay; setScenarioHighSpendDay(v); if (v) toast.warning(`Stress test: -${formatRs(highSpendDayAmount)}`); else toast.info("Stress removed."); }}
-                            className={`flex w-full items-center justify-between p-3 rounded-xl border text-left transition-all ${
-                              !canStressHighSpend ? "opacity-40 cursor-not-allowed border-border/40 bg-surface-raised/10" :
-                              scenarioHighSpendDay ? "border-pb-red bg-pb-red/10" : "border-border bg-background hover:bg-surface"
-                            }`}
-                          >
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${scenarioHighSpendDay ? "bg-pb-red/20 text-pb-red" : "bg-muted text-muted-foreground"}`}>
-                                <TrendingDown className="h-4 w-4" />
-                              </div>
-                              <div>
-                                <span className="block text-xs font-semibold text-foreground">Include high-spend day</span>
-                                <span className="block text-[10px] text-muted-foreground">{canStressHighSpend ? `-${formatRs(highSpendDayAmount)}` : "Needs spend history"}</span>
-                              </div>
+                        <div className="flex flex-wrap gap-1">
+                          {[
+                            { label: "Meal", enabled: canUseMealLever, amount: mealPlanLeverAmount },
+                            { label: "Fixed cost", enabled: canUseFixedCostLever, amount: fixedCostLeverAmount },
+                            { label: "Pool", enabled: canUseSharedPlanLever, amount: sharedPlanLeverAmount },
+                          ].map((l) => (
+                            <div key={l.label} className="rounded-full border border-border/50 bg-background/70 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                              <span>{l.label}</span>
+                              <span className={`ml-1.5 ${l.enabled ? "text-pb-green" : "text-muted-foreground"}`}>
+                                {l.enabled ? `+${formatRs(l.amount)}` : "Inactive"}
+                              </span>
                             </div>
-                            {canStressHighSpend && (
-                              <div className={`h-4 w-4 shrink-0 rounded-full border flex items-center justify-center ${scenarioHighSpendDay ? "bg-pb-red border-pb-red" : "border-muted-foreground/30"}`}>
-                                {scenarioHighSpendDay && <Check className="h-2.5 w-2.5 text-white stroke-[3]" />}
-                              </div>
-                            )}
-                          </button>
+                          ))}
                         </div>
+                        <button
+                          type="button"
+                          disabled={!canStressHighSpend}
+                          onClick={() => {
+                            const v = !scenarioHighSpendDay;
+                            setScenarioHighSpendDay(v);
+                            if (v) toast.warning(`Stress test: -${formatRs(highSpendDayAmount)}`);
+                            else toast.info("Stress removed.");
+                          }}
+                          className={`flex w-full items-center justify-between rounded-xl border p-2.5 text-left transition-all ${
+                            !canStressHighSpend ? "opacity-40 cursor-not-allowed border-border/40 bg-surface-raised/10" :
+                            scenarioHighSpendDay ? "border-pb-red bg-pb-red/10" : "border-border bg-background hover:bg-surface"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${scenarioHighSpendDay ? "bg-pb-red/20 text-pb-red" : "bg-muted text-muted-foreground"}`}>
+                              <TrendingDown className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <span className="block text-xs font-semibold text-foreground">Include high-spend day</span>
+                              <span className="block text-[10px] text-muted-foreground">{canStressHighSpend ? `-${formatRs(highSpendDayAmount)}` : "Needs spend history"}</span>
+                            </div>
+                          </div>
+                          {canStressHighSpend && (
+                            <div className={`h-4 w-4 shrink-0 rounded-full border flex items-center justify-center ${scenarioHighSpendDay ? "bg-pb-red border-pb-red" : "border-muted-foreground/30"}`}>
+                              {scenarioHighSpendDay && <Check className="h-2.5 w-2.5 text-white stroke-[3]" />}
+                            </div>
+                          )}
+                        </button>
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Ã¢â€â‚¬Ã¢â€â‚¬ Right: Cockpit Gauge Ã¢â€â‚¬Ã¢â€â‚¬ */}
-                <div className="hidden lg:flex w-full flex-col gap-3 rounded-xl border border-border/60 bg-background/55 p-4 lg:w-72">
+                <div className="flex w-full flex-col gap-2.5 rounded-2xl border border-border/60 bg-background/55 p-3">
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Runway simulator</span>
                     <Badge variant="outline" className={`text-[9px] font-bold uppercase py-0.5 ${
@@ -1881,7 +1891,7 @@ From PocketBuddy Runway.`;
                     </Badge>
                   </div>
 
-                  <div className="rounded-2xl border border-border/60 bg-surface/70 p-4">
+                  <div className="rounded-2xl border border-border/60 bg-surface/70 p-3">
                     <div className="flex items-end justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Projected runway</p>
@@ -1900,7 +1910,7 @@ From PocketBuddy Runway.`;
                       </div>
                     </div>
 
-                    <div className="mt-4">
+                    <div className="mt-3.5">
                       <div className="relative h-2 overflow-hidden rounded-full bg-surface-raised">
                         <div
                           className={`h-full rounded-full transition-all duration-700 ${isSimulatedSafe ? "bg-pb-green" : "bg-pb-red"}`}
@@ -1914,35 +1924,32 @@ From PocketBuddy Runway.`;
                       </div>
                     </div>
 
-                    <div className="mt-3 flex items-start gap-2 rounded-xl border border-border/40 bg-background/70 p-3">
-                      <div className={`mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full ${isSimulatedSafe ? "bg-pb-green" : "bg-pb-red"}`} />
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-foreground">
-                          {isSimulatedSafe ? "Reaches reset safely" : "Deficit detected"}
-                        </p>
-                        <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                          {isSimulatedSafe
-                            ? `Survives the next ${daysLeftInCycle} days on this plan.`
-                            : safeDailyIsZero
-                              ? "All discretionary balance consumed."
-                              : `Runs out ${Math.max(0, daysLeftInCycle - simulatedDays)} days early. Cycle gap: ${formatRs(simulatedGapPaise)}.`}
-                        </p>
-                      </div>
+                    <div className="mt-3 rounded-xl border border-border/40 bg-background/70 p-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">What this target means</p>
+                      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                        {isSimulatedSafe
+                          ? `Survives the next ${daysLeftInCycle} days on this plan.`
+                          : safeDailyIsZero
+                            ? "All discretionary balance consumed."
+                            : `Runs out ${Math.max(0, daysLeftInCycle - simulatedDays)} days early. Cycle gap: ${formatRs(simulatedGapPaise)}.`}
+                      </p>
                     </div>
                   </div>
 
-                  <div className="space-y-1.5 text-xs">
-                    <div className="flex justify-between gap-3">
-                      <span className="text-muted-foreground">Flexible cash</span>
-                      <span className="font-bold text-foreground tnum">{formatRs(remainingDiscretionary)}</span>
-                    </div>
-                    <div className="flex justify-between gap-3">
-                      <span className="text-muted-foreground">Simulated rate</span>
-                      <span className="font-bold text-primary tnum">{safeDailyIsZero ? "₹0" : `${formatRs(activeSimulatedSpend * 100)}/day`}</span>
-                    </div>
-                    <div className="flex justify-between gap-3">
-                      <span className="text-muted-foreground">Reset in</span>
-                      <span className="font-bold text-foreground tnum">{daysLeftInCycle} days</span>
+                  <div className="rounded-xl border border-border/50 bg-background/65 px-3 py-2.5">
+                    <div className="grid grid-cols-3 gap-3 text-xs">
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Flexible cash</p>
+                        <p className="mt-1 font-bold text-foreground tnum">{formatRs(remainingDiscretionary)}</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Simulated rate</p>
+                        <p className="mt-1 font-bold text-primary tnum">{safeDailyIsZero ? "₹0" : `${formatRs(activeSimulatedSpend * 100)}/day`}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Reset in</p>
+                        <p className="mt-1 font-bold text-foreground tnum">{daysLeftInCycle} days</p>
+                      </div>
                     </div>
                   </div>
 
@@ -1952,11 +1959,10 @@ From PocketBuddy Runway.`;
                     </div>
                   )}
                 </div>
-
               </div>
             </Card>
 
-            {/* Ã°Å¸â€™Â¡ RUNWAY SURVIVAL NUDGES */}
+            {/* ÃƒÂ°Ã…Â¸Ã¢â‚¬â„¢Ã‚Â¡ RUNWAY SURVIVAL NUDGES */}
             <Card className="mt-6 border border-border bg-card/25 p-4 sm:p-5">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                 <div className="space-y-0.5">
@@ -1969,39 +1975,40 @@ From PocketBuddy Runway.`;
                 </span>
               </div>
 
-              <div className="mt-4 border-y border-border/50 divide-y divide-border/50">
-                {secondaryRunwayActions.map((action, index) => {
+              <div className="mt-4 flex flex-wrap gap-2">
+                {secondaryRunwayActions.map((action) => {
                   const active = selectedActionId === action.id;
                   const accent =
                     action.severity === "high"
-                      ? "bg-pb-red"
+                      ? "text-pb-red border-pb-red/25 bg-pb-red/5"
                       : action.severity === "medium"
-                        ? "bg-pb-amber"
-                        : "bg-border";
+                        ? "text-pb-amber border-pb-amber/25 bg-pb-amber/5"
+                        : "text-muted-foreground border-border/60 bg-background/55";
                   const severityLabel = action.severity === "high" ? "Critical" : action.severity === "medium" ? "Recommended" : "Optional";
                   return (
                     <button
                       key={action.id}
                       type="button"
                       onClick={() => setSelectedActionId(action.id)}
-                      className={`flex w-full items-start gap-3 px-3 py-3 text-left transition-colors ${active ? "bg-surface/75" : "hover:bg-surface/50"} ${index === 0 ? "rounded-t-2xl" : ""} ${index === secondaryRunwayActions.length - 1 ? "rounded-b-2xl" : ""}`}
+                      className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-left text-xs font-semibold transition-all ${
+                        active
+                          ? "border-primary bg-primary/5 text-foreground shadow-sm"
+                          : `${accent} hover:border-primary/35 hover:bg-surface`
+                      }`}
                     >
-                      <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${accent}`} />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-sm font-semibold tracking-tight text-foreground">{action.label}</p>
-                          <span className="rounded-full border border-border/60 bg-background px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                            {severityLabel}
-                          </span>
-                          {active && (
-                            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-primary">
-                              Selected
-                            </span>
-                          )}
-                        </div>
-                        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{action.detail}</p>
-                      </div>
-                      <ChevronRight className={`mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${active ? "rotate-90 text-primary" : "text-muted-foreground/70"}`} />
+                      <span
+                        className={`h-2 w-2 shrink-0 rounded-full ${
+                          action.severity === "high"
+                            ? "bg-pb-red"
+                            : action.severity === "medium"
+                              ? "bg-pb-amber"
+                              : "bg-border"
+                        }`}
+                      />
+                      <span className="max-w-[10rem] truncate">{action.label}</span>
+                      <span className="rounded-full border border-border/50 bg-background/70 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+                        {severityLabel}
+                      </span>
                     </button>
                   );
                 })}
@@ -2019,20 +2026,22 @@ From PocketBuddy Runway.`;
                   selectedRunwayAction.id === "action-3" ? "Adjust food cap" :
                   "View settings";
                 return (
-                  <div className="mt-4 flex flex-col gap-3 border-t border-border/50 pt-4 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Selected step</p>
-                      <h4 className="mt-1 text-sm font-semibold tracking-tight text-foreground">{selectedRunwayAction.label}</h4>
-                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{selectedRunwayAction.detail}</p>
+                  <div className="mt-4 rounded-2xl border border-border/50 bg-background/55 p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Selected lever</p>
+                        <h4 className="mt-1 text-sm font-semibold tracking-tight text-foreground">{selectedRunwayAction.label}</h4>
+                        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{selectedRunwayAction.detail}</p>
+                      </div>
+                      {actionPath && (
+                        <Link
+                          to={actionPath}
+                          className="inline-flex h-9 items-center rounded-full border border-border/80 bg-background px-3.5 text-[10px] font-semibold uppercase tracking-wider text-foreground transition-all duration-200 hover:bg-surface hover:text-primary"
+                        >
+                          {actionButtonText}
+                        </Link>
+                      )}
                     </div>
-                    {actionPath && (
-                      <Link
-                        to={actionPath}
-                        className="inline-flex h-9 items-center rounded-full border border-border/80 bg-background px-3.5 text-[10px] font-semibold uppercase tracking-wider text-foreground transition-all duration-200 hover:bg-surface hover:text-primary"
-                      >
-                        {actionButtonText}
-                      </Link>
-                    )}
                   </div>
                 );
               })()}
@@ -2043,101 +2052,90 @@ From PocketBuddy Runway.`;
               <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                 <div className="space-y-1">
                   <p className={sectionEyebrowClass}>Allowance cycle</p>
-                  <h3 className={sectionTitleClass}>Cycle progress and runway split</h3>
-                  <p className={sectionBodyClass}>See how much of the cycle is used, what is fixed, and what still stays flexible.</p>
+                  <h3 className={sectionTitleClass}>What is already reserved, and what is still usable</h3>
+                  <p className={sectionBodyClass}>
+                    A simple view of the money already spoken for and the money students can still steer before reset.
+                  </p>
                 </div>
                 <Badge variant="outline" className="w-fit border-border bg-surface text-[10px] uppercase tracking-wider text-muted-foreground">
                   {forecast.current_cycle.days_left} days left
                 </Badge>
               </div>
 
-              <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-                <div className="space-y-4">
-                  <div className="rounded-2xl border border-border/60 bg-background/55 p-4">
-                    <div className="flex items-center justify-between gap-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                      <span>Started {new Date(forecast.current_cycle.start).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
-                      <span>{allowanceProgressPct}% used</span>
-                      <span>Resets {new Date(forecast.current_cycle.end).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
+              <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)]">
+                <div className="rounded-2xl border border-border/60 bg-background/55 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">This cycle</p>
+                      <p className="mt-1 text-sm font-semibold tracking-tight text-foreground">
+                        {allowanceProgressPct}% already used
+                      </p>
                     </div>
-                    <div className="relative mt-4">
-                      <div className="h-3 overflow-hidden rounded-full bg-surface-raised">
-                        <div
-                          className="h-full rounded-full bg-gradient-to-r from-primary/90 via-pb-amber/80 to-pb-green/80 transition-all"
-                          style={{ width: `${allowanceProgressPct}%` }}
-                        />
-                      </div>
-                      <div className="relative mt-2 h-5">
-                        <span className="absolute left-0 top-0 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Start</span>
-                        <span
-                          className="absolute top-0 -translate-x-1/2 text-[10px] font-semibold uppercase tracking-[0.14em] text-primary"
-                          style={{ left: `${Math.max(8, Math.min(92, allowanceProgressPct))}%` }}
-                        >
-                          Today
-                        </span>
-                        <span className="absolute right-0 top-0 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Reset</span>
-                      </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Resets</p>
+                      <p className="mt-1 text-sm font-semibold tracking-tight text-foreground tnum">
+                        {new Date(forecast.current_cycle.end).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                      </p>
                     </div>
-                    <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-                      The filled bar is the cycle already used. The remaining stretch is still available for student-controlled spending.
-                    </p>
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <div className="min-w-0 rounded-xl border border-border/60 bg-background/55 p-3">
-                      <p className={sectionEyebrowClass}>Funding</p>
+                  <div className="mt-4">
+                    <div className="h-3 overflow-hidden rounded-full bg-surface-raised">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-primary/90 via-pb-amber/80 to-pb-green/80 transition-all"
+                        style={{ width: `${allowanceProgressPct}%` }}
+                      />
+                    </div>
+                    <div className="mt-2 flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                      <span>Start</span>
+                      <span className="text-primary">Today</span>
+                      <span>Reset</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-3 gap-2.5">
+                    <div className="rounded-xl border border-border/50 bg-background/70 px-3 py-2">
+                      <p className={sectionEyebrowClass}>Loaded</p>
                       <p className="mt-1 text-sm font-semibold tracking-tight text-foreground tnum">{formatRs(forecast.current_cycle.available_funding)}</p>
-                      <p className="mt-1 text-[11px] text-muted-foreground">Allowance at cycle start</p>
                     </div>
-                    <div className="min-w-0 rounded-xl border border-border/60 bg-background/55 p-3">
-                      <p className={sectionEyebrowClass}>Spent</p>
+                    <div className="rounded-xl border border-border/50 bg-background/70 px-3 py-2">
+                      <p className={sectionEyebrowClass}>Used</p>
                       <p className="mt-1 text-sm font-semibold tracking-tight text-foreground tnum">{formatRs(forecast.current_cycle.spent)}</p>
-                      <p className="mt-1 text-[11px] text-muted-foreground">Already used this cycle</p>
                     </div>
-                    <div className="min-w-0 rounded-xl border border-border/60 bg-background/55 p-3">
-                      <p className={sectionEyebrowClass}>Balance</p>
+                    <div className="rounded-xl border border-border/50 bg-background/70 px-3 py-2">
+                      <p className={sectionEyebrowClass}>Left</p>
                       <p className="mt-1 text-sm font-semibold tracking-tight text-foreground tnum">{formatRs(remainingBalance)}</p>
-                      <p className="mt-1 text-[11px] text-muted-foreground">Still available to spend</p>
                     </div>
                   </div>
                 </div>
 
                 <div className="rounded-2xl border border-border/60 bg-background/55 p-4">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Where the runway goes</p>
-                    <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Reserved vs flexible</span>
-                  </div>
-
-                  <div className="mt-4 h-3 overflow-hidden rounded-full bg-surface-raised">
-                    <div className="flex h-full w-full">
-                      <div className="bg-primary/80 transition-all" style={{ width: `${committedPct}%` }} />
-                      <div className="bg-pb-amber/75 transition-all" style={{ width: `${flexiblePct}%` }} />
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">What this means</p>
+                      <p className="mt-1 text-sm font-semibold tracking-tight text-foreground">Money already reserved vs money you can still use</p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Reserved</p>
+                      <p className="mt-1 text-sm font-semibold tracking-tight text-foreground tnum">{formatRs(reservedTotal)}</p>
                     </div>
                   </div>
 
-                  <div className="mt-3 flex items-center justify-between gap-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                    <span>Reserved {committedPct}%</span>
-                    <span>Flexible {flexiblePct}%</span>
-                  </div>
-
-                  <div className="mt-4 space-y-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-foreground">Reserved costs</p>
-                        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Subscriptions, meal routine, exam buffer, and pending pool settlements.</p>
-                      </div>
-                      <p className="shrink-0 text-sm font-semibold tnum text-foreground">{formatRs(reservedTotal)}</p>
+                  <div className="mt-4 grid grid-cols-2 gap-2.5">
+                    <div className="rounded-xl border border-border/50 bg-background/70 px-3 py-2.5">
+                      <p className="text-xs font-semibold text-foreground">Reserved costs</p>
+                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Money already spoken for before the next reset.</p>
+                      <p className="mt-2 text-sm font-semibold tnum text-foreground">{formatRs(reservedTotal)}</p>
                     </div>
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-foreground">Flexible cash left</p>
-                        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">This is what still drives the safe/day limit.</p>
-                      </div>
-                      <p className="shrink-0 text-sm font-semibold tnum text-primary">{formatRs(remainingDiscretionary)}</p>
+                    <div className="rounded-xl border border-border/50 bg-background/70 px-3 py-2.5">
+                      <p className="text-xs font-semibold text-foreground">Flexible cash left</p>
+                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">This is the part students can still spend or save.</p>
+                      <p className="mt-2 text-sm font-semibold tnum text-primary">{formatRs(remainingDiscretionary)}</p>
                     </div>
                   </div>
 
-                  <div className="mt-4 border-t border-border/50 pt-3 text-xs leading-relaxed text-muted-foreground">
-                    Reserved costs stay fixed. Flexible cash is the part the student can still steer.
+                  <div className="mt-3 rounded-xl border border-border/40 bg-background/60 px-3 py-2 text-xs text-muted-foreground">
+                    The cycle bar shows how far this month has moved. The two cards below show what is locked and what is still available.
                   </div>
                 </div>
               </div>
@@ -2146,7 +2144,7 @@ From PocketBuddy Runway.`;
           </div>
         )}
 
-        {/* Ã¢â€â‚¬Ã¢â€â‚¬ Tab: Commitments Ã¢â€â‚¬Ã¢â€â‚¬ */}
+        {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Tab: Commitments ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
         {activeTab === "commitments" && (
           <div className="space-y-6">
             <Card className="p-5 sm:p-6 border border-border bg-card/25">
@@ -2246,7 +2244,7 @@ From PocketBuddy Runway.`;
           </div>
         )}
 
-        {/* Ã¢â€â‚¬Ã¢â€â‚¬ Tab: Horizons Ã¢â€â‚¬Ã¢â€â‚¬ */}
+        {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Tab: Horizons ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
         {activeTab === "horizons" && (
           <div className="space-y-6">
             {/* Charts Container */}
@@ -2262,7 +2260,7 @@ From PocketBuddy Runway.`;
                     <Badge variant="outline" className={`text-[10px] uppercase tracking-wider font-semibold ${
                       projectionSignal.isDeficit ? "border-pb-red/30 text-pb-red bg-pb-red/5" : "border-pb-green/30 text-pb-green bg-pb-green/5"
                     }`}>
-                      {projectionSignal.isDeficit ? "First deficit" : "Long view"}: {projectionSignal.label}
+                      {projectionSignal.isDeficit ? "First pressure point" : "Long view"}: {projectionSignal.label}
                     </Badge>
                   )}
                   <Badge variant="outline" className={`text-[10px] uppercase tracking-wider font-semibold ${
@@ -2300,74 +2298,62 @@ From PocketBuddy Runway.`;
                 const isNegative = h.projected_balance < 0;
                 const balanceDelta = Number(h.projected_funding || 0) - Number(h.projected_spend || 0);
                 return (
-                  <Card key={h.key} className="border border-border bg-card/30 p-4">
-                    <div className="space-y-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className={sectionEyebrowClass}>{h.label}</p>
-                          <p className={`mt-1 text-2xl font-semibold tnum ${isNegative ? "text-pb-red" : "text-pb-green"}`}>
-                            {formatRs(h.projected_balance)}
-                          </p>
-                        </div>
-                        <Badge variant="outline" className={`shrink-0 text-[9px] uppercase font-semibold ${
-                          isNegative ? "border-pb-red/30 text-pb-red bg-pb-red/5" : "border-pb-green/30 text-pb-green bg-pb-green/5"
-                        }`}>
-                          {isNegative ? "Deficit" : "Surplus"}
-                        </Badge>
+                  <Card key={h.key} className="rounded-2xl border border-border/60 bg-card/30 p-4 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className={sectionEyebrowClass}>{h.label}</p>
+                        <p className={`mt-1 text-2xl font-semibold tnum ${isNegative ? "text-pb-red" : "text-pb-green"}`}>
+                          {formatRs(h.projected_balance)}
+                        </p>
                       </div>
-
-                      <p className={sectionBodyClass}>
-                        {isNegative
-                          ? "Projected balance falls below zero by the end of this horizon."
-                          : "Projected balance stays positive through this horizon."}
-                      </p>
-
-                      <div className="grid grid-cols-3 gap-2 rounded-2xl border border-border/60 bg-background/55 p-3">
-                        <div className="space-y-1">
-                          <p className={sectionEyebrowClass}>Funding</p>
-                          <p className="text-sm font-semibold text-foreground tnum">{formatRs(h.projected_funding)}</p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className={sectionEyebrowClass}>Spend</p>
-                          <p className="text-sm font-semibold text-foreground tnum">{formatRs(h.projected_spend)}</p>
-                        </div>
-                        <div className="space-y-1 text-right">
-                          <p className={sectionEyebrowClass}>Net</p>
-                          <p className={`text-sm font-semibold tnum ${balanceDelta >= 0 ? "text-pb-green" : "text-pb-red"}`}>
-                            {balanceDelta >= 0 ? "+" : ""}{formatRs(balanceDelta)}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="rounded-xl border border-border/60 bg-background/55 p-3">
-                          <p className={sectionEyebrowClass}>Scenario range</p>
-                          <p className="mt-1 text-sm font-semibold text-foreground tnum">
-                            {formatRs(h.balance_low)} to {formatRs(h.balance_high)}
-                          </p>
-                          <p className={sectionBodyClass}>Range at {forecast.confidence.score}% model confidence.</p>
-                        </div>
-                        <div className="rounded-xl border border-border/60 bg-background/55 p-3">
-                          <p className={sectionEyebrowClass}>{isNegative ? "Correction needed" : "End position"}</p>
-                          <p className="mt-1 text-sm font-semibold text-foreground tnum">
-                            {isNegative ? `${formatRs(h.monthly_shortfall)} / month` : formatRs(h.projected_balance)}
-                          </p>
-                          <p className={sectionBodyClass}>
-                            {isNegative
-                              ? "Add monthly funding or lower flexible spend before this horizon."
-                              : "Current pace still leaves a positive balance at the end of this horizon."}
-                          </p>
-                        </div>
-                      </div>
-
-                      {h.basis && (
-                        <div className="border-t border-border/40 pt-3">
-                          <p className="text-[10px] leading-relaxed text-muted-foreground">
-                            Basis: {h.basis}
-                          </p>
-                        </div>
-                      )}
+                      <Badge variant="outline" className={`shrink-0 text-[9px] uppercase font-semibold ${
+                        isNegative ? "border-pb-red/30 text-pb-red bg-pb-red/5" : "border-pb-green/30 text-pb-green bg-pb-green/5"
+                      }`}>
+                        {isNegative ? "Shortfall" : "Surplus"}
+                      </Badge>
                     </div>
+
+                    <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                      {isNegative
+                        ? "This horizon slips below zero if nothing changes."
+                        : "This horizon still finishes above zero if nothing changes."}
+                    </p>
+
+                    <div className="mt-3 rounded-xl border border-border/50 bg-background/60 p-3">
+                      <div className="grid grid-cols-3 gap-3 text-[11px]">
+                        <div>
+                          <p className="text-muted-foreground">Funding</p>
+                          <p className="mt-1 font-semibold text-foreground tnum">{formatRs(h.projected_funding)}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Spend</p>
+                          <p className="mt-1 font-semibold text-foreground tnum">{formatRs(h.projected_spend)}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Net</p>
+                          <p className={`mt-1 font-semibold tnum ${balanceDelta >= 0 ? "text-pb-green" : "text-pb-red"}`}>{balanceDelta >= 0 ? "+" : ""}{formatRs(balanceDelta)}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-between gap-3 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                      <span>Scenario range</span>
+                      <span>{forecast.confidence.score}% confidence</span>
+                    </div>
+                    <p className="mt-1 text-sm font-semibold text-foreground tnum">
+                      {formatRs(h.balance_low)} to {formatRs(h.balance_high)}
+                    </p>
+                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                      {isNegative
+                        ? `Add ${formatRs(h.monthly_shortfall)} / month or lower flexible spend before this horizon.`
+                        : "Current pace still leaves a positive balance at the end of this horizon."}
+                    </p>
+
+                    {h.basis && (
+                      <p className="mt-3 border-t border-border/40 pt-3 text-[10px] leading-relaxed text-muted-foreground">
+                        Basis: {h.basis}
+                      </p>
+                    )}
                   </Card>
                 );
               })}
@@ -2377,7 +2363,7 @@ From PocketBuddy Runway.`;
 
 
       </div>
-      {/* Ã°Å¸â€œâ€¹ FORECAST INPUTS MODAL */}
+      {/* ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã¢â‚¬Â¹ FORECAST INPUTS MODAL */}
       <Dialog open={showForecastInputs} onOpenChange={setShowForecastInputs}>
         <DialogContent className="max-w-md bg-background border border-border text-foreground">
           <DialogHeader>
@@ -2418,7 +2404,7 @@ From PocketBuddy Runway.`;
         </DialogContent>
       </Dialog>
 
-      {/* Ã°Å¸â€œâ€“ RUNWAY FLIGHT MANUAL GUIDE MODAL */}
+      {/* ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã¢â‚¬â€œ RUNWAY FLIGHT MANUAL GUIDE MODAL */}
       <Dialog open={showGuideModal} onOpenChange={setShowGuideModal}>
         <DialogContent className="max-w-lg bg-background border border-border text-foreground">
           <DialogHeader>
@@ -2465,6 +2451,8 @@ From PocketBuddy Runway.`;
     </AppShell>
   );
 }
+
+
 
 
 
