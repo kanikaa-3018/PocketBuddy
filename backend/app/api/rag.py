@@ -203,10 +203,17 @@ async def get_runway_intel(user_id: str = Depends(get_current_user)):
     user = await db.users.find_one({"_id": user_id}) or {}
     full_name = str(user.get("full_name") or "").strip()
     pool_ids: set[str] = set()
-    user_item_query: dict | None = {"added_by_user_id": user_id}
+    user_item_query: dict = {"added_by_user_id": user_id}
     if full_name:
         name_regex = re.compile(f"^{re.escape(full_name)}$", re.IGNORECASE)
-        user_item_query = {"$or": [{"added_by_user_id": user_id}, {"added_by_name": name_regex}]}
+        user_item_query = {
+            "$or": [
+                {"added_by_user_id": user_id},
+                {"added_by_user_id": {"$exists": False}, "added_by_name": name_regex},
+                {"added_by_user_id": None, "added_by_name": name_regex},
+                {"added_by_user_id": "", "added_by_name": name_regex},
+            ]
+        }
     user_items = await db.cart_pool_items.find(user_item_query).to_list(length=1000)
     pool_ids.update(str(item.get("pool_id")) for item in user_items if item.get("pool_id"))
 

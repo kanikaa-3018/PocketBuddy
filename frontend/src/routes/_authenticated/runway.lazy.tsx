@@ -185,24 +185,45 @@ function RunwayPage() {
     return forecast.commitments.total;
   }, [forecast]);
 
-  const chaiEquivalent = useMemo(() => {
-    const val = Number(affordAmountRs) || 0;
-    return Math.max(1, Math.round(val / 15)); // ₹15 per chai
-  }, [affordAmountRs]);
+  const routineMealUnitRs = useMemo(() => {
+    const routineMealCost = Math.round(Number(foodRoutine?.routine_meal_cost ?? 0) / 100);
+    const foodCap = Math.round(Number(foodRoutine?.recommended_daily_food_cap ?? 0) / 100);
+    return Math.max(40, routineMealCost || foodCap || 80);
+  }, [foodRoutine]);
 
-  const mealEquivalent = useMemo(() => {
-    const val = Number(affordAmountRs) || 0;
-    return Math.max(1, Math.round(val / 80)); // ₹80 per meal
-  }, [affordAmountRs]);
+  const sharedMealUnitRs = useMemo(() => {
+    const sharedMealCost = Math.round(Number(foodRoutine?.shared_meal_cost ?? 0) / 100);
+    return Math.max(60, sharedMealCost || Math.round(routineMealUnitRs * 1.5));
+  }, [foodRoutine, routineMealUnitRs]);
 
-  const AFFORD_PRESETS = [
-    { label: "Chai & Maggi", amount: "35", category: "food" as const, icon: Coffee },
-    { label: "Canteen Meal", amount: "80", category: "food" as const, icon: Utensils },
-    { label: "Auto Ride", amount: "60", category: "travel" as const, icon: Car },
-    { label: "Swiggy Order", amount: "250", category: "food" as const, icon: Utensils },
+  const deliveryOrderUnitRs = useMemo(() => {
+    const deliveryMealCost = Math.round(Number(foodRoutine?.delivery_meal_cost ?? 0) / 100);
+    return Math.max(120, deliveryMealCost || Math.round(routineMealUnitRs * 2.5));
+  }, [foodRoutine, routineMealUnitRs]);
+
+  const quickSpendUnitRs = useMemo(() => {
+    return Math.max(20, Math.round(routineMealUnitRs * 0.45));
+  }, [routineMealUnitRs]);
+
+  const smallSpendEquivalent = useMemo(() => {
+    const val = Number(affordAmountRs) || 0;
+    return Math.max(1, Math.round(val / quickSpendUnitRs));
+  }, [affordAmountRs, quickSpendUnitRs]);
+
+  const routineMealEquivalent = useMemo(() => {
+    const val = Number(affordAmountRs) || 0;
+    return Math.max(1, Math.round(val / routineMealUnitRs));
+  }, [affordAmountRs, routineMealUnitRs]);
+
+  const affordPresets = useMemo(() => [
+    { label: "Quick snack", amount: String(quickSpendUnitRs), category: "food" as const, icon: Coffee },
+    { label: "Routine meal", amount: String(routineMealUnitRs), category: "food" as const, icon: Utensils },
+    { label: "Shared order", amount: String(sharedMealUnitRs), category: "food" as const, icon: Users },
+    { label: "Delivery order", amount: String(deliveryOrderUnitRs), category: "food" as const, icon: Utensils },
+    { label: "Auto ride", amount: "60", category: "travel" as const, icon: Car },
     { label: "Stationery", amount: "100", category: "other" as const, icon: CreditCard },
-    { label: "Movie / Outing", amount: "450", category: "shopping" as const, icon: ShoppingBag },
-  ];
+    { label: "Outing", amount: "450", category: "shopping" as const, icon: ShoppingBag },
+  ], [quickSpendUnitRs, routineMealUnitRs, sharedMealUnitRs, deliveryOrderUnitRs]);
 
 
 
@@ -319,7 +340,7 @@ ${isSimulatedSafe
   : `* Simulation gap: This sandbox setting runs out ${daysLeftInCycle - simulatedDays} days early with a gap of ${formatRs(simulatedGapPaise)}. The real ask-home amount is ${actualAskHomeAmount > 0 ? formatRs(actualAskHomeAmount) : "not required in the base forecast"}.`}
 * Committed Reserve: ${formatRs(adjustedCommitmentsTotal)}
 
-Generated via PocketBuddy Runway.`;
+From PocketBuddy Runway.`;
 
     navigator.clipboard.writeText(brief);
     toast.success("Runway brief copied to clipboard.");
@@ -1403,7 +1424,7 @@ Generated via PocketBuddy Runway.`;
                 <div className="space-y-2">
                   <span className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Quick Presets</span>
                   <div className="flex flex-wrap gap-1.5">
-                    {AFFORD_PRESETS.map((preset) => {
+                    {affordPresets.map((preset) => {
                       const PresetIcon = preset.icon;
                       const isActive = affordAmountRs === preset.amount && affordCategory === preset.category;
                       return (
@@ -1487,12 +1508,12 @@ Generated via PocketBuddy Runway.`;
                       {/* Student analogies */}
                       <div className="mt-3.5 grid grid-cols-2 gap-3 border-t border-border/40 pt-3 text-[11px]">
                         <div className="space-y-0.5">
-                          <span className="block text-[9px] uppercase font-bold text-muted-foreground tracking-wider font-semibold">Chai Equivalent</span>
-                          <span className="text-xs font-black text-foreground tnum">{chaiEquivalent} cups</span>
+                          <span className="block text-[9px] uppercase font-bold text-muted-foreground tracking-wider font-semibold">Small-spend equivalent</span>
+                          <span className="text-xs font-black text-foreground tnum">{smallSpendEquivalent} units</span>
                         </div>
                         <div className="space-y-0.5">
-                          <span className="block text-[9px] uppercase font-bold text-muted-foreground tracking-wider font-semibold">Canteen Meals</span>
-                          <span className="text-xs font-black text-foreground tnum">{mealEquivalent} meals</span>
+                          <span className="block text-[9px] uppercase font-bold text-muted-foreground tracking-wider font-semibold">Routine meals</span>
+                          <span className="text-xs font-black text-foreground tnum">{routineMealEquivalent} meals</span>
                         </div>
                       </div>
 
@@ -1792,7 +1813,7 @@ Generated via PocketBuddy Runway.`;
                     {flightProtocol === "turbulence" && (
                       <div className="space-y-3">
                         <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-pb-red">
-                          <AlertCircle className="h-3.5 w-3.5" /><span>Emergency levers (auto-applied)</span>
+                          <AlertCircle className="h-3.5 w-3.5" /><span>Emergency plan</span>
                         </div>
                         <div className="p-1 space-y-3">
                           <div className="grid grid-cols-3 gap-2 border-b border-border/40 pb-3">
@@ -1843,7 +1864,7 @@ Generated via PocketBuddy Runway.`;
                 <div className="hidden lg:flex w-full flex-col justify-between gap-4 border-t border-border pt-5 lg:w-72 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Survival Cockpit</span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Runway simulator</span>
                       <Badge variant="outline" className={`text-[9px] font-bold uppercase py-0.5 ${
                         flightProtocol === "normal" ? "border-primary/30 bg-primary/10 text-primary" :
                         flightProtocol === "glide" ? "border-pb-amber/30 bg-pb-amber/10 text-pb-amber" :
