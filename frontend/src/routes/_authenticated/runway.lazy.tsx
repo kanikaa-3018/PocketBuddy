@@ -15,7 +15,7 @@ import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useState, useMemo } from "react";
+import { useState, useMemo, type CSSProperties } from "react";
 import { toast } from "sonner";
 import { Tooltip as UITooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import {
@@ -305,6 +305,17 @@ function RunwayPage() {
   }, [affordCheck.runwayDaysLost, daysLeftInCycle]);
 
   const gaugePercentage = Math.min(100, (simulatedDays / Math.max(1, daysLeftInCycle)) * 100);
+  const gaugeArcDegrees = Math.max(24, (Math.max(6, gaugePercentage) / 100) * 360);
+  const gaugeRingStyle = {
+    background: isSimulatedSafe
+      ? `conic-gradient(from 210deg, rgba(16, 185, 129, 0.14) 0deg, rgba(16, 185, 129, 0.96) ${gaugeArcDegrees * 0.58}deg, rgba(52, 211, 153, 0.92) ${gaugeArcDegrees}deg, rgba(148, 163, 184, 0.18) ${gaugeArcDegrees}deg 360deg)`
+      : `conic-gradient(from 210deg, rgba(248, 113, 113, 0.14) 0deg, rgba(239, 68, 68, 0.96) ${gaugeArcDegrees * 0.58}deg, rgba(251, 146, 60, 0.92) ${gaugeArcDegrees}deg, rgba(148, 163, 184, 0.18) ${gaugeArcDegrees}deg 360deg)`,
+    WebkitMask: "radial-gradient(farthest-side, transparent calc(100% - 14px), #000 calc(100% - 13px))",
+    mask: "radial-gradient(farthest-side, transparent calc(100% - 14px), #000 calc(100% - 13px))",
+    boxShadow: isSimulatedSafe
+      ? "0 0 0 1px rgba(16, 185, 129, 0.18), 0 0 34px rgba(16, 185, 129, 0.14)"
+      : "0 0 0 1px rgba(239, 68, 68, 0.18), 0 0 34px rgba(239, 68, 68, 0.14)",
+  } as CSSProperties;
 
   const copyFlightBrief = () => {
     if (!forecast) return;
@@ -1603,12 +1614,12 @@ From PocketBuddy Runway.`;
             )}
 
             {/* ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂºÃ‚Â« DAILY SPEND CHECK ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â SURVIVAL COCKPIT */}
-            <Card className="relative overflow-hidden rounded-2xl border border-border bg-surface p-3 sm:p-3.5 shadow-sm">
+            <Card className="relative overflow-hidden rounded-2xl border border-border bg-surface p-4 sm:p-5 shadow-sm">
               <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-primary/30 via-pb-amber/30 to-pb-green/30" />
 
-              <div className="grid gap-2.5 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
-                <div className="space-y-2.5">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="grid gap-3 sm:gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
+                <div className="space-y-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div className="space-y-0.5">
                       <p className={sectionEyebrowClass}>Daily spend check</p>
                       <div className="flex items-center gap-2">
@@ -1632,15 +1643,15 @@ From PocketBuddy Runway.`;
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-border/60 bg-background/55 p-3">
-                    <div className="flex items-start justify-between gap-3">
+                  <div className="border-t border-border/40 pt-3">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                       <div className="min-w-0">
                         <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Current target</p>
                         <p className="mt-1 text-[15px] font-semibold leading-none text-foreground">
                           {safeDailyIsZero ? "Pause" : `${formatRs(activeSimulatedSpend * 100)}/day`}
                         </p>
                       </div>
-                      <div className={`rounded-full border px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.14em] ${
+                      <div className={`w-fit rounded-full border px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.14em] ${
                         isSimulatedSafe ? "border-pb-green/30 bg-pb-green/5 text-pb-green" : "border-pb-red/30 bg-pb-red/5 text-pb-red"
                       }`}>
                         {isSimulatedSafe ? "Reaches reset" : "Needs adjustment"}
@@ -1648,238 +1659,231 @@ From PocketBuddy Runway.`;
                     </div>
 
                     {!safeDailyIsZero ? (
-                      <>
-                        <div className="mt-3">
-                          <input
-                            type="range"
-                            min={simulatorMinSpend}
-                            max={sliderMaxSpend}
-                            step="10"
-                            value={activeSimulatedSpend}
-                            onChange={(e) => setSimulatedDailySpend(parseInt(e.target.value, 10))}
-                            onMouseUp={() => toast.info(`Simulated at ${formatRs(activeSimulatedSpend * 100)}/day -> ${simulatedDays} days runway`)}
-                            onTouchEnd={() => toast.info(`Simulated at ${formatRs(activeSimulatedSpend * 100)}/day -> ${simulatedDays} days runway`)}
-                            className="h-2 w-full cursor-pointer appearance-none rounded-full bg-gradient-to-r from-pb-green via-pb-amber to-pb-red accent-primary focus:outline-none"
-                          />
-                          <div className="mt-1.5 flex justify-between text-[10px] font-semibold text-muted-foreground">
-                            <span>{formatRs(simulatorMinSpend * 100)}</span>
-                            <span>Mid: {formatRs(Math.round(sliderMaxSpend * 50))}</span>
-                            <span>{formatRs(sliderMaxSpend * 100)}</span>
-                          </div>
+                      <div className="mt-3">
+                        <input
+                          type="range"
+                          min={simulatorMinSpend}
+                          max={sliderMaxSpend}
+                          step="10"
+                          value={activeSimulatedSpend}
+                          onChange={(e) => setSimulatedDailySpend(parseInt(e.target.value, 10))}
+                          onMouseUp={() => toast.info(`Simulated at ${formatRs(activeSimulatedSpend * 100)}/day -> ${simulatedDays} days runway`)}
+                          onTouchEnd={() => toast.info(`Simulated at ${formatRs(activeSimulatedSpend * 100)}/day -> ${simulatedDays} days runway`)}
+                          className="h-2 w-full cursor-pointer appearance-none rounded-full bg-gradient-to-r from-pb-green via-pb-amber to-pb-red accent-primary focus:outline-none"
+                        />
+                        <div className="mt-1.5 flex justify-between text-[10px] font-semibold text-muted-foreground">
+                          <span>{formatRs(simulatorMinSpend * 100)}</span>
+                          <span>Mid: {formatRs(Math.round(sliderMaxSpend * 50))}</span>
+                          <span>{formatRs(sliderMaxSpend * 100)}</span>
                         </div>
-
-                        <div className="mt-3 flex items-start gap-2 rounded-xl border border-border/50 bg-background/50 px-3 py-2 text-xs">
-                          <div className={`mt-1 h-2 w-2 shrink-0 rounded-full ${isSimulatedSafe ? "bg-pb-green" : "bg-pb-red"}`} />
-                          <p className="text-xs font-medium leading-normal text-muted-foreground">
+                        <p className="mt-3 flex items-start gap-2 text-xs leading-normal text-muted-foreground">
+                          <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${isSimulatedSafe ? "bg-pb-green" : "bg-pb-red"}`} />
+                          <span>
                             {isSimulatedSafe
                               ? `This target safely reaches your reset date.`
                               : safeDailyIsZero
                                 ? "All discretionary balance consumed."
                                 : `Runs out ${Math.max(0, daysLeftInCycle - simulatedDays)} days early. Deficit: ${formatRs(simulatedGapPaise)}.`}
-                          </p>
-                        </div>
-                      </>
+                          </span>
+                        </p>
+                      </div>
                     ) : (
-                      <div className="mt-3 rounded-xl border border-pb-red/20 bg-pb-red/5 px-3 py-2.5 text-xs font-medium text-pb-red">
+                      <div className="mt-3 text-xs font-medium text-pb-red">
                         Discretionary budget exhausted. Pause non-essential spending.
                       </div>
                     )}
-                  </div>
 
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Quick targets</span>
-                      {simulatedDailySpend !== null && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSimulatedDailySpend(null);
-                            toast.info("Reset to actual pace.");
-                          }}
-                          className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground hover:text-foreground transition-colors"
-                        >
-                          {defaultPace > 0 ? `Reset to ${formatRs(defaultPace * 100)}/day` : "Reset"}
-                        </button>
+                    <div className="mt-3 border-t border-border/40 pt-3">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Preset targets</span>
+                          {simulatedDailySpend !== null && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSimulatedDailySpend(null);
+                                toast.info("Reset to actual pace.");
+                              }}
+                              className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-foreground"
+                            >
+                              {defaultPace > 0 ? `Reset to ${formatRs(defaultPace * 100)}/day` : "Reset"}
+                            </button>
+                          )}
+                        </div>
+                        <TooltipProvider>
+                          <UITooltip>
+                            <TooltipTrigger asChild>
+                              <button type="button" className="text-muted-foreground transition-colors hover:text-foreground">
+                                <Info className="h-3.5 w-3.5" />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs space-y-2 rounded-xl border border-border bg-card p-3 text-xs shadow-xl">
+                              <p className="font-bold text-foreground flex items-center gap-1">
+                                <Sparkles className="h-3 w-3 text-pb-amber" /> Stretch mode
+                              </p>
+                              <p className="text-muted-foreground">Lower daily target with optional student recovery levers.</p>
+                              <p className="font-bold text-foreground flex items-center gap-1 pt-1">
+                                <AlertTriangle className="h-3 w-3 text-pb-red" /> Emergency mode
+                              </p>
+                              <p className="text-muted-foreground">Protects essentials first, auto-applies all levers.</p>
+                            </TooltipContent>
+                          </UITooltip>
+                        </TooltipProvider>
+                      </div>
+
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {simulatorPresets.map((preset) => (
+                          <button
+                            key={`${preset.label}-${preset.value}`}
+                            type="button"
+                            onClick={() => {
+                              setSimulatedDailySpend(preset.value);
+                              toast.info(`Target: ${preset.label} (${formatRs(preset.value * 100)}/day)`);
+                            }}
+                            className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-all active:scale-95 cursor-pointer ${
+                              activeSimulatedSpend === preset.value
+                                ? "border-primary bg-primary/10 text-primary"
+                                : "border-border/60 bg-background text-muted-foreground hover:bg-surface hover:text-foreground"
+                            }`}
+                          >
+                            {preset.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-1 gap-1 sm:grid-cols-3">
+                        {[
+                          { key: "normal" as const, label: "Current Pace", amount: noSpendHistory ? "—" : `${formatRs((defaultPace || safeDailyRs) * 100)}` },
+                          { key: "glide" as const, label: "Stretch", amount: safeDailyIsZero ? "Pause" : `${formatRs(stretchModeDailyRs * 100)}` },
+                          { key: "turbulence" as const, label: "Emergency", amount: safeDailyIsZero ? "Pause" : `${formatRs(emergencyModeDailyRs * 100)}` }
+                        ].map((mode) => (
+                          <button
+                            key={mode.key}
+                            type="button"
+                            onClick={() => selectRunwayMode(mode.key)}
+                            className={`rounded-xl border px-2 py-1.5 text-center transition-all cursor-pointer sm:px-2 ${
+                              flightProtocol === mode.key
+                                ? "border-primary bg-primary/5 text-foreground shadow-sm"
+                                : "border-border/60 bg-background text-muted-foreground hover:bg-surface hover:text-foreground"
+                            }`}
+                          >
+                            <span className="block truncate text-[10px] sm:text-xs font-semibold">{mode.label}</span>
+                            <span className="mt-0.5 block text-[10px] sm:text-xs font-black tnum">{mode.amount}{mode.key !== "normal" || !noSpendHistory ? <span className="text-[8px] font-normal text-muted-foreground">/day</span> : null}</span>
+                          </button>
+                        ))}
+                      </div>
+
+                      {flightProtocol === "normal" && (
+                      <div className="mt-3 flex items-center gap-2 rounded-xl border border-dashed border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                          <Info className="h-4 w-4 shrink-0" />
+                          <span>Switch to Stretch or Emergency mode to unlock recovery levers.</span>
+                        </div>
+                      )}
+
+                      {flightProtocol === "glide" && (
+                        <div className="mt-3 space-y-2">
+                          <div className="flex items-center gap-1">
+                            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Recovery levers</span>
+                          </div>
+                          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                            {[
+                              { enabled: canUseMealLever, active: scenarioFoodSwitch, icon: Utensils, label: foodSwitchSaving > 0 ? "Replace deliveries" : "Tighten meal routine", detail: canUseMealLever ? `Adds ${formatRs(mealPlanLeverAmount)}` : "Needs food history", onToggle: () => { const v = !scenarioFoodSwitch; setScenarioFoodSwitch(v); if (v) toast.success(`Meal lever: +${formatRs(mealPlanLeverAmount)}`); else toast.info("Meal lever off."); } },
+                              { enabled: canUseFixedCostLever, active: scenarioSubscriptionsPaused, icon: CreditCard, label: "Pause subscriptions", detail: canUseFixedCostLever ? `Frees ${formatRs(fixedCostLeverAmount)}` : "No subs found", onToggle: () => { const v = !scenarioSubscriptionsPaused; setScenarioSubscriptionsPaused(v); if (v) toast.success(`Subs paused: +${formatRs(fixedCostLeverAmount)}`); else toast.info("Subs lever off."); } },
+                              { enabled: canUseSharedPlanLever, active: scenarioPoolSettled, icon: Users, label: sharedPlanLeverLabel, detail: canUseSharedPlanLever ? `Adds ${formatRs(sharedPlanLeverAmount)}` : "No pool dues", onToggle: () => { const v = !scenarioPoolSettled; setScenarioPoolSettled(v); if (v) toast.success(`Pool settled: +${formatRs(sharedPlanLeverAmount)}`); else toast.info("Pool lever off."); } },
+                              { enabled: canStressHighSpend, active: scenarioHighSpendDay, icon: TrendingDown, label: "Stress: high spend day", detail: canStressHighSpend ? `-${formatRs(highSpendDayAmount)}` : "Needs history", onToggle: () => { const v = !scenarioHighSpendDay; setScenarioHighSpendDay(v); if (v) toast.warning(`Stress test: -${formatRs(highSpendDayAmount)}`); else toast.info("Stress removed."); } },
+                            ].map((lever) => {
+                              const LeverIcon = lever.icon;
+                              return (
+                                <button
+                                  key={lever.label}
+                                  type="button"
+                                  disabled={!lever.enabled}
+                                  onClick={lever.onToggle}
+                                  className={`flex items-center justify-between rounded-xl border p-2.5 text-left transition-all cursor-pointer ${
+                                    !lever.enabled
+                                      ? "opacity-35 cursor-not-allowed border-border/30 bg-muted/5"
+                                      : lever.active
+                                        ? "border-pb-green/45 bg-pb-green/5 text-foreground"
+                                        : "border-border/60 bg-background text-muted-foreground hover:bg-surface hover:text-foreground"
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${lever.active ? "bg-pb-green/10 text-pb-green" : "bg-muted text-muted-foreground"}`}>
+                                      <LeverIcon className="h-4 w-4" />
+                                    </div>
+                                    <div className="min-w-0">
+                                      <span className="block truncate text-xs font-bold text-foreground">{lever.label}</span>
+                                      <span className="block text-[10px] text-muted-foreground">{lever.detail}</span>
+                                    </div>
+                                  </div>
+                                  {lever.enabled && (
+                                    <div className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors ${lever.active ? "border-pb-green bg-pb-green" : "border-muted-foreground/30"}`}>
+                                      {lever.active && <Check className="h-2.5 w-2.5 text-white stroke-[3]" />}
+                                    </div>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {flightProtocol === "turbulence" && (
+                        <div className="mt-3 space-y-2.5">
+                          <div className="flex items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-wider text-pb-red">
+                            <span className="flex items-center gap-1.5"><AlertCircle className="h-3.5 w-3.5" /> Emergency plan</span>
+                            <span className="text-muted-foreground">Auto-applied levers</span>
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {[
+                              { label: "Meal", enabled: canUseMealLever, amount: mealPlanLeverAmount },
+                              { label: "Fixed cost", enabled: canUseFixedCostLever, amount: fixedCostLeverAmount },
+                              { label: "Pool", enabled: canUseSharedPlanLever, amount: sharedPlanLeverAmount },
+                            ].map((l) => (
+                              <div key={l.label} className="rounded-full border border-border/50 bg-background/70 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                                <span>{l.label}</span>
+                                <span className={`ml-1.5 ${l.enabled ? "text-pb-green" : "text-muted-foreground"}`}>
+                                  {l.enabled ? `+${formatRs(l.amount)}` : "Inactive"}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                          <button
+                            type="button"
+                            disabled={!canStressHighSpend}
+                            onClick={() => {
+                              const v = !scenarioHighSpendDay;
+                              setScenarioHighSpendDay(v);
+                              if (v) toast.warning(`Stress test: -${formatRs(highSpendDayAmount)}`);
+                              else toast.info("Stress removed.");
+                            }}
+                            className={`flex w-full items-center justify-between rounded-xl border p-2.5 text-left transition-all ${
+                              !canStressHighSpend ? "opacity-40 cursor-not-allowed border-border/40 bg-surface-raised/10" :
+                              scenarioHighSpendDay ? "border-pb-red bg-pb-red/10" : "border-border bg-background hover:bg-surface"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${scenarioHighSpendDay ? "bg-pb-red/20 text-pb-red" : "bg-muted text-muted-foreground"}`}>
+                                <TrendingDown className="h-4 w-4" />
+                              </div>
+                              <div>
+                                <span className="block text-xs font-semibold text-foreground">Include high-spend day</span>
+                                <span className="block text-[10px] text-muted-foreground">{canStressHighSpend ? `-${formatRs(highSpendDayAmount)}` : "Needs spend history"}</span>
+                              </div>
+                            </div>
+                            {canStressHighSpend && (
+                              <div className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${scenarioHighSpendDay ? "border-pb-red bg-pb-red" : "border-muted-foreground/30"}`}>
+                                {scenarioHighSpendDay && <Check className="h-2.5 w-2.5 text-white stroke-[3]" />}
+                              </div>
+                            )}
+                          </button>
+                        </div>
                       )}
                     </div>
-                    <div className="flex flex-wrap gap-1">
-                      {simulatorPresets.map((preset) => (
-                        <button
-                          key={`${preset.label}-${preset.value}`}
-                          type="button"
-                          onClick={() => {
-                            setSimulatedDailySpend(preset.value);
-                            toast.info(`Target: ${preset.label} (${formatRs(preset.value * 100)}/day)`);
-                          }}
-                          className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-all active:scale-95 cursor-pointer ${
-                            activeSimulatedSpend === preset.value
-                              ? "border-primary bg-primary/10 text-primary"
-                              : "border-border/60 bg-background text-muted-foreground hover:bg-surface hover:text-foreground"
-                          }`}
-                        >
-                          {preset.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-border/60 bg-background/55 p-2.5">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Plan intensity</span>
-                      <TooltipProvider>
-                        <UITooltip>
-                          <TooltipTrigger asChild>
-                            <button type="button" className="text-muted-foreground transition-colors hover:text-foreground">
-                              <Info className="h-3.5 w-3.5" />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent className="max-w-xs space-y-2 rounded-xl border border-border bg-card p-3 text-xs shadow-xl">
-                            <p className="font-bold text-foreground flex items-center gap-1">
-                              <Sparkles className="h-3 w-3 text-pb-amber" /> Stretch mode
-                            </p>
-                            <p className="text-muted-foreground">Lower daily target with optional student recovery levers.</p>
-                            <p className="font-bold text-foreground flex items-center gap-1 pt-1">
-                              <AlertTriangle className="h-3 w-3 text-pb-red" /> Emergency mode
-                            </p>
-                            <p className="text-muted-foreground">Protects essentials first, auto-applies all levers.</p>
-                          </TooltipContent>
-                        </UITooltip>
-                      </TooltipProvider>
-                    </div>
-                    <div className="mt-2.5 grid grid-cols-3 gap-1">
-                      {[
-                        { key: "normal" as const, label: "Current Pace", amount: noSpendHistory ? "—" : `${formatRs((defaultPace || safeDailyRs) * 100)}` },
-                        { key: "glide" as const, label: "Stretch", amount: safeDailyIsZero ? "Pause" : `${formatRs(stretchModeDailyRs * 100)}` },
-                        { key: "turbulence" as const, label: "Emergency", amount: safeDailyIsZero ? "Pause" : `${formatRs(emergencyModeDailyRs * 100)}` }
-                      ].map((mode) => (
-                        <button
-                          key={mode.key}
-                          type="button"
-                          onClick={() => selectRunwayMode(mode.key)}
-                          className={`rounded-xl border px-2 py-1.5 text-center transition-all cursor-pointer ${
-                            flightProtocol === mode.key
-                              ? "border-primary bg-primary/5 text-foreground shadow-sm"
-                              : "border-border/60 bg-background text-muted-foreground hover:bg-surface hover:text-foreground"
-                          }`}
-                        >
-                          <span className="block truncate text-[10px] sm:text-xs font-semibold">{mode.label}</span>
-                          <span className="mt-0.5 block text-[10px] sm:text-xs font-black tnum">{mode.amount}{mode.key !== "normal" || !noSpendHistory ? <span className="text-[8px] font-normal text-muted-foreground">/day</span> : null}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-border/60 bg-background/55 p-2.5">
-                    {flightProtocol === "normal" && (
-                      <div className="flex items-center gap-2 rounded-xl border border-dashed border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                        <Info className="h-4 w-4 shrink-0" />
-                        <span>Switch to Stretch or Emergency mode to unlock recovery levers.</span>
-                      </div>
-                    )}
-
-                    {flightProtocol === "glide" && (
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-1">
-                          <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Optional stretch levers</span>
-                        </div>
-                        <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                          {[
-                            { enabled: canUseMealLever, active: scenarioFoodSwitch, icon: Utensils, label: foodSwitchSaving > 0 ? "Replace deliveries" : "Tighten meal routine", detail: canUseMealLever ? `Adds ${formatRs(mealPlanLeverAmount)}` : "Needs food history", onToggle: () => { const v = !scenarioFoodSwitch; setScenarioFoodSwitch(v); if (v) toast.success(`Meal lever: +${formatRs(mealPlanLeverAmount)}`); else toast.info("Meal lever off."); } },
-                            { enabled: canUseFixedCostLever, active: scenarioSubscriptionsPaused, icon: CreditCard, label: "Pause subscriptions", detail: canUseFixedCostLever ? `Frees ${formatRs(fixedCostLeverAmount)}` : "No subs found", onToggle: () => { const v = !scenarioSubscriptionsPaused; setScenarioSubscriptionsPaused(v); if (v) toast.success(`Subs paused: +${formatRs(fixedCostLeverAmount)}`); else toast.info("Subs lever off."); } },
-                            { enabled: canUseSharedPlanLever, active: scenarioPoolSettled, icon: Users, label: sharedPlanLeverLabel, detail: canUseSharedPlanLever ? `Adds ${formatRs(sharedPlanLeverAmount)}` : "No pool dues", onToggle: () => { const v = !scenarioPoolSettled; setScenarioPoolSettled(v); if (v) toast.success(`Pool settled: +${formatRs(sharedPlanLeverAmount)}`); else toast.info("Pool lever off."); } },
-                            { enabled: canStressHighSpend, active: scenarioHighSpendDay, icon: TrendingDown, label: "Stress: high spend day", detail: canStressHighSpend ? `-${formatRs(highSpendDayAmount)}` : "Needs history", onToggle: () => { const v = !scenarioHighSpendDay; setScenarioHighSpendDay(v); if (v) toast.warning(`Stress test: -${formatRs(highSpendDayAmount)}`); else toast.info("Stress removed."); } },
-                          ].map((lever) => {
-                            const LeverIcon = lever.icon;
-                            return (
-                              <button
-                                key={lever.label}
-                                type="button"
-                                disabled={!lever.enabled}
-                                onClick={lever.onToggle}
-                                className={`flex items-center justify-between rounded-xl border p-2.5 text-left transition-all cursor-pointer ${
-                                  !lever.enabled
-                                    ? "opacity-35 cursor-not-allowed border-border/30 bg-muted/5"
-                                    : lever.active
-                                      ? "border-pb-green/45 bg-pb-green/5 text-foreground"
-                                      : "border-border/60 bg-background text-muted-foreground hover:bg-surface hover:text-foreground"
-                                }`}
-                              >
-                                <div className="flex items-center gap-2.5 min-w-0">
-                                  <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${lever.active ? "bg-pb-green/10 text-pb-green" : "bg-muted text-muted-foreground"}`}>
-                                    <LeverIcon className="h-4 w-4" />
-                                  </div>
-                                  <div className="min-w-0">
-                                    <span className="block truncate text-xs font-bold text-foreground">{lever.label}</span>
-                                    <span className="block text-[10px] text-muted-foreground">{lever.detail}</span>
-                                  </div>
-                                </div>
-                                {lever.enabled && (
-                                  <div className={`h-4 w-4 shrink-0 rounded-full border flex items-center justify-center transition-colors ${lever.active ? "bg-pb-green border-pb-green" : "border-muted-foreground/30"}`}>
-                                    {lever.active && <Check className="h-2.5 w-2.5 text-white stroke-[3]" />}
-                                  </div>
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    {flightProtocol === "turbulence" && (
-                      <div className="space-y-2.5">
-                        <div className="flex items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-wider text-pb-red">
-                          <span className="flex items-center gap-1.5"><AlertCircle className="h-3.5 w-3.5" /> Emergency plan</span>
-                          <span className="text-muted-foreground">Auto-applied levers</span>
-                        </div>
-                        <div className="flex flex-wrap gap-1">
-                          {[
-                            { label: "Meal", enabled: canUseMealLever, amount: mealPlanLeverAmount },
-                            { label: "Fixed cost", enabled: canUseFixedCostLever, amount: fixedCostLeverAmount },
-                            { label: "Pool", enabled: canUseSharedPlanLever, amount: sharedPlanLeverAmount },
-                          ].map((l) => (
-                            <div key={l.label} className="rounded-full border border-border/50 bg-background/70 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                              <span>{l.label}</span>
-                              <span className={`ml-1.5 ${l.enabled ? "text-pb-green" : "text-muted-foreground"}`}>
-                                {l.enabled ? `+${formatRs(l.amount)}` : "Inactive"}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                        <button
-                          type="button"
-                          disabled={!canStressHighSpend}
-                          onClick={() => {
-                            const v = !scenarioHighSpendDay;
-                            setScenarioHighSpendDay(v);
-                            if (v) toast.warning(`Stress test: -${formatRs(highSpendDayAmount)}`);
-                            else toast.info("Stress removed.");
-                          }}
-                          className={`flex w-full items-center justify-between rounded-xl border p-2.5 text-left transition-all ${
-                            !canStressHighSpend ? "opacity-40 cursor-not-allowed border-border/40 bg-surface-raised/10" :
-                            scenarioHighSpendDay ? "border-pb-red bg-pb-red/10" : "border-border bg-background hover:bg-surface"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${scenarioHighSpendDay ? "bg-pb-red/20 text-pb-red" : "bg-muted text-muted-foreground"}`}>
-                              <TrendingDown className="h-4 w-4" />
-                            </div>
-                            <div>
-                              <span className="block text-xs font-semibold text-foreground">Include high-spend day</span>
-                              <span className="block text-[10px] text-muted-foreground">{canStressHighSpend ? `-${formatRs(highSpendDayAmount)}` : "Needs spend history"}</span>
-                            </div>
-                          </div>
-                          {canStressHighSpend && (
-                            <div className={`h-4 w-4 shrink-0 rounded-full border flex items-center justify-center ${scenarioHighSpendDay ? "bg-pb-red border-pb-red" : "border-muted-foreground/30"}`}>
-                              {scenarioHighSpendDay && <Check className="h-2.5 w-2.5 text-white stroke-[3]" />}
-                            </div>
-                          )}
-                        </button>
-                      </div>
-                    )}
                   </div>
                 </div>
 
-                <div className="flex w-full flex-col gap-2.5 rounded-2xl border border-border/60 bg-background/55 p-3">
+                <div className="flex w-full flex-col gap-2.5 rounded-2xl border border-border/60 bg-background/55 p-4 sm:gap-2.5 sm:p-5">
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Runway simulator</span>
                     <Badge variant="outline" className={`text-[9px] font-bold uppercase py-0.5 ${
@@ -1891,70 +1895,54 @@ From PocketBuddy Runway.`;
                     </Badge>
                   </div>
 
-                  <div className="rounded-2xl border border-border/60 bg-surface/70 p-3">
-                    <div className="flex items-end justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Projected runway</p>
-                        <p className="mt-1 text-3xl font-semibold tracking-tight text-foreground tnum">
-                          {safeDailyIsZero ? "0" : simulatedDays}
-                        </p>
-                        <p className="text-[11px] text-muted-foreground">
-                          {isSimulatedSafe ? "days to reset" : "days before shortfall"}
-                        </p>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Daily target</p>
-                        <p className="mt-1 text-sm font-semibold text-primary tnum">
-                          {safeDailyIsZero ? "Pause" : `${formatRs(activeSimulatedSpend * 100)}/day`}
-                        </p>
-                      </div>
-                    </div>
+                  <div className="border-t border-border/40 pt-3 sm:pt-4">
+                    <div className="flex flex-col items-center gap-3.5 sm:gap-4">
+                      <div className={`relative flex aspect-square w-full max-w-[190px] items-center justify-center rounded-full border bg-background/75 p-2.5 sm:max-w-[248px] sm:p-3 ${
+                        isSimulatedSafe ? "border-pb-green/30" : "border-pb-red/30"
+                      }`}>
+                        <div className="absolute inset-0 rounded-full bg-background/65" />
+                        <div className="absolute inset-0 rounded-full transition-all duration-700" style={gaugeRingStyle} aria-hidden="true" />
+                        <div className="absolute inset-[16px] rounded-full border border-border/60 bg-background/90 shadow-inner sm:inset-[18px]" />
 
-                    <div className="mt-3.5">
-                      <div className="relative h-2 overflow-hidden rounded-full bg-surface-raised">
-                        <div
-                          className={`h-full rounded-full transition-all duration-700 ${isSimulatedSafe ? "bg-pb-green" : "bg-pb-red"}`}
-                          style={{ width: `${Math.max(6, gaugePercentage)}%` }}
-                        />
+                        <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                          <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-muted-foreground sm:text-[10px]">Projected runway</p>
+                          <p className="mt-1.5 text-[2rem] font-semibold tracking-tight text-foreground tnum sm:mt-2 sm:text-4xl">
+                            {safeDailyIsZero ? "0" : simulatedDays}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground sm:text-[11px]">
+                            {isSimulatedSafe ? "days to reset" : "days before shortfall"}
+                          </p>
+                        </div>
                       </div>
-                      <div className="mt-2 flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                        <span>0d</span>
-                        <span>Reset</span>
-                        <span>{daysLeftInCycle}d</span>
-                      </div>
-                    </div>
 
-                    <div className="mt-3 rounded-xl border border-border/40 bg-background/70 p-3">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">What this target means</p>
-                      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                      <div className="grid w-full grid-cols-1 overflow-hidden rounded-2xl border border-border/50 bg-background/60 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:grid-cols-3 sm:text-[10px]">
+                        <div className="border-b border-border/40 px-2.5 py-2 text-center sm:border-b-0 sm:border-r sm:px-3 sm:py-2.5">
+                          <p>Daily target</p>
+                          <p className="mt-1 text-[13px] font-semibold text-primary tnum normal-case sm:text-sm">{safeDailyIsZero ? "Pause" : `${formatRs(activeSimulatedSpend * 100)}/day`}</p>
+                        </div>
+                        <div className="border-b border-border/40 px-2.5 py-2 text-center sm:border-b-0 sm:border-r sm:px-3 sm:py-2.5">
+                          <p>Reset in</p>
+                          <p className="mt-1 text-[13px] font-semibold text-foreground tnum normal-case sm:text-sm">{daysLeftInCycle} days</p>
+                        </div>
+                        <div className="px-2.5 py-2 text-center sm:px-3 sm:py-2.5">
+                          <p>Flexible cash</p>
+                          <p className="mt-1 text-[13px] font-semibold text-foreground tnum normal-case sm:text-sm">{formatRs(remainingDiscretionary)}</p>
+                        </div>
+                      </div>
+
+                      <p className="max-w-[28rem] text-center text-[11px] leading-relaxed text-muted-foreground sm:text-xs">
                         {isSimulatedSafe
                           ? `Survives the next ${daysLeftInCycle} days on this plan.`
                           : safeDailyIsZero
                             ? "All discretionary balance consumed."
                             : `Runs out ${Math.max(0, daysLeftInCycle - simulatedDays)} days early. Cycle gap: ${formatRs(simulatedGapPaise)}.`}
                       </p>
-                    </div>
-                  </div>
 
-                  <div className="rounded-xl border border-border/50 bg-background/65 px-3 py-2.5">
-                    <div className="grid grid-cols-3 gap-3 text-xs">
-                      <div>
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Flexible cash</p>
-                        <p className="mt-1 font-bold text-foreground tnum">{formatRs(remainingDiscretionary)}</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Simulated rate</p>
-                        <p className="mt-1 font-bold text-primary tnum">{safeDailyIsZero ? "₹0" : `${formatRs(activeSimulatedSpend * 100)}/day`}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Reset in</p>
-                        <p className="mt-1 font-bold text-foreground tnum">{daysLeftInCycle} days</p>
-                      </div>
                     </div>
                   </div>
 
                   {!isSimulatedSafe && actualAskHomeAmount > 0 && (
-                    <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                    <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2 text-[11px] text-muted-foreground sm:text-xs">
                       Actual ask-home buffer: <span className="font-bold text-primary tnum">{formatRs(actualAskHomeAmount)}</span>
                     </div>
                   )}
