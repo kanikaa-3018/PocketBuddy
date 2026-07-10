@@ -1,6 +1,6 @@
 # PocketBuddy Backend
 
-FastAPI backend for auth, profiles, transactions, subscriptions, check-ins, cart pools, and Android companion ingest.
+FastAPI backend for auth, profiles, transactions, statement import, recurring commitments, food, travel, cart pools, check-ins, privacy controls, Account Aggregator sandbox flows, and Android companion ingest.
 
 ## First-Time Setup
 
@@ -22,7 +22,8 @@ AWS_REGION=ap-south-1
 CAMPUS_FOOD_S3_BUCKET=
 CAMPUS_FOOD_S3_KEY=campus_food.json
 BEDROCK_ENABLED=false
-BEDROCK_MODEL_ID=anthropic.claude-3-haiku-20240307-v1:0
+BEDROCK_MODEL_ID=us.amazon.nova-lite-v1:0
+DEMO_MODE=false
 ```
 
 `CAMPUS_FOOD_S3_BUCKET` is optional. When it is empty, the backend reads:
@@ -31,11 +32,19 @@ BEDROCK_MODEL_ID=anthropic.claude-3-haiku-20240307-v1:0
 data/campus_food.json
 ```
 
-The RAG endpoint also works without Bedrock credentials by returning a deterministic local campus-food recommendation.
+The food and travel AI endpoints also work without Bedrock credentials by returning deterministic fallback guidance.
 
 ## Run Locally
 
-Because `.env` is loaded relative to the current working directory, start FastAPI from `backend`:
+The backend settings loader reads both the repository root `.env` and `backend/.env`, so either command style is valid.
+
+From the repository root:
+
+```powershell
+.\backend\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --reload --port 8000
+```
+
+Or from `backend`:
 
 ```powershell
 Set-Location backend
@@ -115,7 +124,7 @@ POST /api/account-aggregator/Consent/Notification
 POST /api/account-aggregator/FI/Notification
 ```
 
-## Campus Food And RAG
+## Campus Food, OCR, And RAG
 
 The frontend dashboard reads:
 
@@ -128,6 +137,22 @@ The authenticated recommendation route is:
 ```http
 POST /api/rag/food-rag
 ```
+
+Menu scanning is review-first. If OCR is configured, extracted menu rows become pending review candidates. If `DEMO_MODE=true` and OCR is unavailable, the scanner can create venue-based demo candidates, but those candidates still stay in review and are not trusted recommendations immediately.
+
+## Statement Import
+
+Authenticated statement import routes:
+
+```http
+POST /api/statement-import/preview
+POST /api/statement-import/commit
+POST /api/statement-import/vendor-category
+GET  /api/statement-import/batches
+POST /api/statement-import/batches/{batch_id}/rollback
+```
+
+The import path supports CSV/TSV/TXT and text-based PDFs, including password-protected PDFs when `pypdf[crypto]` can decrypt them. Scanned PDFs require OCR and are intentionally not trusted by this parser.
 
 For AWS deployment instructions, see:
 

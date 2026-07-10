@@ -1,6 +1,6 @@
 # Bank Statement Import Lite
 
-Status: implemented on `feature/statement-import-lite`.
+Status: implemented on `main`.
 
 ## Why This Exists
 

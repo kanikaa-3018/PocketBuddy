@@ -1,347 +1,215 @@
 # PocketBuddy Final Architecture Decisions
 
-Status: Accepted for hackathon demo  
-Date: 2026-06-14  
-Scope: AWS deployment and production-style architecture narrative for PocketBuddy
+Status: accepted for the finals-ready repository
+Updated: 2026-07-11
+Scope: AWS architecture, data boundaries, cost controls, and production hardening path
 
-## Decision Summary
+## Summary
 
-PocketBuddy will use a hybrid AWS-native architecture.
+PocketBuddy uses a cost-aware hybrid AWS architecture.
 
-We will not present the system as "one VM running the app". EC2 remains part of the stack, but only as the application API layer. The mobile payment-notification path becomes an event-driven serverless ingest pipeline because that path has bursty traffic, retry behavior, and strict acknowledgement needs.
-
-Final high-level flow:
+The product API remains on FastAPI because that is where the business logic lives: auth, profile, transactions, statement import, runway, pools, food, travel, privacy, and companion state. The bursty Android notification path is separated into a serverless ingest lane because phone events need quick acknowledgement, retries, idempotency, and dead-letter handling.
 
 ```text
-Android Connector
-  -> API Gateway HTTP API
-  -> Lambda ingest
-  -> SQS queue
-  -> Lambda processor
-  -> DynamoDB ingest ledger
-  -> MongoDB Atlas / existing FastAPI transaction model
-
 Browser
   -> CloudFront
-     -> S3 origin for React static files
-     -> EC2/Nginx origin for /api/* FastAPI routes
+      -> S3 private origin for React build and APK
+      -> EC2 + Nginx + FastAPI for product APIs
 
-FastAPI on EC2
-  -> MongoDB Atlas main app DB
-  -> Amazon Bedrock for wellness / AI insight generation
-  -> Amazon SES for selected alert emails
-  -> SSM Parameter Store for runtime secrets
-  -> CloudWatch logs and alarms
-```
-
-## Core Architecture Principle
-
-Use AWS services where they solve a real product problem, not just to increase the service count.
-
-The Android ingest path is the best place for serverless AWS because:
-
-- Payment notifications arrive in bursts.
-- Android should receive a fast HTTP response even if downstream processing is slow.
-- Failed mobile delivery can retry, so server-side idempotency matters.
-- SQS gives buffering and retry semantics.
-- DynamoDB conditional writes give clean event deduplication.
-
-The existing FastAPI app should remain on EC2 for now because:
-
-- It already works.
-- It contains app-level routes and business logic.
-- Migrating every route to Lambda adds high risk and limited demo value.
-- The main architecture weakness is not EC2 itself; it is using EC2 for everything.
-
-## Final AWS Service Decisions
-
-### 1. Frontend Hosting
-
-Decision: use S3 and CloudFront for the Vite React frontend.
-
-Reason:
-
-- The frontend is static after `npm run build`.
-- S3 plus CloudFront is a standard AWS-native static hosting path.
-- It removes frontend traffic from EC2.
-- It gives a better demo story than Nginx serving everything from a VM.
-
-Implementation target:
-
-```text
-frontend/dist -> S3 bucket -> CloudFront distribution
-```
-
-CloudFront should have:
-
-- One origin for S3 static assets.
-- One origin for EC2/Nginx/FastAPI API routes.
-- Behavior `/api/*` routed to EC2.
-- Default behavior routed to S3.
-
-This avoids mixed-content issues and gives one stable frontend URL.
-
-### 2. Application API
-
-Decision: keep FastAPI on EC2 for app APIs.
-
-FastAPI continues to own:
-
-- Authentication and signup/login.
-- User profile.
-- Dashboard.
-- Transactions.
-- Companion sync views.
-- Campus food.
-- Wellness.
-- Subscriptions.
-- Wing Cart-Pooler.
-- Seed/demo utilities.
-
-Reason:
-
-- This is the stable working app layer.
-- Rewriting to Lambda now is too risky.
-- Judges care more that the architecture isolates the right high-throughput path.
-
-### 3. Android Mobile Ingest
-
-Decision: move Android webhook ingestion to an AWS serverless pipeline.
-
-Target flow:
-
-```text
 Android Connector
-  -> POST /api/ingest/notification on API Gateway HTTP API
-  -> Lambda ingest
-  -> SQS standard queue
-  -> Lambda processor
-  -> DynamoDB event ledger
-  -> MongoDB Atlas / existing transaction model
+  -> CloudFront /api/ingest/notification-v2
+  -> API Gateway HTTP API
+  -> Ingest Lambda
+  -> SQS queue
+  -> SQS DLQ
+  -> Processor Lambda
+  -> DynamoDB ingest ledger with TTL
+  -> FastAPI canonical transaction path
+  -> MongoDB Atlas product data
+
+AI and observability
+  -> Amazon Bedrock Nova Lite
+  -> CloudWatch logs and alarms
+  -> AWS Budgets
 ```
 
-Lambda ingest responsibilities:
+## Architecture Principle
 
-- Accept Android connector webhook payload.
-- Validate payload shape.
-- Validate webhook token if configured.
-- Generate or preserve a stable `event_id`.
-- Send event to SQS.
-- Return `202 Accepted` quickly.
+Use AWS services where they solve a real product problem:
 
-Lambda processor responsibilities:
+- CloudFront/S3 solve the current static delivery and APK distribution problem.
+- Amplify Hosting is the production frontend operations path because it adds Git-based deployment, previews, SSL, custom domains, and rollback workflow.
+- EC2/Nginx/FastAPI keeps the product API stable and cheap for the finals window.
+- API Gateway/Lambda/SQS/DLQ/DynamoDB solve bursty mobile notification ingest.
+- MongoDB stores flexible product state.
+- Bedrock turns deterministic context into short guidance, not source-of-truth calculations.
+- CloudWatch and AWS Budgets keep the demo observable and cost-controlled.
 
-- Read events from SQS.
-- Normalize source payload.
-- Use DynamoDB conditional write for idempotency.
-- If not duplicate, write canonical transaction to the existing app data path.
-- Log processing result.
+This is not a service-count architecture. Each service has a narrow reason to exist.
 
-SQS queue:
+## Service Decisions
 
-- Use a Standard Queue first.
-- Do app-level deduplication in DynamoDB.
-- Add DLQ only if time permits.
+| Layer | Decision | Reason |
+| --- | --- | --- |
+| Frontend and APK | Current: S3 private bucket behind CloudFront. Production: Amplify Hosting | Current setup is cheap and deployed; production needs managed CI/CD, previews, SSL, domains, and rollbacks. |
+| Public entry | CloudFront | Single HTTPS entry for web, APK, product APIs, and mobile ingest routing. |
+| Product API | Current: EC2 + Nginx + FastAPI. Production: HTTP API + Lambda or ECS Express Mode | EC2 is stable for the finals window; optimized launch should remove idle public compute first, then move to containers when traffic justifies it. |
+| Mobile ingest edge | API Gateway HTTP API | Low-cost request entry for phone events and clean separation from web routes. |
+| Ingest function | Lambda | Validate, normalize, and enqueue quickly without tying Android sync to the app server. |
+| Buffer | SQS standard queue | Absorbs bursts and retries safely. |
+| Failure handling | SQS DLQ | Keeps failed events inspectable and replayable instead of disappearing. |
+| Event ledger | DynamoDB with TTL | Idempotent append-heavy event store; prevents duplicate phone notifications from becoming duplicate transactions. |
+| Product data | MongoDB Atlas | Flexible state for users, profiles, transactions, pools, food, travel, runway, privacy, and demo data. |
+| AI | Bedrock Nova Lite | Bounded text generation after deterministic engines compute the facts. |
+| Secrets/config | SSM Parameter Store standard parameters | Enough for this stage and avoids per-secret Secrets Manager cost. |
+| Observability | CloudWatch logs and alarms | Lambda errors, queue age, DLQ depth, backend health, and demo debugging. |
+| Cost control | AWS Budgets | Alerts before credits are consumed unexpectedly. |
 
-DynamoDB table:
+## Database Boundary
 
-```text
-Table: pocketbuddy_ingest_events
-Partition key: user_id
-Sort key: event_id
+### MongoDB Atlas
+
+MongoDB is the product database. It stores:
+
+- users and profiles;
+- transactions and statement imports;
+- recurring commitments;
+- runway inputs and derived records;
+- cart pools, requests, members, splits, UTR state, and QR metadata;
+- campus food catalogs, OCR candidates, review signals, and meal check-ins;
+- travel routes, reports, saved routes, and quote checks;
+- privacy records, consent sandbox records, and account deletion scope.
+
+### DynamoDB
+
+DynamoDB is the ingest ledger only. It stores:
+
+- connector event IDs;
+- user/device/event dedupe keys;
+- masked preview metadata;
+- processing state;
+- retry status;
+- TTL cleanup field;
+- DLQ replay correlation metadata.
+
+This split is intentional. Product workflows need flexible document relationships; ingest events need high-write idempotency and retry safety.
+
+## Android Ingest Contract
+
+New Android builds use:
+
+```http
+POST /api/ingest/notification-v2
 ```
 
-Recommended stored fields:
+The v2 contract requires:
 
-```text
-user_id
-event_id
-source
-source_app
-direction
-amount
-currency
-merchant
-transaction_id
-raw_text_redacted
-received_at
-processed_at
-status
-dedupe_key
-```
+- structured payment fields;
+- masked notification preview;
+- installation-scoped device ID;
+- client event ID;
+- timestamp;
+- HMAC signature;
+- `rawTextSuppressed=true`.
 
-### 4. Main Database
+The v2 route must not accept raw notification or SMS body text. The legacy `/api/ingest/notification` route exists only for old connector compatibility and should stay disabled for raw-text ingest unless explicitly migrating an old APK.
 
-Decision: keep MongoDB Atlas as the main app database.
+See [mobile-ingest-contract.md](./mobile-ingest-contract.md).
 
-MongoDB remains the source for:
+## DLQ And Replay
 
-- Users.
-- Profiles.
-- Transactions.
-- Subscriptions.
-- Check-ins.
-- Pools.
-- Cart members and settlements.
-- Campus/user-added catalog data.
+The mobile ingest queue must have a DLQ. A failed event should move to the DLQ after the configured receive count. Operations should be able to:
 
-DynamoDB is not replacing MongoDB now.
-
-Reason:
-
-- Current backend already uses MongoDB.
-- Full migration is unnecessary for demo.
-- DynamoDB is best used as the ingest ledger and idempotency layer.
-
-### 5. AI Layer
-
-Decision: use Amazon Bedrock only where it adds clear value.
-
-Use Bedrock for:
-
-- Wellness insight generation.
-- Optional food recommendation explanation if the deterministic result needs a natural-language explanation.
-
-Do not use Bedrock for:
-
-- Every transaction parse.
-- Basic category matching.
-- Every dashboard card.
-
-Reason:
-
-- Bedrock is paid usage, not a normal free-tier service.
-- Demo usage should stay very small.
-- Deterministic fallback must exist so the demo still works if Bedrock fails or access is delayed.
-
-### 6. Secrets And Configuration
-
-Decision: use SSM Parameter Store standard parameters.
-
-Store:
-
-- MongoDB Atlas URI.
-- JWT secret.
-- Android webhook token.
-- Bedrock model ID and region.
-- SES sender email.
-
-Do not use Secrets Manager now.
-
-Reason:
-
-- SSM standard parameters are sufficient for demo.
-- Secrets Manager adds cost and setup overhead.
-
-### 7. Monitoring
-
-Decision: use CloudWatch for logs and one or two meaningful alarms.
+1. inspect the DLQ payload;
+2. identify whether the issue is parser, auth, schema, or downstream availability;
+3. patch the processor or data;
+4. redrive the DLQ message back to the source queue.
 
 Minimum alarms:
 
-- SQS `ApproximateAgeOfOldestMessage` greater than 300 seconds.
-- Lambda processor error count greater than 0 over a short window, if time permits.
+- Lambda processor errors greater than 0;
+- SQS approximate age of oldest message greater than the chosen threshold;
+- DLQ visible messages greater than 0;
+- EC2 backend health check failing.
 
-Reason:
+## AI Boundary
 
-- Shows operational discipline.
-- Directly monitors the event-driven pipeline.
-- Avoids over-hardening the platform.
+Bedrock Nova Lite is used for language, not truth.
 
-### 8. Email Alerts
+Deterministic code computes:
 
-Decision: use SES only for one concrete demo alert.
+- runway pace and safe daily spend;
+- fare windows and quote deltas;
+- food eligibility and verified menu state;
+- pool settlement status;
+- recurring commitment detection.
 
-Recommended alert:
+Bedrock receives bounded context and produces short guidance. Prompts should forbid invented numbers when deterministic values already exist.
 
-- Runway warning email when remaining runway drops below a configured threshold.
+## OCR Boundary
 
-Reason:
+OCR is not a trusted source of menu truth.
 
-- It is visible in the demo.
-- It maps to PocketBuddy's student money-safety goal.
-- It adds an AWS communication service without turning the app into an email system.
+Menu scanning can create candidates, but candidates stay in review until campus verification. If `DEMO_MODE=true`, a venue-based fallback may create realistic review candidates when OCR is unavailable. Those rows are still not trusted recommendations immediately.
 
-## What We Are Not Doing Now
+Do not present Textract as the required architecture. The account hit a real access/subscription blocker earlier, and the product is stronger when OCR is optional and review-first.
 
-Do not build these during the hackathon unless everything else is already stable:
+## Cost Decisions
 
-- Full FastAPI-to-Lambda migration.
-- Cognito auth migration.
-- ECS, EKS, RDS, OpenSearch, NAT Gateway, or VPC-heavy architecture.
-- Full custom domain and HTTPS certificate setup.
-- Complex multi-account AWS setup.
-- Full DLQ replay dashboard.
-- Full admin dashboard for catalogs.
-- Moving all MongoDB data to DynamoDB.
+Detailed scale estimates are maintained in [aws-cost-model.md](./aws-cost-model.md).
 
-These can be described as future production hardening, not demo implementation.
+The finals architecture keeps EC2 because it is already stable and cheap enough for a short demo window. The optimized launch architecture removes idle EC2/public IPv4 first: move frontend operations to Amplify Hosting, keep API Gateway/Lambda/SQS/DLQ/DynamoDB for mobile ingest, and move the product API to HTTP API + Lambda only after MongoDB connection reuse and cold-start behavior are tested. ECS Express Mode/ECS Fargate is the next step for sustained traffic, not the cheapest default for the current credit-constrained account.
 
-## Cost Guardrails
+### Keep
 
-Use low-cost/free-tier-friendly choices:
+- S3 + CloudFront for current static frontend and APK delivery.
+- Amplify Hosting as the production frontend operations path.
+- Small EC2 instance for FastAPI during the finals window.
+- API Gateway HTTP API, Lambda, SQS, DLQ, and DynamoDB for low-volume mobile ingest.
+- SSM Parameter Store standard parameters.
+- CloudWatch logs with short retention.
+- AWS Budgets alerts.
 
-- One EC2 instance only.
-- No Elastic IP unless absolutely needed.
-- No NAT Gateway.
-- No Secrets Manager.
-- No RDS.
-- No OpenSearch.
-- No provisioned DynamoDB capacity unless specifically required.
-- Keep Bedrock usage behind feature flag and fallback.
-- Keep CloudWatch logs retention short for demo.
+### Avoid For The Finals Account
 
-Known paid/limited items:
+- NAT Gateway, because it has an hourly charge even when idle.
+- Always-on WAF, because the Web ACL and rules create monthly cost.
+- App Runner as a new architecture recommendation, because AWS has closed it to new customers and points teams toward ECS Express Mode.
+- ECS/Fargate migration before traffic justifies the fixed load balancer/container baseline.
+- Secrets Manager unless rotation is required.
+- Textract as a required menu-scanning dependency.
+- Large self-hosted OCR/routing services on the small EC2 instance.
+- Application Load Balancer until traffic justifies the fixed hourly baseline.
 
-- Bedrock is pay-per-use.
-- MongoDB Atlas is outside AWS, but current free cluster can remain.
-- AWS free-tier limits change by account plan and time; verify before final submission.
+## Production Hardening Path
 
-## Demo Narrative
+After finals, harden in this order:
 
-Use this wording in pitch/demo:
+1. Version the mobile ingest infrastructure under `infra/`.
+2. Add CloudWatch alarms and DLQ redrive documentation.
+3. Put runtime config in SSM Parameter Store.
+4. Add a stable domain and avoid EC2 public-DNS drift.
+5. Move frontend operations from manual S3 upload to Amplify Hosting.
+6. Add WAF only when the budget accepts the fixed monthly cost.
+7. Move route/geocode providers from public demo endpoints to self-hosted or commercial providers.
+8. Evaluate Aurora/PostgreSQL only if pool settlements become regulated financial obligations requiring relational ledger integrity.
+9. Evaluate HTTP API + Lambda for the product API if connection reuse and cold starts are acceptable.
+10. Move FastAPI to ECS Express Mode/ECS Fargate only when sustained traffic or operations justify the cost.
 
-PocketBuddy uses an AWS-native hybrid architecture. The web app is distributed through CloudFront and S3, while FastAPI on EC2 serves the application API. The most sensitive path, mobile financial notification ingest, is isolated into a serverless event pipeline: API Gateway receives Android UPI/SMS events, Lambda quickly validates and queues them, SQS buffers bursts, another Lambda processes them asynchronously, and DynamoDB provides an idempotent event ledger before the transaction reaches the main app database. Bedrock powers targeted wellness insights, SSM stores configuration, SES sends runway alerts, and CloudWatch monitors failures.
+## Judge-Safe Explanation
 
-## Implementation Priority
+Use this if asked why the architecture is not fully serverless:
 
-Priority 1: keep current EC2 deployment stable.
+> PocketBuddy has two traffic shapes. The web product is interactive and stateful, so FastAPI on a small EC2 instance keeps the finals demo stable and low-cost. For production, frontend operations should move to Amplify Hosting and the API should move to Lambda or ECS Express Mode only after traffic and connection behavior justify it. Mobile notification ingest is bursty and retry-sensitive, so that path is separated through API Gateway, Lambda, SQS, DLQ, and DynamoDB. MongoDB stores product state; DynamoDB stores idempotent ingest events. This keeps AWS usage purposeful instead of adding services for show.
 
-Priority 2: move frontend to S3 + CloudFront.
+## Current Risk Register
 
-Priority 3: implement serverless mobile ingest path.
-
-Priority 4: add CloudWatch alarm for ingest queue.
-
-Priority 5: add Bedrock wellness insight with fallback.
-
-Priority 6: add SES runway warning if time remains.
-
-## Validation Checklist
-
-Before claiming architecture is implemented, verify:
-
-- Frontend opens from CloudFront URL.
-- `/api/*` works through CloudFront or the EC2 API URL.
-- Android connector can post to API Gateway URL.
-- Lambda ingest logs one received event.
-- SQS receives the event.
-- Lambda processor consumes the event.
-- DynamoDB stores exactly one event for duplicate retries.
-- MongoDB/app dashboard reflects the canonical transaction.
-- CloudWatch alarm exists for stuck SQS messages.
-- Bedrock feature works or fallback path is visibly used.
-
-## Source Notes
-
-Architecture assumptions are based on current AWS pricing/free-tier pages checked on 2026-06-14:
-
-- AWS Free Tier: https://aws.amazon.com/free/
-- AWS Lambda pricing: https://aws.amazon.com/lambda/pricing/
-- Amazon API Gateway pricing: https://aws.amazon.com/api-gateway/pricing/
-- Amazon SQS pricing: https://aws.amazon.com/sqs/pricing/
-- Amazon DynamoDB pricing: https://aws.amazon.com/dynamodb/pricing/
-- Amazon S3 pricing: https://aws.amazon.com/s3/pricing/
-- Amazon CloudFront pricing: https://aws.amazon.com/cloudfront/pricing/
-- Amazon Bedrock pricing: https://aws.amazon.com/bedrock/pricing/
-
+| Risk | Mitigation |
+| --- | --- |
+| EC2 public DNS changes after stop/start | Verify CloudFront origin after restarting EC2; use stable DNS when available. |
+| CloudFront routes API traffic to S3 | Keep behavior priority clear: exact ingest route, `/api/*`, then default S3. |
+| DLQ messages ignored | Alarm on DLQ depth and keep replay instructions in the runbook. |
+| Android parser misses a bank/payment format | Send low-confidence events to review; collect masked corrections. |
+| OCR creates bad food data | Keep OCR rows pending review and never publish directly. |
+| Bedrock invents values | Ground prompts with deterministic facts and forbid invented numbers. |
+| AWS credits drain | Stop EC2 when not demoing, avoid NAT Gateway/WAF/ALB/ECS until justified, keep budgets enabled. |
