@@ -3,6 +3,7 @@ import { useMemo, useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
 import { AppShell, MobileMenuButton } from "@/components/AppShell";
+import { TravelRouteMap } from "@/components/travel/TravelRouteMap";
 import {
   Compass,
   AlertOctagon,
@@ -847,6 +848,29 @@ function TravelPage() {
     return routes.find((r: any) => r.id === selectedRouteId) || null;
   }, [routes, selectedRouteId]);
 
+  const selectedActiveMode = useMemo(() => {
+    if (!selectedRoute?.modes?.length) return null;
+    const selectedModeKey = selectedMode.toLowerCase();
+    return (
+      selectedRoute.modes.find((m: any) => {
+        const modeKey = String(m.mode || "").toLowerCase();
+        const shortKey = modeKey.split(" ")[0];
+        return modeKey === selectedModeKey || modeKey.includes(selectedModeKey) || selectedModeKey.includes(shortKey);
+      }) || selectedRoute.modes[0]
+    );
+  }, [selectedRoute, selectedMode]);
+
+  const selectedTimeFareAnchor = selectedActiveMode?.median_fare
+    ? Math.round(Number(selectedActiveMode.median_fare) * timeContext.factor)
+    : null;
+
+  const selectedRouteTrustLabel = useMemo(() => {
+    const confidence = String(selectedRoute?.confidence || "low").toLowerCase();
+    if (confidence === "high") return "High trust";
+    if (confidence === "medium") return "Medium trust";
+    return "Needs confirmation";
+  }, [selectedRoute]);
+
   useEffect(() => {
     setAiCoachResult(null);
     setAppQuote("");
@@ -869,22 +893,19 @@ function TravelPage() {
   }, [isReportOpen, selectedRoute]);
 
   const overchargeAnalysis = useMemo(() => {
-    if (!selectedRoute || !driverQuote) return null;
-    const modeDetails =
-      selectedRoute.modes.find((m: any) => m.mode.toLowerCase().includes(selectedMode.toLowerCase())) ||
-      selectedRoute.modes[0];
+    if (!selectedRoute || !selectedActiveMode || !driverQuote) return null;
     const quote = parseFloat(driverQuote);
     if (isNaN(quote) || quote <= 0) return null;
-    const normalMedian = Math.round(modeDetails.median_fare * timeContext.factor);
-    const normalMax = Math.round(modeDetails.max_fare * timeContext.factor);
-    const normalMin = Math.round(modeDetails.min_fare * timeContext.factor);
+    const normalMedian = Math.round(selectedActiveMode.median_fare * timeContext.factor);
+    const normalMax = Math.round(selectedActiveMode.max_fare * timeContext.factor);
+    const normalMin = Math.round(selectedActiveMode.min_fare * timeContext.factor);
     const overchargeAmt = Math.max(0, quote - normalMax);
     const isOvercharged = quote > normalMax;
     const isFair = quote <= normalMax && quote >= normalMin;
     const isUndercut = quote < normalMin;
     const pctAboveMedian = Math.round(((quote - normalMedian) / normalMedian) * 100);
     return { isOvercharged, isFair, isUndercut, normalMedian, normalMax, normalMin, overchargeAmt, pctAboveMedian };
-  }, [selectedRoute, selectedMode, driverQuote, timeContext.factor]);
+  }, [selectedRoute, selectedActiveMode, driverQuote, timeContext.factor]);
 
   const splitFareData = useMemo(() => {
     if (!selectedRoute) return null;
@@ -1093,6 +1114,60 @@ function TravelPage() {
     });
   }, [selectedRoute, timeContext, travelIntent]);
 
+  const heroDecision = estimatedDecision || selectedDecision;
+  const heroRoute = estimatedResult || selectedRoute;
+  const heroMode = estimatedResult?.modes?.[0] || selectedActiveMode;
+  const heroFareRange = heroMode
+    ? `₹${Math.round(heroMode.min_fare * timeContext.factor)}–₹${Math.round(heroMode.max_fare * timeContext.factor)}`
+    : null;
+  const heroFareAnchor = heroDecision?.fare
+    || (heroMode?.median_fare ? Math.round(heroMode.median_fare * timeContext.factor) : null);
+  const heroAcceptLimit = heroDecision?.acceptUpTo ? `₹${heroDecision.acceptUpTo}` : null;
+  const heroSourceLabel = heroRoute
+    ? routeSourceDisplay(heroRoute)
+      .replace("Mapped road route, cached", "Road route, cached")
+      .replace("Mapped road route", "Road route")
+      .replace("Fallback distance estimate", "Distance estimate")
+    : "Map route";
+  const heroTrustLabel = heroRoute
+    ? (String(heroRoute.confidence || "").toLowerCase() === "high"
+      ? "High trust"
+      : String(heroRoute.confidence || "").toLowerCase() === "medium"
+        ? "Medium trust"
+        : "Needs reports")
+    : "Pending";
+
+  const selectedOriginCoords = selectedOriginPlace?.lat != null && selectedOriginPlace?.lon != null
+    ? [selectedOriginPlace.lat, selectedOriginPlace.lon]
+    : null;
+  const selectedDestinationCoords = selectedDestinationPlace?.lat != null && selectedDestinationPlace?.lon != null
+    ? [selectedDestinationPlace.lat, selectedDestinationPlace.lon]
+    : null;
+  const plannerHasDraft = Boolean(
+    dynamicOrigin.trim()
+      || dynamicDestination.trim()
+      || selectedOriginPlace
+      || selectedDestinationPlace
+      || manualOriginText
+      || manualDestinationText,
+  );
+  const mapRoute = estimatedResult || (!plannerHasDraft ? selectedRoute : null);
+  const mapSavedRouteParts = mapRoute === selectedRoute ? selectedRouteParts : null;
+  const mapOriginCoords = estimatedResult?.origin_coords
+    || selectedOriginCoords
+    || (mapRoute === selectedRoute ? selectedRoute?.origin_coords : null);
+  const mapDestinationCoords = estimatedResult?.dest_coords
+    || selectedDestinationCoords
+    || (mapRoute === selectedRoute ? selectedRoute?.dest_coords : null);
+  const mapOriginLabel = estimatedResult?.origin_resolved_label
+    || selectedOriginPlace?.label
+    || mapSavedRouteParts?.from
+    || dynamicOrigin;
+  const mapDestinationLabel = estimatedResult?.destination_resolved_label
+    || selectedDestinationPlace?.label
+    || mapSavedRouteParts?.to
+    || dynamicDestination;
+
   return (
     <AppShell>
       {/* Page Header */}
@@ -1104,7 +1179,7 @@ function TravelPage() {
             <span className="truncate sm:whitespace-nowrap">Campus Fare Guard</span>
           </h1>
         </div>
-        <div className="flex w-full items-center justify-end gap-3 md:w-auto md:shrink-0">
+        <div className="hidden">
           <div className={`hidden items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider sm:flex ${timeContext.color}`}>
             <Clock className="h-3.5 w-3.5" />
             <span>{timeContext.label}</span>
@@ -1118,21 +1193,22 @@ function TravelPage() {
           </div>
         </div>
 
-      <div className="pb-24 max-w-5xl mx-auto space-y-5">
-        <Card className="relative z-10 overflow-visible rounded-xl border-border bg-surface">
-          <div className="space-y-4 p-4 sm:p-5">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="pb-24 space-y-5">
+        <Card className="relative z-10 overflow-visible rounded-2xl border-border bg-surface">
+          <div className="space-y-3 p-3 sm:space-y-4 sm:p-5 xl:p-6">
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(280px,340px)] xl:items-start">
               <div className="min-w-0 space-y-1">
-                <h2 className="text-lg font-semibold tracking-tight text-foreground">Plan a campus ride</h2>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Travel Guard</p>
+                <h2 className="text-lg font-semibold tracking-tight text-foreground sm:text-2xl">Plan a campus ride</h2>
                 <p className="max-w-3xl text-xs leading-relaxed text-muted-foreground">
-                  Enter pickup and destination. PocketBuddy gives one clear move.
+                  Know the normal fare before you bargain. PocketBuddy maps the route, adjusts for timing, and gives a walk-away limit.
                 </p>
               </div>
-              <div className="lg:min-w-[286px] lg:self-start">
+              <div className="xl:self-start">
                 <Select value={activeCollege} onValueChange={handleCampusChange}>
                   <SelectTrigger
                     id="select-campus-dropdown"
-                    className="h-12 w-full rounded-lg border-border bg-background px-3 py-2 text-left shadow-sm transition-colors hover:border-primary/30 hover:bg-surface focus:ring-1 focus:ring-primary/25 lg:w-[286px] [&>span]:line-clamp-none"
+                    className="h-12 w-full rounded-lg border-border bg-background px-3 py-2 text-left shadow-sm transition-colors hover:border-primary/30 hover:bg-surface focus:ring-1 focus:ring-primary/25 [&>span]:line-clamp-none"
                   >
                     <span className="min-w-0 text-left">
                       <span className="block text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Campus</span>
@@ -1161,154 +1237,236 @@ function TravelPage() {
               </div>
             </div>
 
-            {isFallbackCampus && (
-              <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2.5 text-xs text-amber-700 dark:text-amber-300">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="leading-relaxed">
-                    Add your college once so places, saved routes, and fare reports are searched near the right campus.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCustomCollegeDraft("");
-                      setCampusEditorOpen(true);
-                    }}
-                    className="w-fit rounded-md border border-amber-500/30 bg-background px-2.5 py-1.5 text-[11px] font-semibold text-foreground transition-colors hover:bg-surface"
-                  >
-                    Set campus
-                  </button>
+            <div className="grid gap-4 lg:grid-cols-[minmax(360px,0.88fr)_minmax(460px,1.12fr)] lg:items-stretch">
+              <div className="space-y-3">
+                {isFallbackCampus && (
+                  <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2.5 text-xs text-amber-700 dark:text-amber-300">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="leading-relaxed">
+                        Add your college once so places, saved routes, and fare reports are searched near the right campus.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCustomCollegeDraft("");
+                          setCampusEditorOpen(true);
+                        }}
+                        className="w-fit rounded-md border border-amber-500/30 bg-background px-2.5 py-1.5 text-[11px] font-semibold text-foreground transition-colors hover:bg-surface"
+                      >
+                        Set campus
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div ref={routeSearchRef} className="relative z-30 overflow-visible rounded-lg border border-border bg-background p-1.5 shadow-sm">
+                  <div className="grid grid-cols-1 gap-1.5">
+                    <div className={`relative rounded-md px-3 py-2 transition-colors hover:bg-surface/60 focus-within:bg-surface focus-within:ring-1 focus-within:ring-primary/20 ${originSuggestionsOpen ? "z-[70]" : "z-10"}`}>
+                      <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                        <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                        Pickup
+                      </div>
+                      <div className="relative mt-1">
+                        <Input
+                          id="input-dynamic-origin"
+                          placeholder="Station, airport, hostel, landmark"
+                          value={dynamicOrigin}
+                          onFocus={() => setOriginSuggestionsOpen(true)}
+                          onBlur={() => setTimeout(() => setOriginSuggestionsOpen(false), 120)}
+                          onChange={(e) => {
+                            setDynamicOrigin(e.target.value);
+                            setEstimatedResult(null);
+                            setSelectedOriginPlace(null);
+                            setManualOriginText("");
+                            setOriginSuggestionsOpen(true);
+                          }}
+                          onKeyDown={(e) => e.key === "Enter" && handleEstimateRoute()}
+                          className="h-8 border-0 bg-transparent px-0 text-sm font-medium shadow-none placeholder:text-muted-foreground/60 focus-visible:ring-0 focus-visible:ring-offset-0"
+                        />
+                        <PlaceSuggestionsDropdown
+                          open={!isFallbackCampus && originSuggestionsOpen && debouncedDynamicOrigin.length >= 2}
+                          loading={originSuggestionsLoading}
+                          suggestions={originSuggestions}
+                          query={debouncedDynamicOrigin}
+                          onSelect={(suggestion) => {
+                            setDynamicOrigin(suggestion.label);
+                            setEstimatedResult(null);
+                            setSelectedOriginPlace(suggestion);
+                            setManualOriginText("");
+                            setOriginSuggestionsOpen(false);
+                          }}
+                          onUseTypedPlace={() => {
+                            setEstimatedResult(null);
+                            setManualOriginText(dynamicOrigin.trim());
+                            setSelectedOriginPlace(null);
+                            setOriginSuggestionsOpen(false);
+                          }}
+                        />
+                      </div>
+                      {selectedOriginPlace ? (
+                        <p className="mt-1 truncate text-[10px] font-medium text-primary">{selectedOriginPlace.label}</p>
+                      ) : manualOriginText && manualOriginText === dynamicOrigin.trim() ? (
+                        <p className="mt-1 truncate text-[10px] font-medium text-muted-foreground">Typed place. PocketBuddy will verify it while estimating.</p>
+                      ) : null}
+                    </div>
+
+                    <div className={`relative rounded-md px-3 py-2 transition-colors hover:bg-surface/60 focus-within:bg-surface focus-within:ring-1 focus-within:ring-primary/20 ${destinationSuggestionsOpen ? "z-[70]" : "z-10"}`}>
+                      <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                        Destination
+                      </div>
+                      <div className="relative mt-1">
+                        <Input
+                          id="input-dynamic-destination"
+                          placeholder="Campus, gate, hostel, landmark"
+                          value={dynamicDestination}
+                          onFocus={() => setDestinationSuggestionsOpen(true)}
+                          onBlur={() => setTimeout(() => setDestinationSuggestionsOpen(false), 120)}
+                          onChange={(e) => {
+                            setDynamicDestination(e.target.value);
+                            setEstimatedResult(null);
+                            setSelectedDestinationPlace(null);
+                            setManualDestinationText("");
+                            setDestinationSuggestionsOpen(true);
+                          }}
+                          onKeyDown={(e) => e.key === "Enter" && handleEstimateRoute()}
+                          className="h-8 border-0 bg-transparent px-0 text-sm font-medium shadow-none placeholder:text-muted-foreground/60 focus-visible:ring-0 focus-visible:ring-offset-0"
+                        />
+                        <PlaceSuggestionsDropdown
+                          open={!isFallbackCampus && destinationSuggestionsOpen && debouncedDynamicDestination.length >= 2}
+                          loading={destinationSuggestionsLoading}
+                          suggestions={destinationSuggestions}
+                          query={debouncedDynamicDestination}
+                          onSelect={(suggestion) => {
+                            setDynamicDestination(suggestion.label);
+                            setEstimatedResult(null);
+                            setSelectedDestinationPlace(suggestion);
+                            setManualDestinationText("");
+                            setDestinationSuggestionsOpen(false);
+                          }}
+                          onUseTypedPlace={() => {
+                            setEstimatedResult(null);
+                            setManualDestinationText(dynamicDestination.trim());
+                            setSelectedDestinationPlace(null);
+                            setDestinationSuggestionsOpen(false);
+                          }}
+                        />
+                      </div>
+                      {selectedDestinationPlace ? (
+                        <p className="mt-1 truncate text-[10px] font-medium text-primary">{selectedDestinationPlace.label}</p>
+                      ) : manualDestinationText && manualDestinationText === dynamicDestination.trim() ? (
+                        <p className="mt-1 truncate text-[10px] font-medium text-muted-foreground">Typed place. PocketBuddy will verify it while estimating.</p>
+                      ) : null}
+                    </div>
+
+                  </div>
+
+                  <div className="mt-1.5 grid gap-2 border-t border-border/70 px-1.5 pt-2 sm:grid-cols-[190px_minmax(0,1fr)] sm:items-center">
+                    <Select value={fareTimeSelection} onValueChange={(value) => setFareTimeSelection(value as TravelTimeSelection)}>
+                      <SelectTrigger className="h-10 rounded-md border-border bg-surface text-xs">
+                        <span className="min-w-0 text-left">
+                          <span className="block text-[9px] font-medium uppercase tracking-wider text-muted-foreground">Travel time</span>
+                          <SelectValue />
+                        </span>
+                      </SelectTrigger>
+                      <SelectContent className="bg-background border border-border text-foreground">
+                        <SelectItem value="now" className="text-xs">Now ({currentTimeContext.label})</SelectItem>
+                        {TRAVEL_TIME_CHOICES.map((choice) => (
+                          <SelectItem key={choice.id} value={choice.id} className="text-xs">
+                            {choice.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button id="btn-estimate-route" onClick={handleEstimateRoute} disabled={isEstimating || isFallbackCampus}
+                      className="h-10 w-full rounded-md bg-primary px-5 text-xs font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-70">
+                      <span className="flex items-center justify-center gap-2">
+                      {isFallbackCampus ? (
+                        <>Set campus to estimate</>
+                      ) : isEstimating ? (
+                        <><span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />Mapping route</>
+                      ) : (
+                        <><Search className="h-4 w-4" />Estimate fare</>
+                      )}
+                      </span>
+                    </Button>
+                  </div>
+
+                </div>
+
+                <div className="rounded-xl border border-border bg-background p-3 shadow-sm">
+                  <div className="flex flex-col gap-2.5 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                        <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+                        Current move
+                      </div>
+                      <p className="mt-1 truncate text-base font-semibold text-foreground">
+                        {heroDecision?.label || (heroRoute ? "Fare range ready" : "Estimate a route")}
+                      </p>
+                      <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+                        {heroDecision?.action || "Enter pickup and destination to get a route-specific fare window."}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2 rounded-lg border border-border bg-surface px-3 py-1.5 sm:min-w-[116px] sm:flex-col sm:items-start sm:gap-0.5">
+                      <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Anchor fare</span>
+                      <span className="text-lg font-semibold tabular-nums text-foreground">{heroFareAnchor ? `₹${heroFareAnchor}` : "--"}</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-2 grid grid-cols-3 gap-2">
+                    <div className="rounded-lg border border-border/70 bg-surface px-3 py-1.5">
+                      <p className="text-[9px] font-medium uppercase tracking-wider text-muted-foreground">Time</p>
+                      <p className="mt-1 truncate text-xs font-semibold text-foreground">{timeContext.label}</p>
+                    </div>
+                    <div className="rounded-lg border border-border/70 bg-surface px-3 py-1.5">
+                      <p className="text-[9px] font-medium uppercase tracking-wider text-muted-foreground">Range</p>
+                      <p className="mt-1 truncate text-xs font-semibold text-foreground">{heroFareRange || "Pending"}</p>
+                    </div>
+                    <div className="rounded-lg border border-border/70 bg-surface px-3 py-1.5">
+                      <p className="text-[9px] font-medium uppercase tracking-wider text-muted-foreground">Limit</p>
+                      <p className="mt-1 truncate text-xs font-semibold text-foreground">{heroAcceptLimit || "After quote"}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-2 flex items-center gap-2 rounded-lg border border-border/70 bg-surface px-3 py-2">
+                    <Info className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <div className="min-w-0">
+                      <p className="text-[9px] font-medium uppercase tracking-wider text-muted-foreground">Evidence</p>
+                      <p className="mt-0.5 text-xs font-semibold text-foreground">{heroTrustLabel} · {heroSourceLabel}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-2 grid grid-cols-3 gap-2">
+                    <div className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-surface/70 px-3 py-2">
+                      <MapPin className="h-3 w-3 shrink-0 text-primary" />
+                      <p className="truncate text-[10px] font-semibold text-foreground">Route first</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-surface/70 px-3 py-2">
+                      <Clock className="h-3 w-3 shrink-0 text-primary" />
+                      <p className="truncate text-[10px] font-semibold text-foreground">Timing aware</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-surface/70 px-3 py-2">
+                      <ShieldCheck className="h-3 w-3 shrink-0 text-primary" />
+                      <p className="truncate text-[10px] font-semibold text-foreground">Walk-away limit</p>
+                    </div>
+                  </div>
                 </div>
               </div>
-            )}
 
-            <div ref={routeSearchRef} className="relative z-30 overflow-visible rounded-lg border border-border bg-background p-1.5 shadow-sm">
-              <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-2">
-                <div className={`relative rounded-md px-3 py-2 transition-colors hover:bg-surface/60 focus-within:bg-surface focus-within:ring-1 focus-within:ring-primary/20 ${originSuggestionsOpen ? "z-[70]" : "z-10"}`}>
-                  <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                    <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                    Pickup
-                  </div>
-                  <div className="relative mt-1">
-                    <Input
-                      id="input-dynamic-origin"
-                      placeholder="Station, airport, hostel, landmark"
-                      value={dynamicOrigin}
-                      onFocus={() => setOriginSuggestionsOpen(true)}
-                      onBlur={() => setTimeout(() => setOriginSuggestionsOpen(false), 120)}
-                      onChange={(e) => {
-                        setDynamicOrigin(e.target.value);
-                        setSelectedOriginPlace(null);
-                        setManualOriginText("");
-                        setOriginSuggestionsOpen(true);
-                      }}
-                      onKeyDown={(e) => e.key === "Enter" && handleEstimateRoute()}
-                      className="h-8 border-0 bg-transparent px-0 text-sm font-medium shadow-none placeholder:text-muted-foreground/60 focus-visible:ring-0 focus-visible:ring-offset-0"
-                    />
-                    <PlaceSuggestionsDropdown
-                      open={!isFallbackCampus && originSuggestionsOpen && debouncedDynamicOrigin.length >= 2}
-                      loading={originSuggestionsLoading}
-                      suggestions={originSuggestions}
-                      query={debouncedDynamicOrigin}
-                      onSelect={(suggestion) => {
-                        setDynamicOrigin(suggestion.label);
-                        setSelectedOriginPlace(suggestion);
-                        setManualOriginText("");
-                        setOriginSuggestionsOpen(false);
-                      }}
-                      onUseTypedPlace={() => {
-                        setManualOriginText(dynamicOrigin.trim());
-                        setSelectedOriginPlace(null);
-                        setOriginSuggestionsOpen(false);
-                      }}
-                    />
-                  </div>
-                  {selectedOriginPlace ? (
-                    <p className="mt-1 truncate text-[10px] font-medium text-primary">{selectedOriginPlace.label}</p>
-                  ) : manualOriginText && manualOriginText === dynamicOrigin.trim() ? (
-                    <p className="mt-1 truncate text-[10px] font-medium text-muted-foreground">Typed place. PocketBuddy will verify it while estimating.</p>
-                  ) : null}
-                </div>
-
-                <div className={`relative rounded-md px-3 py-2 transition-colors hover:bg-surface/60 focus-within:bg-surface focus-within:ring-1 focus-within:ring-primary/20 ${destinationSuggestionsOpen ? "z-[70]" : "z-10"}`}>
-                  <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                    Destination
-                  </div>
-                  <div className="relative mt-1">
-                    <Input
-                      id="input-dynamic-destination"
-                      placeholder="Campus, gate, hostel, landmark"
-                      value={dynamicDestination}
-                      onFocus={() => setDestinationSuggestionsOpen(true)}
-                      onBlur={() => setTimeout(() => setDestinationSuggestionsOpen(false), 120)}
-                      onChange={(e) => {
-                        setDynamicDestination(e.target.value);
-                        setSelectedDestinationPlace(null);
-                        setManualDestinationText("");
-                        setDestinationSuggestionsOpen(true);
-                      }}
-                      onKeyDown={(e) => e.key === "Enter" && handleEstimateRoute()}
-                      className="h-8 border-0 bg-transparent px-0 text-sm font-medium shadow-none placeholder:text-muted-foreground/60 focus-visible:ring-0 focus-visible:ring-offset-0"
-                    />
-                    <PlaceSuggestionsDropdown
-                      open={!isFallbackCampus && destinationSuggestionsOpen && debouncedDynamicDestination.length >= 2}
-                      loading={destinationSuggestionsLoading}
-                      suggestions={destinationSuggestions}
-                      query={debouncedDynamicDestination}
-                      onSelect={(suggestion) => {
-                        setDynamicDestination(suggestion.label);
-                        setSelectedDestinationPlace(suggestion);
-                        setManualDestinationText("");
-                        setDestinationSuggestionsOpen(false);
-                      }}
-                      onUseTypedPlace={() => {
-                        setManualDestinationText(dynamicDestination.trim());
-                        setSelectedDestinationPlace(null);
-                        setDestinationSuggestionsOpen(false);
-                      }}
-                    />
-                  </div>
-                  {selectedDestinationPlace ? (
-                    <p className="mt-1 truncate text-[10px] font-medium text-primary">{selectedDestinationPlace.label}</p>
-                  ) : manualDestinationText && manualDestinationText === dynamicDestination.trim() ? (
-                    <p className="mt-1 truncate text-[10px] font-medium text-muted-foreground">Typed place. PocketBuddy will verify it while estimating.</p>
-                  ) : null}
-                </div>
-
-              </div>
-
-              <div className="mt-1.5 grid gap-2 border-t border-border/70 px-1.5 pt-2 sm:grid-cols-[190px_minmax(0,1fr)] sm:items-center">
-                <Select value={fareTimeSelection} onValueChange={(value) => setFareTimeSelection(value as TravelTimeSelection)}>
-                  <SelectTrigger className="h-10 rounded-md border-border bg-surface text-xs">
-                    <span className="min-w-0 text-left">
-                      <span className="block text-[9px] font-medium uppercase tracking-wider text-muted-foreground">Travel time</span>
-                      <SelectValue />
-                    </span>
-                  </SelectTrigger>
-                  <SelectContent className="bg-background border border-border text-foreground">
-                    <SelectItem value="now" className="text-xs">Now ({currentTimeContext.label})</SelectItem>
-                    {TRAVEL_TIME_CHOICES.map((choice) => (
-                      <SelectItem key={choice.id} value={choice.id} className="text-xs">
-                        {choice.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button id="btn-estimate-route" onClick={handleEstimateRoute} disabled={isEstimating || isFallbackCampus}
-                  className="h-10 w-full rounded-md bg-primary px-5 text-xs font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-70">
-                  <span className="flex items-center justify-center gap-2">
-                  {isFallbackCampus ? (
-                    <>Set campus to estimate</>
-                  ) : isEstimating ? (
-                    <><span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />Mapping route</>
-                  ) : (
-                    <><Search className="h-4 w-4" />Estimate fare</>
-                  )}
-                  </span>
-                </Button>
-              </div>
+              <TravelRouteMap
+                geometry={mapRoute?.geometry}
+                originCoords={mapOriginCoords}
+                destinationCoords={mapDestinationCoords}
+                originLabel={mapOriginLabel}
+                destinationLabel={mapDestinationLabel}
+                distanceKm={mapRoute?.distance_km}
+                durationMins={mapRoute?.duration_mins}
+                routeSource={mapRoute ? routeSourceDisplay(mapRoute) : null}
+                cacheHit={Boolean(mapRoute?.routing_cache_hit)}
+                className="h-[240px] sm:h-[300px] lg:h-full lg:min-h-[410px]"
+              />
             </div>
-
           </div>
 
           {estimatedResult && (
@@ -1367,6 +1525,11 @@ function TravelPage() {
                         routing_provider: estimatedResult.routing_provider,
                         eta_confidence: estimatedResult.eta_confidence,
                         split_suggestion: estimatedResult.split_suggestion,
+                        source: estimatedResult.source,
+                        routing_cache_hit: estimatedResult.routing_cache_hit,
+                        origin_coords: estimatedResult.origin_coords,
+                        dest_coords: estimatedResult.dest_coords,
+                        geometry: estimatedResult.geometry,
                         campus_landmark: dynamicDestination.slice(0, 35),
                         college: activeCollege
                       }
@@ -1473,21 +1636,27 @@ function TravelPage() {
             <button
               type="button"
               onClick={() => setSavedRoutesOpen((open) => !open)}
-              className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left sm:px-4"
+              className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left transition-colors hover:bg-surface-raised/35 sm:px-4"
             >
-              <div className="min-w-0">
-                <p className="text-sm font-semibold tracking-tight text-foreground">Saved routes</p>
-                <p className="truncate text-[11px] text-muted-foreground">
-                  {routes.length} route{routes.length === 1 ? "" : "s"} saved for quick checking
-                </p>
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <p className="text-sm font-semibold tracking-tight text-foreground">Saved routes</p>
+                  <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    {routes.length} saved
+                  </span>
+                </div>
+                {selectedRouteParts ? (
+                  <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                    Current: {selectedRouteParts.from} to {selectedRouteParts.to}
+                  </p>
+                ) : (
+                  <p className="mt-0.5 truncate text-[11px] text-muted-foreground">Pick a saved route for quote checks and coaching</p>
+                )}
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                {selectedRouteParts ? (
-                  <span className="hidden max-w-[240px] truncate text-[11px] font-medium text-primary sm:inline">
-                    Viewing {selectedRouteParts.from} to {selectedRouteParts.to}
-                  </span>
-                ) : null}
-                <span className="text-[11px] font-medium text-muted-foreground">{savedRoutesOpen ? "Hide" : "Show"}</span>
+                <span className="rounded-md border border-border bg-background px-2.5 py-1 text-[11px] font-medium text-foreground">
+                  {savedRoutesOpen ? "Hide" : "Change"}
+                </span>
                 <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${savedRoutesOpen ? "rotate-180" : ""}`} />
               </div>
             </button>
@@ -1505,6 +1674,13 @@ function TravelPage() {
                       aria-current={isActiveRoute ? "true" : undefined}
                       onClick={() => {
                         setSelectedRouteId(r.id);
+                        setEstimatedResult(null);
+                        setDynamicOrigin("");
+                        setDynamicDestination("");
+                        setSelectedOriginPlace(null);
+                        setSelectedDestinationPlace(null);
+                        setManualOriginText("");
+                        setManualDestinationText("");
                         setDriverQuote("");
                         setNegotiatedAmount("");
                         setAiCoachResult(null);
@@ -1545,163 +1721,100 @@ function TravelPage() {
         {/* Route Detail Tabs */}
         {selectedRoute && (
           <div className="space-y-4 animate-[fadeIn_0.2s_ease-out]">
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div className="flex min-w-0 flex-1 items-start gap-3">
-                <div className="mt-1 flex w-3 flex-col items-center self-stretch">
-                  <span className="h-2.5 w-2.5 rounded-full bg-primary" />
-                  <span className="my-1 h-8 w-px flex-1 bg-gradient-to-b from-primary to-emerald-500/80" />
-                  <span className="h-2.5 w-2.5 rounded-full border-2 border-emerald-500 bg-background" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">Now viewing</p>
-                  <h2 className="truncate text-base font-semibold tracking-tight text-foreground">{selectedRouteParts?.from || "Saved route"}</h2>
-                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                    to <span className="font-medium text-foreground">{selectedRouteParts?.to || "Campus"}</span>
-                  </p>
-                </div>
-              </div>
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-medium text-muted-foreground">
-                {selectedRoute.distance_km && (
-                  <span>{selectedRoute.distance_km} km</span>
-                )}
-                {selectedRoute.duration_mins && (
-                  <span className="border-l border-border pl-2">{selectedRoute.duration_mins} min</span>
-                )}
-                <span className="border-l border-border pl-2 text-foreground">
-                  {(selectedRoute.confidence || "low").toLowerCase() === "high"
-                    ? "High trust"
-                    : (selectedRoute.confidence || "low").toLowerCase() === "medium"
-                    ? "Medium trust"
-                    : "Needs confirmation"}
-                </span>
-              </div>
-            </div>
-
-            {selectedDecision && (
-              <div className="rounded-lg bg-surface px-3.5 py-3 ring-1 ring-border/80">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                      <span className="text-sm font-semibold text-foreground">{selectedDecision.label}</span>
-                      <span className="text-xs font-medium text-muted-foreground">₹{selectedDecision.fare} around</span>
-                      {selectedDecision.eta ? <span className="text-xs font-medium text-muted-foreground">{selectedDecision.eta}</span> : null}
-                    </div>
-                    <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{selectedDecision.action}</p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2 sm:justify-end">
-                    <div className="text-left sm:text-right">
-                      <p className="text-[9px] text-muted-foreground">Walk away above</p>
-                      <p className="text-sm font-semibold text-foreground">₹{selectedDecision.acceptUpTo}</p>
-                    </div>
-                    <Select value={travelIntent} onValueChange={(value) => setTravelIntent(value as TravelIntent)}>
-                      <SelectTrigger className="h-8 w-[108px] rounded-md border-border bg-background text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-background border border-border text-foreground">
-                        {TRAVEL_INTENTS.map((intent) => (
-                          <SelectItem key={intent.id} value={intent.id} className="text-xs">
-                            {intent.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Transport Mode Selector */}
-            <div className="flex flex-wrap gap-2">
-              {selectedRoute.modes.map((m) => {
-                const modeStyle = travelModeStyle(m.mode);
-                const isActive = selectedMode === m.mode;
-                return (
-                  <button
-                    key={m.mode}
-                    onClick={() => setSelectedMode(m.mode)}
-                    className={`rounded-xl border px-3 py-2 text-left transition-all cursor-pointer ${
-                      isActive
-                        ? `${modeStyle.className} ${modeStyle.textClassName} ring-1 ring-primary/20`
-                        : "bg-surface border-border text-muted-foreground hover:text-foreground hover:bg-surface-raised"
-                    }`}
-                  >
-                    <span className="block text-[10px] font-semibold">{modeStyle.label}</span>
-                    <span className="block text-[10px]">₹{m.min_fare}–{m.max_fare}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Time of day fare risk widget */}
-            <Card className="bg-surface border border-border p-4 sm:p-5 space-y-4">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                  <h3 className="text-xs font-semibold tracking-tight text-foreground">Fare timing</h3>
-                </div>
-                <span className="text-[10px] md:text-xs font-medium text-muted-foreground">Model plus reports when available</span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
-                {TRAVEL_TIME_CHOICES.map((h) => {
-                  const modeDetails = selectedRoute.modes.find((m: any) => m.mode.toLowerCase().includes(selectedMode.toLowerCase())) || selectedRoute.modes[0];
-                  const currentFare = Math.round(modeDetails.median_fare * h.factor);
-                  const isActive = timeContext.apiValue === h.id;
-                  return (
-                    <button
-                      key={h.label}
-                      type="button"
-                      onClick={() => setFareTimeSelection(h.id)}
-                      className={`p-3.5 rounded-xl border transition-all flex flex-col justify-between space-y-2 relative overflow-hidden ${
-                        isActive
-                          ? "bg-surface-raised border-primary text-foreground ring-1 ring-primary/20 shadow-sm"
-                          : "bg-surface border-border/60 opacity-80 hover:opacity-100 hover:bg-surface-raised/40"
-                      }`}
-                    >
-                      {isActive && (
-                          <div className="absolute top-0 right-0 bg-primary text-primary-foreground text-[8px] font-medium px-2 py-0.5 rounded-bl-lg">
-                          Selected
-                        </div>
-                      )}
-                      <div>
-                        <p className="text-[10px] md:text-xs font-semibold text-foreground/90">{h.label}</p>
-                        <p className="text-[9px] text-zinc-500 font-medium">{h.window}</p>
-                      </div>
-
-                      <div className="flex justify-between items-end pt-1">
-                        <div>
-                          <p className="text-base sm:text-xl font-semibold tracking-tight text-foreground">₹{currentFare}</p>
-                          <p className="text-[9px] text-muted-foreground font-medium">Est. fare</p>
-                        </div>
-                        <span className="text-[9px] font-medium px-1.5 py-0.5 rounded border border-border bg-surface-raised text-muted-foreground">
-                          {h.factor === 1 ? "Base" : `${h.factor}x`}
-                        </span>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Dynamic Live Travel Nudge Banner */}
+            <Card className="bg-surface border border-border p-3 sm:p-4">
               {(() => {
                 const modeDetails = selectedRoute.modes.find((m: any) => m.mode.toLowerCase().includes(selectedMode.toLowerCase())) || selectedRoute.modes[0];
                 const peakEstimate = Math.round(modeDetails.median_fare * timeContext.factor);
                 const isHighPeak = timeContext.factor >= 1.3;
                 const isMildPeak = timeContext.factor >= 1.15;
+                const modeLabel = travelModeStyle(modeDetails.mode).label;
 
                 return (
-                  <div className="p-4 border border-border/80 bg-surface-raised/40 rounded-2xl flex items-start gap-3 shadow-sm">
-                    <div className="w-1.5 h-3.5 bg-primary rounded-full shrink-0 mt-1" />
-                    <div className="space-y-1">
-                      <p className="text-xs font-semibold tracking-tight text-foreground">
-                        Selected timing estimate: ₹{peakEstimate} ({selectedMode.split(" ")[0]} · {timeContext.label})
-                      </p>
-                      <p className="text-xs text-muted-foreground/90 leading-relaxed">
+                  <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(280px,0.72fr)_minmax(220px,0.58fr)] xl:items-center">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Selected route</p>
+                      <div className="mt-2 flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary" />
+                          <h2 className="truncate text-base font-semibold tracking-tight text-foreground">
+                            {selectedRouteParts?.from || "Saved route"}
+                          </h2>
+                        </div>
+                        <span className="hidden text-[11px] font-medium text-muted-foreground sm:inline">to</span>
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-success" />
+                          <p className="truncate text-sm font-medium text-foreground">{selectedRouteParts?.to || "Campus"}</p>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
+                        {selectedRoute.distance_km ? (
+                          <span className="rounded-full border border-border bg-background px-2 py-1">{selectedRoute.distance_km} km</span>
+                        ) : null}
+                        {selectedRoute.duration_mins ? (
+                          <span className="rounded-full border border-border bg-background px-2 py-1">{selectedRoute.duration_mins} min</span>
+                        ) : null}
+                        {selectedActiveMode ? (
+                          <span className="rounded-full border border-border bg-background px-2 py-1">
+                            {travelModeStyle(selectedActiveMode.mode).label} anchor {selectedTimeFareAnchor ? `₹${selectedTimeFareAnchor}` : ""}
+                          </span>
+                        ) : null}
+                        <span className="rounded-full border border-border bg-background px-2 py-1 text-foreground">{selectedRouteTrustLabel}</span>
+                        <SourceBadge label={selectedActiveMode?.fare_source || selectedRoute.source} />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2">
+                      {selectedRoute.modes.map((m) => {
+                        const modeStyle = travelModeStyle(m.mode);
+                        const isActive = selectedMode === m.mode;
+                        return (
+                          <button
+                            key={m.mode}
+                            type="button"
+                            onClick={() => setSelectedMode(m.mode)}
+                            className={`rounded-lg border px-3 py-2 text-left transition-colors ${
+                              isActive
+                                ? `${modeStyle.className} ${modeStyle.textClassName} ring-1 ring-primary/20`
+                                : "border-border bg-background text-muted-foreground hover:bg-surface-raised/45 hover:text-foreground"
+                            }`}
+                          >
+                            <span className="block text-[10px] font-semibold">{modeStyle.label}</span>
+                            <span className="block text-[10px]">₹{m.min_fare}–{m.max_fare}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="rounded-lg border border-border bg-background px-3 py-2.5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                            <Clock className="h-3 w-3" />
+                            Fare timing
+                          </div>
+                          <p className="mt-0.5 text-sm font-semibold leading-snug text-foreground">₹{peakEstimate} · {modeLabel} · {timeContext.label}</p>
+                        </div>
+                        <Select value={fareTimeSelection} onValueChange={(value) => setFareTimeSelection(value as TravelTimeSelection)}>
+                          <SelectTrigger className="h-8 w-[92px] rounded-md border-border bg-surface px-2 text-[10px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="bg-background border border-border text-foreground">
+                            <SelectItem value="now" className="text-xs">Now</SelectItem>
+                            {TRAVEL_TIME_CHOICES.map((choice) => (
+                              <SelectItem key={choice.id} value={choice.id} className="text-xs">
+                                {choice.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <p className="mt-1.5 line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">
                         {isHighPeak
-                          ? "Peak-hour fare risk is high. Walk 100m away from crowded exits or travel with classmates to avoid inflated flat quotes."
+                          ? "High fare risk. Prefer a pre-booked ride or travel with classmates."
                           : isMildPeak
-                          ? "Mild peak-hour risk. Use any app quote only as a comparison point and keep your counter-offer near the fair range."
-                          : "Favorable baseline fare window. Keep your counter-offer near the normal fare anchor."}
+                          ? "Mild fare risk. Use the app quote as a comparison point."
+                          : "Normal fare window. Keep the counter-offer near the anchor."}
                       </p>
                     </div>
                   </div>
@@ -1720,7 +1833,7 @@ function TravelPage() {
                 { id: "reports" as const, icon: Users, label: "Reports" },
               ]).map(({ id, icon: Icon, label }, idx) => (
                 <button key={id} onClick={() => setActiveDetailTab(id)}
-                  className={`flex-1 py-2.5 text-[10px] font-medium transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 cursor-pointer ${idx < 3 ? "border-r border-border " : ""}${activeDetailTab === id ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-white/5"}`}>
+                  className={`flex-1 py-2.5 text-[10px] font-medium transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 cursor-pointer ${idx < 3 ? "border-r border-border " : ""}${activeDetailTab === id ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-background/60"}`}>
                   <Icon className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">{label}</span>
                   <span className="sm:hidden">{label.split(" ")[0]}</span>
@@ -1730,10 +1843,10 @@ function TravelPage() {
 
             {/* Quote Checker Tab */}
             {activeDetailTab === "check" && (
-              <Card className="bg-surface border-border p-5 space-y-5 animate-[fadeIn_0.2s_ease-out]">
-                <div className="flex items-start justify-between gap-2 flex-wrap">
-                  <div>
-                    <div className="flex items-center gap-1.5">
+              <Card className="bg-surface border-border p-4 space-y-5 animate-[fadeIn_0.2s_ease-out] sm:p-5">
+                <div className="flex flex-col gap-2">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       <h3 className="text-sm font-semibold tracking-tight text-foreground">Check a driver quote</h3>
                       <button
                         type="button"
@@ -1744,9 +1857,18 @@ function TravelPage() {
                         <Info className="h-3.5 w-3.5" />
                       </button>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Checking {selectedRouteParts?.from || "selected pickup"} to {selectedRouteParts?.to || "destination"} · {selectedMode.split(" ")[0]} · {timeContext.label}.
-                    </p>
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
+                      <span className="max-w-full truncate rounded-full border border-border bg-background px-2 py-1 text-foreground">
+                        {selectedRouteParts?.from || "Pickup"} to {selectedRouteParts?.to || "Destination"}
+                      </span>
+                      <span className="rounded-full border border-border bg-background px-2 py-1">
+                        {selectedActiveMode ? travelModeStyle(selectedActiveMode.mode).label : selectedMode.split(" ")[0]}
+                      </span>
+                      <span className="rounded-full border border-border bg-background px-2 py-1">{timeContext.label}</span>
+                      {selectedTimeFareAnchor ? (
+                        <span className="rounded-full border border-border bg-background px-2 py-1 text-foreground">Anchor ₹{selectedTimeFareAnchor}</span>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
 
@@ -1761,10 +1883,9 @@ function TravelPage() {
                   </div>
                 )}
 
-                {(() => {
-                  const activeMode = selectedRoute.modes.find((m: any) => m.mode.toLowerCase().includes(selectedMode.toLowerCase())) || selectedRoute.modes[0];
-                  return <FareEvidencePanel mode={activeMode} routeResult={selectedRoute} compact />;
-                })()}
+                {selectedActiveMode ? (
+                  <FareEvidencePanel mode={selectedActiveMode} routeResult={selectedRoute} compact />
+                ) : null}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -1865,8 +1986,12 @@ function TravelPage() {
                   </div>
                 </div>
 
-                <div className="space-y-3 pt-2">
-                  <p className="text-[10px] md:text-xs font-medium text-muted-foreground">Fare range distribution</p>
+                <details className="group rounded-xl border border-border bg-background/40">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5">
+                    <span className="text-xs font-semibold tracking-tight text-foreground">Fare range distribution</span>
+                    <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
+                  </summary>
+                  <div className="space-y-3 border-t border-border px-3 py-3">
                   {selectedRoute.modes.map((m) => (
                     <div key={m.mode} className="space-y-1.5 border-b border-border/30 pb-3 last:border-0 last:pb-0">
                       <div className="flex justify-between items-center">
@@ -1874,7 +1999,7 @@ function TravelPage() {
                         <span className="text-xs font-black text-primary font-mono">₹{m.min_fare} – ₹{m.max_fare}</span>
                       </div>
                       <div className="relative h-2 bg-surface-raised rounded-full overflow-hidden">
-                        <div className="absolute h-full bg-gradient-to-r from-primary/60 to-amber-500/60 rounded-full"
+                        <div className="absolute h-full bg-primary/35 rounded-full"
                           style={{ left: `${(m.min_fare / 800) * 100}%`, width: `${((m.max_fare - m.min_fare) / 800) * 100}%` }} />
                         <div className="absolute w-2 h-2 bg-white border border-primary rounded-full top-0 -translate-x-1/2"
                           style={{ left: `${(m.median_fare / 800) * 100}%` }} />
@@ -1884,7 +2009,8 @@ function TravelPage() {
                       </div>
                     </div>
                   ))}
-                </div>
+                  </div>
+                </details>
                 <div className="space-y-4 pt-4 border-t border-border/40">
                   <div className="flex items-center gap-2 px-1">
                     <div className="w-1.5 h-3.5 bg-primary rounded-full" />
