@@ -505,7 +505,7 @@ function PrivacyPage() {
         <ShieldCheck className="h-5 w-5 text-primary shrink-0" />
       </div>
 
-      <div className="mx-auto max-w-3xl pb-20 space-y-8">
+      <div className="mx-auto w-full max-w-5xl pb-20 space-y-8">
 
         {/* Data Control Center */}
         <section className="space-y-3">

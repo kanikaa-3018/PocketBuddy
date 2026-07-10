@@ -321,9 +321,10 @@ function SettingsPage() {
 
       <div
         style={{
-          maxWidth: "640px",
+          width: "100%",
+          maxWidth: "880px",
           margin: "0 auto",
-          padding: "32px 0 80px",
+          padding: "28px 0 80px",
           display: "flex",
           flexDirection: "column",
           gap: "2px",
