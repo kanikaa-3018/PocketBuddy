@@ -101,6 +101,10 @@ android/tools/ingest_test_backend/data/
 .env.*
 !.env.example
 
+# Local verification artifacts
+output/
+.playwright-cli/
+
 data/db/
 
 # Local verification/scratch artifacts

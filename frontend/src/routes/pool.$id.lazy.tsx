@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ChevronLeft, Share2, Trash2, Check, X, AlertCircle, Sparkles, ExternalLink, User, ShoppingBag, Clock, Shield, Link as LinkIcon, Bell, Eye, EyeOff, Smartphone, Plus, Minus, Pencil, CheckCircle2, ClipboardList, UserCheck, UserPlus, UserX } from "lucide-react";
 import { toast } from "sonner";
-import { rupees, relativeTime } from "@/lib/format";
+import { formatMinutesLeft, rupees, relativeTime } from "@/lib/format";
 import { useAuth } from "@/lib/auth-context";
 import { signUpFn, signInWithPasswordFn } from "@/lib/api/auth.functions";
 import {
@@ -309,6 +309,7 @@ function PoolDetail() {
   const [showAmazonMockGateway, setShowAmazonMockGateway] = useState(false);
   const [amazonSessionId, setAmazonSessionId] = useState("");
   const [joinBusy, setJoinBusy] = useState(false);
+  const [pendingCheckoutIntent, setPendingCheckoutIntent] = useState<"manual" | "amazon" | null>(null);
 
   // Track toasting status to avoid spamming on 3-second polls
   const [hasToastedStatus, setHasToastedStatus] = useState<string | null>(null);
@@ -945,7 +946,7 @@ function PoolDetail() {
     }
   }
 
-  async function completeCheckout() {
+  async function completeCheckout(options?: { bypassPendingRequests?: boolean }) {
     if (!hostUpi.trim()) {
       toast.error("Enter your UPI address before manual split checkout.");
       return;
@@ -959,9 +960,9 @@ function PoolDetail() {
       return;
     }
 
-    if (pendingRoommateRequests.length > 0) {
-      const proceed = confirm(`${pendingRoommateRequests.length} roommate request${pendingRoommateRequests.length === 1 ? "" : "s"} still need host review. Finalize anyway?`);
-      if (!proceed) return;
+    if (pendingRoommateRequests.length > 0 && !options?.bypassPendingRequests) {
+      setPendingCheckoutIntent("manual");
+      return;
     }
 
     setBusy(true);
@@ -991,7 +992,7 @@ function PoolDetail() {
     }
   }
 
-  async function initiateAmazonCheckout() {
+  async function initiateAmazonCheckout(options?: { bypassPendingRequests?: boolean }) {
     const deliveryAmount = parseFloat(finalDeliveryFee || "0");
     const surgeAmount = parseFloat(finalSurgeFee || "0");
     const discountAmount = parseFloat(finalDiscount || "0");
@@ -1000,9 +1001,9 @@ function PoolDetail() {
       return;
     }
 
-    if (pendingRoommateRequests.length > 0) {
-      const proceed = confirm(`${pendingRoommateRequests.length} roommate request${pendingRoommateRequests.length === 1 ? "" : "s"} still need host review. Continue to sandbox checkout?`);
-      if (!proceed) return;
+    if (pendingRoommateRequests.length > 0 && !options?.bypassPendingRequests) {
+      setPendingCheckoutIntent("amazon");
+      return;
     }
 
     setBusy(true);
@@ -1201,6 +1202,24 @@ function PoolDetail() {
       toast.error(err.message || "Failed to update join request");
     } finally {
       setJoinBusy(false);
+    }
+  }
+
+  function reviewPendingCartRequests() {
+    setPendingCheckoutIntent(null);
+    setCheckoutOpen(false);
+    setTimeout(() => {
+      document.getElementById("host-cart-review")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+  }
+
+  async function continuePendingCheckout() {
+    const intent = pendingCheckoutIntent;
+    setPendingCheckoutIntent(null);
+    if (intent === "manual") {
+      await completeCheckout({ bypassPendingRequests: true });
+    } else if (intent === "amazon") {
+      await initiateAmazonCheckout({ bypassPendingRequests: true });
     }
   }
 
@@ -1496,7 +1515,7 @@ function PoolDetail() {
             ) : (
               <span id="timer-pool" className="inline-flex items-center gap-1.5 text-xs font-bold bg-white/5 border border-border rounded-full px-3.5 py-1.5 tnum uppercase tracking-wider text-foreground">
                 <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                <span>{minsLeft}m left</span>
+                <span>{formatMinutesLeft(minsLeft)}</span>
               </span>
             )}
           </div>
@@ -1617,7 +1636,7 @@ function PoolDetail() {
             {pool.status === "open" ? (
               <div className="space-y-4">
                 {pendingJoinRequests.length > 0 && (
-                  <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+                  <div id="host-join-requests" className="rounded-xl border border-primary/20 bg-primary/5 p-4 scroll-mt-24">
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="text-[10px] font-black uppercase tracking-[0.22em] text-primary">
@@ -1722,7 +1741,7 @@ function PoolDetail() {
                 </div>
 
                 {(cartRunnerGroups.length > 0 || missingLinkItems.length > 0) && (
-                  <div className="rounded-xl border border-border bg-surface p-4 space-y-3">
+                  <div id="host-cart-review" className="rounded-xl border border-border bg-surface p-4 space-y-3 scroll-mt-24">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div>
                         <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5">
@@ -2949,6 +2968,34 @@ function PoolDetail() {
       </Dialog>
 
       {/* Host Checkout Modal */}
+      <Dialog open={Boolean(pendingCheckoutIntent)} onOpenChange={(open) => !open && setPendingCheckoutIntent(null)}>
+        <DialogContent className="max-w-md bg-background text-foreground border border-border">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <AlertCircle className="h-4 w-4 text-amber-500" />
+              Review cart requests?
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm leading-relaxed text-muted-foreground">
+            <p>
+              {pendingRoommateRequests.length} item request{pendingRoommateRequests.length === 1 ? "" : "s"} still need a host decision.
+              Mark them as added, substituted, unavailable, or skipped so the split stays clear.
+            </p>
+            <p className="text-xs">
+              You can continue anyway for the demo, but the cleaner flow is to review the cart builder first.
+            </p>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={reviewPendingCartRequests} disabled={busy}>
+              Review requests
+            </Button>
+            <Button onClick={continuePendingCheckout} disabled={busy} className="bg-primary text-primary-foreground">
+              Continue anyway
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={checkoutOpen} onOpenChange={setCheckoutOpen}>
         <DialogContent id="dialog-checkout" className="max-w-[400px]">
           <DialogHeader>
@@ -3024,7 +3071,7 @@ function PoolDetail() {
           <DialogFooter className="mt-2 flex flex-col gap-2 sm:flex-col sm:space-x-0">
             <div className="flex flex-col gap-2 w-full">
               <Button 
-                onClick={initiateAmazonCheckout} 
+                onClick={() => initiateAmazonCheckout()}
                 disabled={busy} 
                 className="w-full bg-[#FF9900] hover:bg-[#E48A00] text-black font-extrabold flex items-center justify-center gap-2 rounded-xl py-2.5 h-11 border border-[#D58000] shadow-sm tracking-wide"
               >
@@ -3035,7 +3082,7 @@ function PoolDetail() {
                 <Button variant="outline" onClick={() => setCheckoutOpen(false)} disabled={busy} className="flex-1 rounded-xl h-10">
                   Close
                 </Button>
-                <Button onClick={completeCheckout} disabled={busy} className="flex-1 bg-green-600 hover:bg-green-700 text-white rounded-xl h-10 font-bold">
+                <Button onClick={() => completeCheckout()} disabled={busy} className="flex-1 bg-green-600 hover:bg-green-700 text-white rounded-xl h-10 font-bold">
                   {busy ? "Finalizing..." : "Manual UPI Split"}
                 </Button>
               </div>

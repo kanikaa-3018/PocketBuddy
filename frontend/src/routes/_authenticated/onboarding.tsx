@@ -331,16 +331,25 @@ function Onboarding() {
     setUpiApps((prev) => (prev.includes(app) ? prev.filter((a) => a !== app) : [...prev, app]));
   }
 
-  const StepBar = ({ currentStep }: { currentStep: number }) => (
+  const StepBar = ({ currentStep, onSelect }: { currentStep: number; onSelect: (step: 1 | 2 | 3) => void }) => (
     <div className="flex gap-2 w-full max-w-[360px] mx-auto mb-6 lg:mb-7">
       {[1, 2, 3].map((s) => (
-        <div key={s} className="flex-1 h-0.5 bg-border rounded-full overflow-hidden">
+        <button
+          key={s}
+          type="button"
+          aria-label={`Go to onboarding step ${s}`}
+          disabled={s > currentStep}
+          onClick={() => onSelect(s as 1 | 2 | 3)}
+          className="flex-1 h-3 rounded-full disabled:cursor-not-allowed"
+        >
+        <span className="block h-0.5 bg-border rounded-full overflow-hidden">
           <div
             className={`h-full bg-primary transition-all duration-300 ${
               s <= currentStep ? "w-full" : "w-0"
             }`}
           />
-        </div>
+        </span>
+        </button>
       ))}
     </div>
   );
@@ -355,7 +364,7 @@ function Onboarding() {
           step === 3 ? "max-w-[1040px]" : "max-w-[760px]"
         }`}
       >
-        <StepBar currentStep={step} />
+        <StepBar currentStep={step} onSelect={setStep} />
 
         {step === 1 && (
           <div id="onboarding-step-1" className="space-y-4">
@@ -815,9 +824,11 @@ function Onboarding() {
                     </div>
                     <Button
                       onClick={() =>
-                        document
-                          .getElementById("android-sync-setup")
-                          ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                        setTimeout(() => {
+                          const target = document.getElementById("android-sync-setup");
+                          target?.scrollIntoView({ behavior: "smooth", block: "start" });
+                          target?.focus({ preventScroll: true });
+                        }, 0)
                       }
                       disabled={busy}
                       className="h-9 w-full shrink-0 bg-primary text-primary-foreground text-xs font-black uppercase tracking-wider sm:w-fit"
@@ -827,7 +838,7 @@ function Onboarding() {
                   </div>
                 </div>
 
-                <div id="android-sync-setup" className="rounded-xl border border-border bg-surface-raised p-5 scroll-mt-6">
+                <div id="android-sync-setup" tabIndex={-1} className="rounded-xl border border-border bg-surface-raised p-5 scroll-mt-6 focus:outline-none focus:ring-2 focus:ring-primary/40">
                   <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
                     Android auto-sync setup
                   </p>

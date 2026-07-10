@@ -1145,6 +1145,43 @@ def mask_merchant_name(raw_string: str) -> str:
     return raw_string
 
 
+def _is_campus_payment_signal_candidate(raw_string: str) -> bool:
+    value = (raw_string or "").strip().lower()
+    if not value:
+        return False
+    non_campus_tokens = {
+        "spotify",
+        "youtube",
+        "netflix",
+        "prime",
+        "amazon prime",
+        "hotstar",
+        "salary",
+        "stipend",
+        "allowance",
+        "interest",
+        "cashback",
+    }
+    if any(token in value for token in non_campus_tokens):
+        return False
+    campus_tokens = {
+        "upi/",
+        "canteen",
+        "mess",
+        "kiosk",
+        "cafe",
+        "juice",
+        "bh-",
+        "bh2",
+        "campus",
+        "hostel",
+        "photocopy",
+        "stationery",
+        "library",
+    }
+    return any(token in value for token in campus_tokens)
+
+
 def _category_from_signal_response(response: str) -> str:
     value = response.strip().lower()
     if any(token in value for token in ("food", "canteen", "mess", "tea", "chai", "snack", "meal")):
@@ -1191,6 +1228,12 @@ async def get_food_signals(user_id: str = Depends(get_current_user)):
             raw_string = tc.get("_id")
             if not raw_string:
                 continue
+            if not _is_campus_payment_signal_candidate(str(raw_string)):
+                continue
+
+            category = str(tc.get("category") or "").strip().lower()
+            if category and category not in {"other", "general"}:
+                continue
 
             # Skip if already marked as mapped in transactions
             if tc.get("mapped") is True and tc.get("category") not in [None, "", "other", "general"]:
@@ -1213,12 +1256,13 @@ async def get_food_signals(user_id: str = Depends(get_current_user)):
 
             quiz_id = _stable_quiz_id("quiz_cat", raw_string)
             await _store_quiz_context(db, quiz_id, "category", {"merchant_raw": raw_string})
+            merchant_hint = mask_merchant_name(str(raw_string))
 
             quizzes.append({
                 "id": quiz_id,
                 "type": "category",
                 "title": "Repeated Payment Signal",
-                "question": "PocketBuddy found the same unmapped campus payment label across students. What kind of place should it be treated as?",
+                "question": f'How should "{merchant_hint}" be treated?',
                 "options": ["Food / canteen", "Stationery", "Delivery", "General store", "Not sure"],
                 "detail": f"Seen in {tx_count} payment{'s' if tx_count > 1 else ''} across {user_count} independent student{'s' if user_count > 1 else ''}. Raw payer details stay private.",
                 "privacy_note": "Shared data changes only after independent matching confirmations.",

@@ -1,8 +1,28 @@
 // Currency + date formatting (INR, IST)
 const inrFmt = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
-export const rupees = (paisa: number): string => `₹${inrFmt.format(Math.round(paisa / 100))}`;
+export const rupees = (paisa: number): string => {
+  const value = Number(paisa);
+  if (!Number.isFinite(value)) return "₹0";
+  return `₹${inrFmt.format(Math.round(value / 100))}`;
+};
 export const rupeesFromInt = (rupeesInt: number): string =>
-  `₹${inrFmt.format(Math.round(rupeesInt))}`;
+  `₹${inrFmt.format(Math.round(Number.isFinite(Number(rupeesInt)) ? Number(rupeesInt) : 0))}`;
+
+export function formatMinutesLeft(minutes: number): string {
+  const safeMinutes = Math.max(0, Math.round(Number.isFinite(Number(minutes)) ? Number(minutes) : 0));
+  if (safeMinutes <= 0) return "Closed";
+  if (safeMinutes < 60) return `${safeMinutes}m left`;
+
+  const hours = Math.floor(safeMinutes / 60);
+  const mins = safeMinutes % 60;
+  if (hours < 48) {
+    return mins > 0 ? `${hours}h ${mins}m left` : `${hours}h left`;
+  }
+
+  const days = Math.floor(hours / 24);
+  const remHours = hours % 24;
+  return remHours > 0 ? `${days}d ${remHours}h left` : `${days}d left`;
+}
 
 export function relativeTime(iso: string | Date): string {
   const d = typeof iso === "string" ? new Date(iso) : iso;

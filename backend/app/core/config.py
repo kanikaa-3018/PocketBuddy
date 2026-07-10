@@ -1,8 +1,16 @@
+from pathlib import Path
+
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+REPO_DIR = BACKEND_DIR.parent
+
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=(REPO_DIR / ".env", BACKEND_DIR / ".env"),
+        extra="ignore",
+    )
 
     JWT_SECRET: str
     MONGO_URI: str

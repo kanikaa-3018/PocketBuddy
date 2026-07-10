@@ -759,7 +759,8 @@ function humanStatus(status?: string) {
   if (status === "pending") return "Processing";
   if (status === "sync_disabled_by_user" || status === "sync_paused_by_user") return "Paused by user";
   if (status === "consent_revoked_repair_required") return "Re-pair required";
-  if (status === "auto_verified") return "Pool verified";
+  if (status === "auto_verified" || status === "pool_payment_verified") return "Pool verified";
+  if (status === "pool_payment_review") return "Pool review";
   if (status === "received") return "Received credit";
   if (status === "incomplete") return "Needs review";
   if (status === "duplicate") return "Duplicate";
@@ -805,10 +806,16 @@ function StatusBadge({ status }: { status?: string }) {
         Re-pair
       </Badge>
     );
-  if (status === "auto_verified")
+  if (status === "auto_verified" || status === "pool_payment_verified")
     return (
       <Badge className="bg-success/20 text-success text-[10px] md:text-xs">
         Pool verified
+      </Badge>
+    );
+  if (status === "pool_payment_review")
+    return (
+      <Badge className="bg-warning/20 text-warning text-[10px] md:text-xs">
+        Pool review
       </Badge>
     );
   if (status === "received")

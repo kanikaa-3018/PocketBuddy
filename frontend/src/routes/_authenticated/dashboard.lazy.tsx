@@ -1822,11 +1822,9 @@ function Dashboard() {
       ],
     },
   ];
-  const showInlineSmartNudges = dashboardVisitOrdinal === 1;
   const inlineNudgeIds = new Set(["velocity_spike", "late_night", "delivery_overuse", "sub_bleed", "short_runway"]);
-  const inlineSmartNudges = showInlineSmartNudges
-    ? nudges.filter((nudge) => inlineNudgeIds.has(nudge.id)).slice(0, 2)
-    : [];
+  const inlineSmartNudges = nudges.filter((nudge) => inlineNudgeIds.has(nudge.id)).slice(0, 1);
+  const inlineSmartNudgeId = inlineSmartNudges[0]?.id ?? "";
   const getNudgeActions = (nudge: any) =>
     nudge.id === "delivery_overuse" || nudge.id === "late_night"
       ? [{
@@ -1858,7 +1856,7 @@ function Dashboard() {
   const dashboardNotifications = useMemo<DashboardNotificationItem[]>(() => {
     const items: DashboardNotificationItem[] = [];
 
-    const nudgesForBell = showInlineSmartNudges ? [] : nudges;
+    const nudgesForBell = nudges.filter((nudge) => nudge.id !== inlineSmartNudgeId);
     nudgesForBell.forEach((nudge) => {
       items.push({
         id: `nudge-${nudge.id}`,
@@ -1954,7 +1952,7 @@ function Dashboard() {
     return items;
   }, [
     nudges,
-    showInlineSmartNudges,
+    inlineSmartNudgeId,
     showRunwayWarning,
     runwayView,
     showExamWarning,
@@ -2117,59 +2115,6 @@ function Dashboard() {
             </div>
           </div>
 
-          {inlineSmartNudges.length > 0 && (
-            <div id="section-dashboard-smart-nudges" className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-              {inlineSmartNudges.map((nudge) => {
-                const Icon = nudge.icon;
-                const actions = getNudgeActions(nudge).slice(0, 2);
-                const isWarning = nudge.id === "velocity_spike" || nudge.id === "sub_bleed" || nudge.id === "late_night";
-                return (
-                  <div
-                    key={nudge.id}
-                    className={`rounded-2xl border bg-surface p-4 ${
-                      isWarning ? "border-warning/25" : "border-border"
-                    }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl border bg-surface-raised ${
-                        isWarning ? "border-warning/25 text-warning" : "border-border text-muted-foreground"
-                      }`}>
-                        <Icon className="h-4 w-4" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Needs attention</p>
-                          <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Today</span>
-                        </div>
-                        <p className="mt-1 text-sm font-semibold leading-snug text-foreground">{nudge.title}</p>
-                        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{nudge.body}</p>
-                        {actions.length > 0 && (
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {actions.map((action) => (
-                              <Button
-                                key={action.label}
-                                type="button"
-                                size="sm"
-                                variant={action.variant === "primary" ? "default" : "outline"}
-                                className={
-                                  action.variant === "primary"
-                                    ? "h-8 px-3 text-[11px] font-semibold"
-                                    : "h-8 border-border bg-surface-raised px-3 text-[11px] font-semibold text-foreground hover:bg-surface-interactive"
-                                }
-                                onClick={() => action.onClick()}
-                              >
-                                {action.label}
-                              </Button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
         </section>
 
         {/* ── Smart Nudges row ──────────────────────────────────────────── */}
@@ -2177,8 +2122,58 @@ function Dashboard() {
           {/* ── Main Column ─────────────────────────────────────────────── */}
           <div className="md:col-span-7 lg:col-span-8 flex flex-col gap-6 animate-[fadeIn_0.3s_ease-out]">
 
-            {(showRunwayWarning || showExamWarning || showPossibleCommitments) && (
+            {(inlineSmartNudges.length > 0 || showRunwayWarning || showExamWarning || showPossibleCommitments) && (
               <div className="order-0 grid grid-cols-1 gap-3 xl:grid-cols-2">
+                {inlineSmartNudges.map((nudge) => {
+                  const Icon = nudge.icon;
+                  const actions = getNudgeActions(nudge).slice(0, 2);
+                  const isWarning = nudge.id === "velocity_spike" || nudge.id === "sub_bleed" || nudge.id === "late_night";
+                  return (
+                    <div
+                      key={nudge.id}
+                      id="section-dashboard-smart-nudges"
+                      className={`rounded-2xl border bg-surface p-4 ${
+                        isWarning ? "border-warning/25" : "border-border"
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl border bg-surface-raised ${
+                          isWarning ? "border-warning/25 text-warning" : "border-border text-muted-foreground"
+                        }`}>
+                          <Icon className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Needs attention</p>
+                            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Today</span>
+                          </div>
+                          <p className="mt-1 text-sm font-semibold leading-snug text-foreground">{nudge.title}</p>
+                          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{nudge.body}</p>
+                          {actions.length > 0 && (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {actions.map((action) => (
+                                <Button
+                                  key={action.label}
+                                  type="button"
+                                  size="sm"
+                                  variant={action.variant === "primary" ? "default" : "outline"}
+                                  className={
+                                    action.variant === "primary"
+                                      ? "h-8 px-3 text-[11px] font-semibold"
+                                      : "h-8 border-border bg-surface-raised px-3 text-[11px] font-semibold text-foreground hover:bg-surface-interactive"
+                                  }
+                                  onClick={() => action.onClick()}
+                                >
+                                  {action.label}
+                                </Button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
                 {showRunwayWarning && runwayView && (
                   <div id="card-runway-alert" className="rounded-2xl border border-destructive/20 bg-destructive/5 p-4">
                     <div className="flex items-start gap-3">

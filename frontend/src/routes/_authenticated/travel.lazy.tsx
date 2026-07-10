@@ -1,9 +1,11 @@
 import { createLazyFileRoute } from "@tanstack/react-router";
 import { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import QRCode from "qrcode";
 import { useAuth } from "@/lib/auth-context";
 import { AppShell, MobileMenuButton } from "@/components/AppShell";
 import { TravelRouteMap } from "@/components/travel/TravelRouteMap";
+import { buildUpiPaymentIntent, isValidUpiId } from "@/lib/upi-payment";
 import {
   Compass,
   AlertOctagon,
@@ -24,6 +26,7 @@ import {
   TriangleAlert,
   SplitSquareHorizontal,
   ChevronDown,
+  QrCode,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -240,6 +243,111 @@ const getIntermediateData = (
     available: false,
   };
 };
+
+function TravelSplitPaymentQr({
+  upiId,
+  hostName,
+  amountRupees,
+  routeLabel,
+}: {
+  upiId?: string | null;
+  hostName?: string | null;
+  amountRupees: number;
+  routeLabel: string;
+}) {
+  const [qrDataUrl, setQrDataUrl] = useState("");
+  const [copied, setCopied] = useState(false);
+  const note = useMemo(() => `Travel split: ${routeLabel}`.slice(0, 80), [routeLabel]);
+  const paymentIntent = useMemo(
+    () =>
+      buildUpiPaymentIntent({
+        upiId,
+        payeeName: hostName,
+        amountRupees,
+        note,
+      }),
+    [amountRupees, hostName, note, upiId],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    setQrDataUrl("");
+    if (!paymentIntent) return;
+
+    QRCode.toDataURL(paymentIntent, {
+      errorCorrectionLevel: "M",
+      margin: 1,
+      width: 136,
+      color: { dark: "#0f172a", light: "#ffffff" },
+    })
+      .then((url) => {
+        if (!cancelled) setQrDataUrl(url);
+      })
+      .catch(() => {
+        if (!cancelled) setQrDataUrl("");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [paymentIntent]);
+
+  if (!isValidUpiId(upiId)) {
+    return (
+      <div className="rounded-2xl border border-border bg-background/55 px-3.5 py-3 text-xs leading-relaxed text-muted-foreground">
+        Add the host UPI ID in Settings to show a scan-to-pay code for ride splits.
+      </div>
+    );
+  }
+
+  if (!paymentIntent) return null;
+
+  const amountLabel = amountRupees % 1 ? amountRupees.toFixed(2) : amountRupees.toFixed(0);
+
+  const copyPaymentLink = async () => {
+    try {
+      await navigator.clipboard.writeText(paymentIntent);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1400);
+      toast.success("UPI payment link copied");
+    } catch {
+      toast.error("Could not copy UPI link");
+    }
+  };
+
+  return (
+    <div className="rounded-2xl border border-border bg-background/60 p-3.5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="flex h-36 w-36 shrink-0 items-center justify-center rounded-xl border border-border bg-white p-2">
+          {qrDataUrl ? (
+            <img src={qrDataUrl} alt="UPI QR code for host payment" className="h-full w-full" />
+          ) : (
+            <QrCode className="h-8 w-8 text-slate-400" />
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pay host directly</p>
+          <p className="mt-1 text-sm font-semibold text-foreground">
+            Scan to pay ₹{amountLabel} to {hostName || "the host"}
+          </p>
+          <p className="mt-1 break-all text-xs text-muted-foreground">{upiId}</p>
+          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+            PocketBuddy creates the payment intent only. The actual transfer happens in the student's UPI app.
+          </p>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <Button type="button" asChild className="h-9 bg-primary text-xs font-semibold text-primary-foreground">
+              <a href={paymentIntent}>Open UPI app</a>
+            </Button>
+            <Button type="button" variant="outline" onClick={copyPaymentLink} className="h-9 text-xs font-semibold">
+              {copied ? <Check className="mr-1.5 h-3.5 w-3.5" /> : <Copy className="mr-1.5 h-3.5 w-3.5" />}
+              {copied ? "Copied" : "Copy link"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function getTimeOfDaySurge() {
   const h = new Date().getHours();
@@ -2414,6 +2522,13 @@ function TravelPage() {
                           </Badge>
                         ) : null}
                       </div>
+
+                      <TravelSplitPaymentQr
+                        upiId={profile?.upi_id}
+                        hostName={user?.fullName}
+                        amountRupees={selectedStrategyPerPerson}
+                        routeLabel={`${selectedRouteParts?.from || "Pickup"} to ${selectedRouteParts?.to || "destination"}`}
+                      />
 
                       {splitTravelType === "split" && (
                         <div className="grid grid-cols-1 gap-3 sm:grid-cols-[180px_minmax(0,1fr)]">

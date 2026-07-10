@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { rupees } from "@/lib/format";
+import { formatMinutesLeft, rupees } from "@/lib/format";
 import { Clock, AlertCircle, Check, ShieldCheck, Users } from "lucide-react";
 import { getProfile, getCartPools, insertCartPool, getCatalog, addCatalogItem } from "@/lib/api/db.functions";
 
@@ -508,7 +508,7 @@ function PoolCard({ pool }: { pool: Pool }) {
             {pendingRequestCount > 0 && (
               <div className="mt-3 inline-flex items-center gap-2 rounded-xl border border-primary/25 bg-primary/10 px-3 py-2 text-xs font-bold text-primary">
                 <Users className="h-4 w-4" />
-                <span>Review {pendingRequestCount} join request{pendingRequestCount === 1 ? "" : "s"}</span>
+                <span>Review {pendingRequestCount} join request{pendingRequestCount === 1 ? "" : "s"} in this pool</span>
               </div>
             )}
 
@@ -632,7 +632,7 @@ function PoolCard({ pool }: { pool: Pool }) {
               {active ? (
                 <span className="inline-flex items-center gap-1 text-xs font-bold bg-white/5 border border-border px-3 py-1 rounded-full text-foreground tnum">
                   <Clock className="h-3 w-3 text-muted-foreground" />
-                  <span>{minsLeft}m left</span>
+                  <span>{formatMinutesLeft(minsLeft)}</span>
                 </span>
               ) : (
                 <span className="text-[10px] md:text-xs text-muted-foreground font-semibold uppercase tracking-wider">

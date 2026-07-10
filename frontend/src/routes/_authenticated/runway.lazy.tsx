@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  Legend, ComposedChart, Line
+  Legend, ComposedChart, Line, ReferenceLine, Cell
 } from "recharts";
 
 export const Route = createLazyFileRoute("/_authenticated/runway")({
@@ -477,11 +477,17 @@ From PocketBuddy Runway.`;
     if (!forecast?.horizons) return [];
     return forecast.horizons.map((h: any) => ({
       name: h.label,
-      "Expected Spend": Math.round((h.projected_spend || 0) / 100),
-      "Allowance / Funding": Math.round((h.projected_funding || 0) / 100),
       "Ending Balance": Math.round((h.projected_balance || 0) / 100),
+      "Lower Range": Math.round((h.balance_low || 0) / 100),
+      "Upper Range": Math.round((h.balance_high || 0) / 100),
     }));
   }, [forecast]);
+
+  const formatChartRs = (value: number) => {
+    const abs = Math.abs(Number(value) || 0);
+    const compact = abs >= 1000 ? `${(abs / 1000).toFixed(abs >= 10000 ? 0 : 1)}k` : abs.toLocaleString("en-IN");
+    return `${Number(value) < 0 ? "-" : ""}₹${compact}`;
+  };
 
   const activeActionType = nextBestAction?.type || forecast?.action?.type || "on_track";
   const activeActionTitle = activeActionType === "ask_home" && actualAskHomeAmount > 0
@@ -2167,19 +2173,27 @@ From PocketBuddy Runway.`;
 
               <div className="h-72 w-full rounded-xl border border-border/50 bg-background/45 p-3 text-xs">
                 <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: -16, bottom: 0 }}>
+                  <ComposedChart data={chartData} margin={{ top: 10, right: 14, left: -4, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.55} />
                     <XAxis dataKey="name" stroke="var(--muted-foreground)" fontSize={12} fontWeight={600} />
-                    <YAxis stroke="var(--muted-foreground)" fontSize={12} fontWeight={600} />
+                    <YAxis stroke="var(--muted-foreground)" fontSize={12} fontWeight={600} tickFormatter={formatChartRs} width={58} />
                     <Tooltip
                       formatter={(value: any) => formatRs(Number(value) * 100)}
                       contentStyle={{ backgroundColor: "var(--card)", borderColor: "var(--border)", borderRadius: "12px", fontSize: "12px" }}
                       labelStyle={{ fontWeight: 600, color: "var(--foreground)" }}
                     />
                     <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: "12px", fontWeight: 600 }} />
-                    <Bar dataKey="Allowance / Funding" fill="var(--pb-green)" fillOpacity={0.45} radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="Expected Spend" fill="var(--pb-red)" fillOpacity={0.42} radius={[4, 4, 0, 0]} />
-                    <Line type="monotone" dataKey="Ending Balance" stroke="var(--primary)" strokeWidth={2} dot={{ r: 4 }} />
+                    <ReferenceLine y={0} stroke="var(--muted-foreground)" strokeOpacity={0.65} strokeDasharray="4 4" />
+                    <Bar dataKey="Ending Balance" radius={[5, 5, 5, 5]} fillOpacity={0.86}>
+                      {chartData.map((entry) => (
+                        <Cell
+                          key={entry.name}
+                          fill={entry["Ending Balance"] < 0 ? "var(--pb-red)" : "var(--pb-green)"}
+                        />
+                      ))}
+                    </Bar>
+                    <Line type="monotone" dataKey="Lower Range" stroke="var(--pb-red)" strokeWidth={1.5} strokeDasharray="5 4" dot={false} />
+                    <Line type="monotone" dataKey="Upper Range" stroke="var(--pb-green)" strokeWidth={1.5} strokeDasharray="5 4" dot={false} />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
